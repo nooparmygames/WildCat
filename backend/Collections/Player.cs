@@ -27,7 +27,7 @@ namespace Collections
 
         public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            streamProvider =this.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            streamProvider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
             connectionStream = streamProvider.GetStream<UNetConnectionDataTransferMessage>(StreamNames.PlayerConnection(this.GetPrimaryKeyString()));
             await base.OnActivateAsync(cancellationToken);
         }
@@ -62,8 +62,6 @@ namespace Collections
             State.RunningGames.Add(game);
             return WriteStateAsync();
         }
-        
-        
 
         public Task GameFinished(IRelayServerGame game)
         {

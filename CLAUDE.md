@@ -135,15 +135,15 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
 
 ## Roadmap
 
-1. Port to Orleans 10 on .NET 10: packages, serialization attributes, hosting with a co-hosted
+1. (Done) Port to Orleans 10 on .NET 10: packages, serialization attributes, hosting with a co-hosted
    gateway, memory streams or broadcast channels instead of SMS, `RegisterGrainTimer`,
    reminders package, tests on `InProcessTestCluster`. Keep behavior identical in this step.
-2. Remove PlayFab, CafeBazaar, billing, dead subsystems and card-game leftovers listed in
+2. (Done) Remove PlayFab, CafeBazaar, billing, dead subsystems and card-game leftovers listed in
    `docs/legacy-backend-notes.md` and `docs/unity-sdk-notes.md`.
 3. Rename to WildCat.
 4. Security fixes before any public deployment: ticket leaked in relayed frames,
-   client-controlled inventory grants and scores, missing developer-secret checks, provider
-   login bypass, unauthenticated environment creation, client-side MD5 replaced by a server-side
+   client-controlled inventory grants and scores, missing developer-secret checks,
+   unauthenticated environment creation, client-side MD5 replaced by a server-side
    password hash. Fix the gateway disconnect cleanup and persist Session.
 5. PostgreSQL providers, configuration model, Docker Compose, README quick start.
 6. Split the gateway into transport, dispatcher and per-feature handlers; pin message ids;

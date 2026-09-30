@@ -13,7 +13,7 @@ namespace Interfaces
         /// </summary>
         /// <param name="playerID">The player we want to find match for</param>
         /// <param name="maximumWaitTime">Maximum amount of time before declaring a failure</param>
-        /// <returns>Guid of a iGame or empty in case of failure.</returns>
+        /// <returns>The relay game that was created, or an empty id in case of failure.</returns>
         Task<FoundRelayMatchResult> FindMatch(IPlayer playerID, uint skill,uint maxWaitTime);
         Task<bool> RemoveDisconnectedPlayer(IPlayer player);
         Task<int> GetOnlinePlayersCount();

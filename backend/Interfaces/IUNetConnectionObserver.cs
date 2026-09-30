@@ -17,8 +17,7 @@ namespace Interfaces
         [Id(2)] public int connectionId;
         [Id(3)] public int channelId;
         [Id(4)] public byte[] data;
-        [Id(5)] public string gameKey;
-        [Id(6)] public Guid matchId;
+        // Ids 5 and 6 held gameKey and matchId for the removed GameCreated event; do not reuse.
         [GenerateSerializer, Alias("wildcat.UNetConnectionDataTransferMessage.EventType")]
         public enum EventType
         {

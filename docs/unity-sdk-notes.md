@@ -68,7 +68,8 @@ as C# events or public delegate fields.
 - Relay: `UpdateGame<T>(game, msg, type, qos)` fire-and-forget with custom message types above
   1023; `RegisterHandler(type, handler)` / `UnregisterHandler` for raw messages, payload via
   `msg.GetData<T>()`.
-- Challenges: `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`, events
+- Challenges: `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`,
+  `GetChallenges` (161/162), events
   `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied`.
 - Cloud data: `SaveCloudData`, `SavePublicCloudData`, `GetCloudData`, `GetPublicCloudData`,
   `GetPlayerPublicCloudData`, `GetPublisherData`.

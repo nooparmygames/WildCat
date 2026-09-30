@@ -16,9 +16,7 @@ namespace Collections
             // process-wide settings to handle grain references. Replace both in step 4.
             var jsonSettings = OrleansJsonSerializer.GetDefaultSerializerSettings(this.GrainFactory);
             JsonConvert.DefaultSettings = () => jsonSettings;
-            var key = this.GetPrimaryKeyString();
-            string[] keyParts = key.Split('_');
-            var gameKey = keyParts[0];
+            var gameKey = this.GetPrimaryKeyString().Split('_')[0];
             if (string.IsNullOrEmpty(State.GameKey))
             {
                 State.GameKey = gameKey;

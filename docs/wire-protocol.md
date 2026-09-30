@@ -115,6 +115,8 @@ Leaderboards, inventory, scripting, time, dev
 Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dropped without a
 response): 84-87 RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem,
 123/124 ConsumeItem. The grain logic behind them exists; only the gateway handlers are missing.
+The ConsumeItem payload class (`ConsumeItemInventoryRequestMessage`) was removed in step 2 because
+nothing used it; a future handler defines its own payload.
 
 Removed in step 2 (the ids are now gaps): 0-5 old CreateAccount/Login/Logout, 11/12 JoinGame,
 40/41 VerifyStoreReceipt (CafeBazaar, the only handled one), 46-61 developer and CafeBazaar admin
