@@ -96,9 +96,10 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
 
 ## Decisions (confirmed by the owner on 2026-09-30)
 
-- Name: WildCat everywhere. Rename namespaces, `ApadanaMessageBase`, `ApadanaMsgType`, the
-  `ScriptingAPI.Apadana` script object, editor menus, solution and project names. Do the rename
-  as one dedicated commit so history stays readable.
+- Name: WildCat everywhere. Done in step 3 (commit "Rename the project to WildCat"): namespaces,
+  `ApadanaMessageBase`/`ApadanaMsgType` (now `WildCatMessageBase`/`WildCatMsgType`), the
+  `ScriptingAPI.Apadana` script object (now `WildCatScriptApi`, script global `WildCat`), editor
+  menus, solution and project names. New code uses the WildCat names only.
 - Orleans 10 on .NET 10, following `.claude/skills/orleans/reference/migration-3x.md`.
 - Storage: PostgreSQL through the official ADO.NET packages for clustering, grain state and
   reminders. Memory providers in Debug and tests. No MongoDB, no Azure, no Redis.
