@@ -11,8 +11,21 @@ namespace WildCat.Interfaces
         Task<Dictionary<IPlayer, Tuple<Guid,string>>> StartGame(IPlayer[] players,GameMode gameMode);
 
         Task SendToAllBut(IPlayer player, int channelId, byte[] data);
-        Task SetGameProperty(string key, byte[] value);
-        Task SetPlayerProperty(IPlayer player, string key, byte[] data);
+
+        /// <summary>
+        /// Sets a match property for everyone and pushes MatchPropertyChangedEvent to the players
+        /// in the match, the setter included. Returns false and changes nothing when the match's
+        /// properties would reach 10 KB. Throws GameNotRunningException when
+        /// <paramref name="player"/> is not a player of the match.
+        /// </summary>
+        Task<bool> SetGameProperty(IPlayer player, string key, byte[] value);
+
+        /// <summary>
+        /// Sets one of <paramref name="player"/>'s own properties in the match and pushes
+        /// MatchPropertyChangedEvent to the other players. Same limit and refusal as
+        /// <see cref="SetGameProperty"/>.
+        /// </summary>
+        Task<bool> SetPlayerProperty(IPlayer player, string key, byte[] data);
 
         Task<bool> PlayerDisconnected(IPlayer player);
         Task PlayerStarted(IPlayer player);
@@ -43,46 +56,79 @@ namespace WildCat.Interfaces
         [Id(4)] public int MaxPlayers { get; set; }
         [Id(5)] public DateTime StartTime { get; set; }
 
-        private const int MAX_DATA_SIZE = 10240;
-        [Id(6)] private int storedDataSize;
+        /// <summary>
+        /// The mode the match was started with; kept so a reactivated match still knows it. Null
+        /// for a match that was never started.
+        /// </summary>
+        [Id(7)] public GameMode Mode { get; set; }
+
+        // Id 6 held a private running total of the property sizes, which the JSON grain storage
+        // did not keep; the total is now counted from the properties. Do not reuse it.
+
+        /// <summary>The match and player properties together (values only) stay below this many bytes.</summary>
+        public const int MaxPropertyBytes = 10240;
+
+        public const string NotAPlayer = "You are not a player in this match.";
+        public const string MatchFinished = "The match has finished.";
+
+        private int PropertyBytes()
+        {
+            int total = 0;
+            foreach (var value in GameProperties.Values)
+                total += value?.Length ?? 0;
+            foreach (var bag in PlayerProperties.Values)
+            {
+                foreach (var value in bag.Values)
+                    total += value?.Length ?? 0;
+            }
+            return total;
+        }
 
         public bool SetGameProperty(string key, byte[] value)
         {
-            int afterPotentialRemovalSize = storedDataSize;
-            if (GameProperties.ContainsKey(key))
-                afterPotentialRemovalSize -= GameProperties[key].Length;
-
-            if (afterPotentialRemovalSize + value.Length < MAX_DATA_SIZE)
-            {
-                GameProperties[key] = value;
-                storedDataSize = afterPotentialRemovalSize + value.Length;
-                return true;
-            }
-            else
+            value ??= Array.Empty<byte>();
+            int afterPotentialRemovalSize = PropertyBytes();
+            if (GameProperties.TryGetValue(key, out var old))
+                afterPotentialRemovalSize -= old?.Length ?? 0;
+            if (afterPotentialRemovalSize + value.Length >= MaxPropertyBytes)
                 return false;
+            GameProperties[key] = value;
+            return true;
         }
 
+        /// <summary>
+        /// Sets a property of <paramref name="player"/>, who must be a player of the match. (The
+        /// legacy version replaced the whole dictionary for a player without properties yet and
+        /// then threw KeyNotFoundException, so no player property was ever stored.)
+        /// </summary>
         public bool SetPlayerProperties(IPlayer player, string key, byte[] value)
         {
+            GetPlayerData(player);
+            value ??= Array.Empty<byte>();
             string playerKey = player.GetPrimaryKeyString();
-            if (!PlayerProperties.ContainsKey(playerKey))
-                PlayerProperties = new Dictionary<string, Dictionary<string, byte[]>>();
-            int afterPotentialRemovalSize = storedDataSize;
-            if (PlayerProperties[playerKey].ContainsKey(key))
-                afterPotentialRemovalSize -= PlayerProperties[playerKey][key].Length;
-            if (afterPotentialRemovalSize + value.Length < MAX_DATA_SIZE)
-            {
-                PlayerProperties[playerKey][key] = value;
-                storedDataSize = afterPotentialRemovalSize + value.Length;
-                return true;
-            }
-            else
+            if (!PlayerProperties.TryGetValue(playerKey, out var bag))
+                bag = new Dictionary<string, byte[]>();
+            int afterPotentialRemovalSize = PropertyBytes();
+            if (bag.TryGetValue(key, out var old))
+                afterPotentialRemovalSize -= old?.Length ?? 0;
+            if (afterPotentialRemovalSize + value.Length >= MaxPropertyBytes)
                 return false;
+            bag[key] = value;
+            PlayerProperties[playerKey] = bag;
+            return true;
         }
 
+        /// <summary>
+        /// The player's entry in the match. Throws GameNotRunningException when the player is not
+        /// in it (an unknown match has no players), which the gateway answers with error code 1.
+        /// </summary>
         public RelayServerGamePlayerState GetPlayerData(IPlayer player)
         {
-            return Players.First(x => x.player.GetPrimaryKeyString() == player.GetPrimaryKeyString());
+            string playerKey = player.GetPrimaryKeyString();
+            var found = Players.FirstOrDefault(x => x.player.GetPrimaryKeyString() == playerKey);
+            if (found == null)
+                throw new GameNotRunningException(NotAPlayer);
+            return found;
         }
 
         public RelayServerGameState()

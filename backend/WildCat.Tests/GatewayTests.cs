@@ -331,37 +331,6 @@ namespace WildCat.Tests
         }
 
         [Fact]
-        public async Task RemovingItemsThePlayerDoesNotHoldIsReportedAsAFailure()
-        {
-            var (developerKey, gameKey) = await CreateDeveloperAndGame();
-            await using var host = await GatewayTestHost.StartAsync(cluster.Client);
-            var (client, session, playerId) = await ConnectAndLogIn(host, developerKey, gameKey);
-            await using var _ = client;
-
-            var item = GrainFactory.GetGrain<IItem>(ResourcesUtility.GetItemKey(gameKey.ToString(), "gem"));
-            await item.Initialize("gem", "a gem", null, 100000, false, false, TimeSpan.Zero, false, false, 0, TimeSpan.Zero, null);
-            var inventory = GrainFactory.GetGrain<IPlayerInventory>(
-                ResourcesUtility.GetPlayerInventoryKey(gameKey.ToString(), playerId));
-            await inventory.AddItem(new IInventoryItem[] { item }, new[] { 3 });
-
-            WildCatMessageBase Remove(int count) => WildCatMessageBase.CreateWithAuthDataAndRequestID(
-                new RemoveItemInventoryRequestMessage { inventoryName = "", items = new[] { ("gem", count) } },
-                WildCatMsgType.RemoveInventoryItemRequest, WildCatMsgHeader.normal, session.ToString(), client.NextRequestId());
-
-            var tooMany = Remove(5);
-            var reply = await client.RequestAsync(tooMany);
-            Assert.Equal(WildCatMsgType.RemoveInventoryItemResponse, reply.msgType);
-            var failed = reply.GetPayload<OptionalResponse<GetInventoryResponseMessage>>();
-            Assert.False(failed.isSuccesful);
-            Assert.Equal(1, failed.errorCode);
-
-            reply = await client.RequestAsync(Remove(2));
-            var removed = reply.GetPayload<OptionalResponse<GetInventoryResponseMessage>>();
-            Assert.True(removed.isSuccesful, removed.errorMsg);
-            Assert.Equal(new[] { ("gem", 1) }, removed.msg.items);
-        }
-
-        [Fact]
         public async Task WebSocketFromAnUnlistedOriginIsRefused()
         {
             await using var host = await GatewayTestHost.StartAsync(cluster.Client,

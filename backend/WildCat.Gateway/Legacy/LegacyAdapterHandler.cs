@@ -25,22 +25,6 @@ namespace WildCat.Gateway
             Route(WildCatMsgType.AcceptChallengeRequest, WildCatMsgType.AcceptChallengeResponse),
             Route(WildCatMsgType.DenyChallengeRequest, WildCatMsgType.DenyChallengeResponse),
             Route(WildCatMsgType.GetPlayerChallengesRequest, WildCatMsgType.GetPlayerChallengesResponse),
-
-            // Matches, leaderboards and inventory (group 3)
-            Route(WildCatMsgType.FindMatchRequest, WildCatMsgType.FindMatchResponse),
-            Route(WildCatMsgType.LeaveGameRequest, WildCatMsgType.LeaveGameResponse),
-            Route(WildCatMsgType.SetMatchPropertyRequest, WildCatMsgType.SetMatchPropertyResponse),
-            Route(WildCatMsgType.RejoinMatchRequest, WildCatMsgType.RejoinMatchResponse),
-            Route(WildCatMsgType.GetPlayerPendingMatchesRequest, WildCatMsgType.GetPlayerMatchesResponse),
-            Route(WildCatMsgType.GetLeaderboardRequest, WildCatMsgType.GetLeaderboardResponse),
-            // Refused from clients without looking at the session: grants and scores come from scripts.
-            Route(WildCatMsgType.SetLeaderboardRequest, WildCatMsgType.SetLeaderboardResponse, SessionRequirement.None),
-            Route(WildCatMsgType.AddItemToInventoryRequest, WildCatMsgType.AddItemToInventoryResponse, SessionRequirement.None),
-            Route(WildCatMsgType.SetItemToInventoryRequest, WildCatMsgType.SetItemToInventoryResponse, SessionRequirement.None),
-            Route(WildCatMsgType.GetInventoryRequest, WildCatMsgType.GetInventoryResponse),
-            Route(WildCatMsgType.RemoveInventoryItemRequest, WildCatMsgType.RemoveInventoryItemResponse),
-            Route(WildCatMsgType.UnlockInventoryRequest, WildCatMsgType.UnlockInventoryResponse),
-            Route(WildCatMsgType.GetInventoryUnlockTimeRequest, WildCatMsgType.GetInventoryUnlockTimeResponse),
         };
 
         private readonly FrontEndServer frontEnd;

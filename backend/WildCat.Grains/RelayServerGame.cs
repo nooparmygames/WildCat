@@ -21,7 +21,13 @@ namespace WildCat.Grains
         private RelayServerGameState State => state.State;
 
         private const int EVENT_CHANNEL = 0;
-        private GameMode gameMode;
+
+        /// <summary>
+        /// The mode the match was started with. It is kept in state, so a match that was
+        /// deactivated still knows it (the legacy code kept it in a field and threw a
+        /// NullReferenceException on the next disconnect or finish).
+        /// </summary>
+        private GameMode Mode => State.Mode ?? GameMode.CreateDefault();
 
         public Task<RelayServerGameStatus> GetGameState()
         {
@@ -49,7 +55,7 @@ namespace WildCat.Grains
         public async Task<bool> PlayerDisconnected(IPlayer player)
         {
             State.GetPlayerData(player).state = RelayServerPlayerGameStatus.Disconnected;
-            if (gameMode.FinishGameWithOneDisconnect)
+            if (Mode.FinishGameWithOneDisconnect)
             {
                 State.State = RelayServerGameStatus.FinishedWithDisconnect;
                 State.Players.Where(x => x.player.GetPrimaryKeyString() != player.GetPrimaryKeyString()).Select(x =>
@@ -57,6 +63,7 @@ namespace WildCat.Grains
                     x.state = RelayServerPlayerGameStatus.Finished;
                     return x;
                 });
+                await state.WriteStateAsync();
                 string extended;
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
@@ -72,6 +79,7 @@ namespace WildCat.Grains
                     State.State = RelayServerGameStatus.SomeJoined;
                 else
                     State.State = RelayServerGameStatus.Started;
+                await state.WriteStateAsync();
                 string extended;
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
@@ -84,11 +92,17 @@ namespace WildCat.Grains
         //calls player
         public async Task PlayerFinished(IPlayer player)
         {
+            // Look the player up first: someone who is not in the match must not change its state.
+            var playerState = State.GetPlayerData(player);
             State.State = RelayServerGameStatus.SomeFinished;
-            State.GetPlayerData(player).state = RelayServerPlayerGameStatus.Finished;
-            if (State.Players.All(x => x.state == RelayServerPlayerGameStatus.Finished || (gameMode.FinishGameWithOneDisconnect && x.state == RelayServerPlayerGameStatus.Disconnected)))
-            {
+            playerState.state = RelayServerPlayerGameStatus.Finished;
+            bool allFinished = State.Players.All(x => x.state == RelayServerPlayerGameStatus.Finished
+                || (Mode.FinishGameWithOneDisconnect && x.state == RelayServerPlayerGameStatus.Disconnected));
+            if (allFinished)
                 State.State = RelayServerGameStatus.AllFinished;
+            await state.WriteStateAsync();
+            if (allFinished)
+            {
                 string extended;
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
@@ -104,7 +118,7 @@ namespace WildCat.Grains
             {
                 gameMode = GameMode.CreateDefault();
             }
-            this.gameMode = gameMode;
+            State.Mode = gameMode;
             State.MaxPlayers = gameMode.MaxPlayers;
             if (State.MaxPlayers < players.Length)
                 throw new ArgumentException("argument count should be 2 but is " + players.Length);
@@ -159,8 +173,10 @@ namespace WildCat.Grains
         //Called by player
         public async Task PlayerRejoined(IPlayer player)
         {
-            //await player.GameStarted(this.AsReference<IRelayServerGame>());
             var playerState = State.GetPlayerData(player);
+            // A finished match stays finished (rejoining one used to set it back to SomeJoined).
+            if (!IsRunning())
+                throw new GameNotRunningException(RelayServerGameState.MatchFinished);
             playerState.state = RelayServerPlayerGameStatus.InGame;
             playerState.lastMessageTime = DateTime.Now;
             if (State.State != RelayServerGameStatus.SomeFinished)
@@ -246,16 +262,24 @@ namespace WildCat.Grains
 
         public Task<bool> IsValidGame()
         {
-            return Task.FromResult(State.State != RelayServerGameStatus.AllFinished && State.State != RelayServerGameStatus.FinishedWithDisconnect);
+            return Task.FromResult(IsRunning());
         }
 
-        public async Task SetGameProperty(string key, byte[] value)
+        private bool IsRunning()
         {
+            return State.State != RelayServerGameStatus.AllFinished && State.State != RelayServerGameStatus.FinishedWithDisconnect;
+        }
+
+        public async Task<bool> SetGameProperty(IPlayer player, string key, byte[] value)
+        {
+            // Only a player of the match may change it.
+            State.GetPlayerData(player);
             string keyExtension;
             var primaryKey = this.GetPrimaryKey(out keyExtension);
-            if (State.SetGameProperty(key, value))
-            {
-                var propertyChangeMsg = WildCatMessageBase.Create(
+            if (!State.SetGameProperty(key, value))
+                return false;
+            await state.WriteStateAsync();
+            var propertyChangeMsg = WildCatMessageBase.Create(
                 new MatchPropertyChangeData
                 {
                     Game = primaryKey,
@@ -264,17 +288,18 @@ namespace WildCat.Grains
                     value = value
                 },
                 WildCatMsgType.MatchPropertyChangedEvent, WildCatMsgHeader.normal);
-                await SendDataToPlayers(EVENT_CHANNEL, WireCodec.Encode(propertyChangeMsg), State.Players, false);
-            }
+            await SendDataToPlayers(EVENT_CHANNEL, WireCodec.Encode(propertyChangeMsg), State.Players, false);
+            return true;
         }
 
-        public async Task SetPlayerProperty(IPlayer player, string key, byte[] value)
+        public async Task<bool> SetPlayerProperty(IPlayer player, string key, byte[] value)
         {
             string ext;
             var primary = this.GetPrimaryKey(out ext);
-            if (State.SetPlayerProperties(player, key, value))
-            {
-                var msg = WildCatMessageBase.Create(
+            if (!State.SetPlayerProperties(player, key, value))
+                return false;
+            await state.WriteStateAsync();
+            var msg = WildCatMessageBase.Create(
                 new MatchPropertyChangeData
                 {
                     Game = primary,
@@ -283,8 +308,8 @@ namespace WildCat.Grains
                     value = value
                 },
                 WildCatMsgType.MatchPropertyChangedEvent, WildCatMsgHeader.normal);
-                await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, WireCodec.Encode(msg));
-            }
+            await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, WireCodec.Encode(msg));
+            return true;
         }
 
         public Task<RelayServerGameState> GetState()

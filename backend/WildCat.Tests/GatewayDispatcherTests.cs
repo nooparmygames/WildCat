@@ -413,7 +413,6 @@ namespace WildCat.Tests
             }, signIn);
 
             Assert.DoesNotContain(registry.LegacyTypes, t => ported.Contains(t));
-            Assert.Contains(WildCatMsgType.FindMatchRequest, registry.LegacyTypes);
             Assert.All(registry.Routes, r => Assert.True(r.RequestType <= WildCatMsgType.HighestInternal));
             Assert.All(GatewayExtensions.HandlerTypes(), t => Assert.True(typeof(IMessageHandler).IsAssignableFrom(t)));
         }

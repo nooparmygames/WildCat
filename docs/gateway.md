@@ -34,6 +34,13 @@ WildCat.Gateway/
     Auth/                  Authenticate (76), CreateNewAccount (78), EmailActivation (80),
                            AddAuthMechanismToAccount (82), RecoverPassword (84),
                            ResendActivation (86), ResetPasswordWithCode (163), SignIn.cs (shared)
+    Matches/               FindMatch (15), LeaveGame (13), SetMatchProperty (129),
+                           GetPlayerPendingMatches (131), RejoinMatch (133), Matches.cs (shared)
+    Leaderboards/          GetLeaderboard (26)
+    Inventory/             GetInventory (109), RemoveInventoryItem (115), UnlockInventory (119),
+                           GetInventoryUnlockTime (121), Inventories.cs (shared)
+    Refused/               SetLeaderboard (28), AddItemToInventory (111), SetItemToInventory (113):
+                           always error 1, grants and scores come from server scripts
   Legacy/                  temporary: FrontEndServer (old code) and LegacyAdapterHandler
 ```
 
@@ -152,8 +159,11 @@ namespace WildCat.Gateway
   WildCatMsgHeader.normal))`.
 - To a player logged in on this node: `ConnectionRegistry.SendToPlayer(playerId, WireCodec.Encode(frame))`.
 - From a grain (any node): `IPlayer.SendDataToConnection(player, channel, encodedFrame)` publishes
-  on the player's PlayerConnection stream; `PushSubscriptions` queues it on the player's socket.
-  RelayServerGame sends its match events this way.
+  on the player's PlayerConnection stream (awaited, so frames one caller sends in turn stay in
+  order); `PushSubscriptions` queues it on the player's socket. RelayServerGame sends its match
+  events (9, 10, 125-128) and relayed game messages this way. Answers never take this path (the
+  legacy FindMatch and LeaveGame answers did), so an answer can arrive before the match events
+  its own request caused.
 - Friend and challenge events arrive on the FriendEvents and ChallengeEvents streams and become
   frames in `Push/FriendEventFrames.cs` and `Push/ChallengeEventFrames.cs`.
 

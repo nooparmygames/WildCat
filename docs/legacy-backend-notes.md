@@ -101,9 +101,11 @@ TaskCompletionSource per waiting player and every 3 s recomputes each player's c
 (the latest criterion whose start time has passed), times players out, and groups players whose
 skill distance is within the current threshold, requiring MinPlayers-1 opponents when
 `IsMinPlayersEnough` else MaxPlayers-1. On a match it creates `IRelayServerGame(Guid.NewGuid(),
-gameKey)`, calls `StartGame`, and resolves every waiting task. The gateway then calls
-`PlayerStarted` for the requesting player (marked TODO to make explicit). Challenges bypass the
-matchmaker and create the game directly.
+gameKey)`, calls `StartGame`, and resolves every waiting task. The gateway's FindMatch handler
+then joins the requesting player with `PlayerStarted` as an explicit step (the legacy gateway did
+it under a TODO to make it not automatic; the SDK has no separate join message) and answers
+with the match id and players. It caps the wait at 20 s so the matchmaker answers within the
+30 s grain call timeout. Challenges bypass the matchmaker and create the game directly.
 
 Relay: the backend never parses game payloads. `SendToAllBut(player, channel, bytes)` forwards
 to every other InGame player via `IPlayer.SendDataToConnection`, which publishes a
@@ -204,9 +206,18 @@ Correctness:
 9. Fixed in step 4: `Session` was never persisted, so any deactivation or restart dropped every
    session; it now writes state on initialize, user binding and end, and touches at most once a
    minute.
-10. `RelayServerGame`: `gameMode` is not persisted (NullReferenceException after reactivation in
-    disconnect and finish paths); a `Select` with side effects is never enumerated; property
-    setters and the disconnect-finish path never write state.
+10. `RelayServerGame`: a `Select` with side effects in the disconnect-finish path is never
+    enumerated, so the other players stay InGame in a match that finished with a disconnect.
+    Fixed in step 6b: the game mode is kept in state (`RelayServerGameState.Mode`; it lived in a
+    field, so a reactivated match threw NullReferenceException on the next disconnect or finish);
+    property setters, disconnects and finishes write state; the property size limit is counted
+    from the stored values (a private running total that the JSON storage did not keep); a player
+    property could never be set (the state replaced the whole dictionary and then threw
+    KeyNotFoundException); the setters return false when a value does not fit instead of
+    silently storing nothing; `GetPlayerData` throws `GameNotRunningException` ("You are not a
+    player in this match.") for a player who is not in the match, and `PlayerFinished` looks the
+    player up before changing the match state; setting a match property needs a player of the
+    match; `PlayerRejoined` refuses a finished match instead of setting it back to SomeJoined.
 11. `LeaderBoard.CreateList` indexes an empty list (any board with chunks fails to activate);
     partial chunks are never persisted; chunks are never cleared.
 12. Removed in step 2: `DeveloperInvoiceCollection.GenerateInvoicesIfNeeded` looped forever;
@@ -216,7 +227,8 @@ Correctness:
 14. `RelayServerMatchMaker` (and the `MatchMaker` removed in step 2) uses `.Seconds`/`.Minutes`
     instead of `TotalSeconds` (waits capped at 60 s), never resolves the parked task on
     `RemoveDisconnectedPlayer`, and holds the grain call open longer than the 30 s response
-    timeout. It also throws when the first criterion start time is not 0.
+    timeout. It also throws when the first criterion start time is not 0. Since step 6b the
+    gateway caps a FindMatch wait at 20 s, so the call returns before the timeout.
 15. Fixed in step 9: `ScriptCompilationUtility.RunScript` called `Thread.Abort`
     (PlatformNotSupported on .NET 5+; the port abandoned the thread, so a runaway script kept
     running), raced on a placeholder task so every call waited the full 3 s, kept a
@@ -240,7 +252,9 @@ Correctness:
     That worked on 3.4.3 only because call chain reentrancy was on by default there
     (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the
     port restores it with `CallChainReentrancyFilter` until the cycles get targeted
-    `RequestContext.AllowCallChainReentrancy()` calls. `SetEloScore` does not persist. (Step 2
+    `RequestContext.AllowCallChainReentrancy()` calls. Since step 6b the gateway's RejoinMatch
+    calls `PlayerRejoined` directly, which leaves no cycle on that path (`IPlayer.RejoinMatch`
+    still has it). `SetEloScore` does not persist. (Step 2
     removed `CalculateELO`, which treated a draw as a loss, and `AddPlayerProvider`, which
     allowed one account per provider name.) Fixed in step 4: `Disconnected` ignored the login
     ticket, so a stale connection logged out a newer session; it now ignores a ticket that is
@@ -282,6 +296,10 @@ Correctness:
     argument and answer unexpected exceptions with "Internal error" instead of the raw message.
     The rest (GetPlayerChallenges, the log calls and retries in the other groups) goes with
     roadmap step 6b.
+    Fixed in step 6b for matches, leaderboards and inventory: the handlers answer expected
+    failures with code 1 and a fixed text (unexpected ones with "Internal error"), LeaveGame
+    without a game target gets an answer, the LeaveGame retries are gone, and FindMatch and
+    LeaveGame answer on the connection instead of through the PlayerConnection stream.
 22. Fixed in step 4: the gateway's default branch handed every message id without a handler to
     the relay, which forwarded it to the other players whenever it had a game target and a
     session. A match participant could therefore send ids up to `HighestInternal`, such as 10

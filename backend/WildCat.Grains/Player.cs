@@ -52,13 +52,17 @@ namespace WildCat.Grains
             await base.OnActivateAsync(cancellationToken);
         }
 
+        /// <summary>
+        /// Publishes an encoded frame on the player's PlayerConnection stream, which the gateway
+        /// node holding the player's socket pushes to the client (WildCat.Gateway/Push). The
+        /// publish is awaited, so frames a caller sends one after another are queued in that order
+        /// and a failed publish reaches the caller (it used to be fire and forget).
+        /// </summary>
         public Task SendDataToConnection(IPlayer player, int channel, byte[] data)
         {
-            if (this.GetPrimaryKeyString() == player.GetPrimaryKeyString())
-            {
-                connectionStream.OnNextAsync(new PlayerConnectionMessage { player = player, channelId = channel, data = data });
-            }
-            return Task.CompletedTask;
+            if (this.GetPrimaryKeyString() != player.GetPrimaryKeyString())
+                return Task.CompletedTask;
+            return connectionStream.OnNextAsync(new PlayerConnectionMessage { player = player, channelId = channel, data = data });
         }
         
         private async Task OnTimer(object timerState)

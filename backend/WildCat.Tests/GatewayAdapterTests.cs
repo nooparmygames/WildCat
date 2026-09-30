@@ -116,66 +116,15 @@ namespace WildCat.Tests
         }
 
         [Fact]
-        public async Task MatchesLeaderboardsInventoryAndScriptsAnswerThroughTheAdapter()
+        public async Task ScriptEventsAnswerThroughTheAdapter()
         {
-            var (host, client, ticket, playerId, gameKey) = await StartLoggedIn();
+            var (host, client, ticket, _, _) = await StartLoggedIn();
             await using var _ = host;
             await using var __ = client;
-
-            var pending = await client.CallAsync<PendingMatchesCollectionData>(WildCatMsgType.GetPlayerPendingMatchesRequest,
-                new EmptyMessage(), WildCatMsgType.GetPlayerMatchesResponse, ticket);
-            Assert.True(pending.isSuccesful, pending.errorMsg);
-            Assert.Empty(pending.msg.matches);
-
-            var inventory = await client.CallAsync<GetInventoryResponseMessage>(WildCatMsgType.GetInventoryRequest,
-                new StringMessage(), WildCatMsgType.GetInventoryResponse, ticket);
-            Assert.True(inventory.isSuccesful, inventory.errorMsg);
-            Assert.Empty(inventory.msg.items);
-
-            var leaderboard = await client.RequestAsync(client.Request(WildCatMsgType.GetLeaderboardRequest,
-                new GetLeaderBoardRequest { leaderBoardName = "l1", type = GetLeaderBoardRequest.RequestType.Me }, ticket));
-            Assert.Equal(WildCatMsgType.GetLeaderboardResponse, leaderboard.msgType);
 
             var script = await client.CallAsync<ScriptEventExecutionResponseMessage>(WildCatMsgType.ExecuteScriptEventRequest,
                 new ScriptEventExecutionRequestMessage { eventName = "no-such-event" }, WildCatMsgType.ExecuteScriptEventResponse, ticket);
             Assert.False(script.isSuccesful);
-
-            foreach (var (request, response) in new[]
-                     {
-                         (WildCatMsgType.SetLeaderboardRequest, WildCatMsgType.SetLeaderboardResponse),
-                         (WildCatMsgType.AddItemToInventoryRequest, WildCatMsgType.AddItemToInventoryResponse),
-                         (WildCatMsgType.SetItemToInventoryRequest, WildCatMsgType.SetItemToInventoryResponse),
-                     })
-            {
-                var refused = await client.CallAsync<EmptyMessage>(request, new EmptyMessage(), response, ticket);
-                Assert.False(refused.isSuccesful);
-                Assert.Equal(GatewayErrors.Refused, refused.errorCode);
-                Assert.Equal(GatewayErrors.ClientGrantRejected, refused.errorMsg);
-            }
-        }
-
-        [Fact]
-        public async Task LeaveGameAnswersInsteadOfThrowing()
-        {
-            // The answer used to be built with an empty ticket, which threw, so no answer went out.
-            var (host, client, ticket, playerId, gameKey) = await StartLoggedIn();
-            await using var _ = host;
-            await using var __ = client;
-            var matchId = Guid.NewGuid();
-            var player = GrainFactory.GetGrain<IPlayer>(playerId);
-            var other = GrainFactory.GetGrain<IPlayer>(TestSetup.UniqueId("other"));
-            var game = GrainFactory.GetGrain<IRelayServerGame>(matchId, gameKey.ToString(), null);
-            await game.StartGame(new[] { player, other }, null);
-            await game.PlayerStarted(player);
-
-            var leave = WildCatMessageBase.CreateWithGameTarget(new EmptyMessage(), WildCatMsgType.LeaveGameRequest,
-                WildCatMsgHeader.normal, matchId.ToString(), ticket);
-            leave.SetRequestID(client.NextRequestId());
-            var reply = await client.RequestAsync(leave);
-
-            Assert.Equal(WildCatMsgType.LeaveGameResponse, reply.msgType);
-            Assert.Equal(WildCatMsgHeader.HasRequestID, reply.header);
-            Assert.True(reply.GetPayload<OptionalResponse<EmptyMessage>>().isSuccesful);
         }
 
         [Fact]

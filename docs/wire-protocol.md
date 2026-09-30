@@ -222,29 +222,41 @@ Challenges (adapter)
 | 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetChallengeRequests` (bug: received lands in sent) |
 | 19, 22, 25 | StartChallengeRequestedEvent, ChallengeAcceptedEvent, ChallengeDeniedEvent (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
 
-Matchmaking, match state and relay (adapter)
+Matchmaking, match state and relay (handlers since step 6b)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 15/16 | FindMatch | {matchType, uint skill, uint waitTime} / {Guid gameId, string, string[] players} | `ICustomMatchMaker(gameKey, matchType).FindMatch`, then `PlayerStarted`; answered through the PlayerConnection stream |
-| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `IRelayServerGame.SetPlayer/GameProperty` |
-| 133/134 | RejoinMatch | {Guid} / empty | `IPlayer.RejoinMatch` |
-| 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `IPlayer.GetPendingMatches` |
-| 13/14 | LeaveGame | header game / empty | `IRelayServerGame.PlayerFinished`; answered through the PlayerConnection stream (the answer threw before step 6) |
+| 15/16 | FindMatch | {matchType, uint skill, uint waitTime} / {Guid gameId, string, string[] players} | `FindMatchHandler`: `ICustomMatchMaker(gameKey, matchType).FindMatch` (a mode the game does not define plays by the default two player rules), then `PlayerStarted` joins the player; the wait is capped at 20 s; code 1 "Match not found" when it runs out and for an empty mode name. Other requests and the relay of the connection go on while it waits |
+| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `SetMatchPropertyHandler`, `IRelayServerGame.SetPlayer/GameProperty`; code 1 when the match's values would reach 10240 bytes in total, and for a match the player is not in |
+| 133/134 | RejoinMatch | {Guid} / empty | `RejoinMatchHandler`, `IRelayServerGame.PlayerRejoined`; code 1 for a match the player is not in or one that has finished |
+| 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `GetPlayerPendingMatchesHandler`, `IPlayer.GetPendingMatches` |
+| 13/14 | LeaveGame | header game / empty | `LeaveGameHandler`, `IRelayServerGame.PlayerFinished`; code 1 without a game target, with one that is not a Guid, and for a match the player is not in |
 | >1023 | game messages | frame with HasGameTarget, relayed without the ticket, in order | dispatcher relay worker, `SendToAllBut(player, 0, frame)` (retried up to 5 times before step 6) |
-| 9, 10 | GamePlayerAddedEvent {Player, Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
+| 9, 10 | GamePlayerAddedEvent {Player (the name), Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
 | 125..128 | GamePlayerRemovedEvent, GamePlayerRejoinedEvent, MatchRejoinSyncEvent {Game, gameProps, playerProps}, MatchPropertyChangedEvent {Game, Player?, key, bytes} (S) | | from RelayServerGame |
 
-Leaderboards, inventory (adapter)
+Match events are built by RelayServerGame and reach the client through the player's
+PlayerConnection stream (`IPlayer.SendDataToConnection`, `Push/PushSubscriptions.cs`); a match
+property change goes to every player in the match, a player property change to the others only.
+Answers go straight to the connection. Before step 6b FindMatch and LeaveGame answered through the
+stream too, so an answer can now arrive before the events its own request caused (FindMatch's own
+GamePlayerAddedEvent, LeaveGame's GameFinishedEvent).
 
-| Id | Message | Payload | Grain path |
+Leaderboards, inventory (handlers since step 6b)
+
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 26/27 | GetLeaderboard | {byte type Top/Around/Me, name, [count], [offset]} / {playerRank, count, entries: {playerId, userName, score, entryTime}[]} | `ILeaderBoard` |
-| 28/29 | SetLeaderboard | {name, int score} / empty | refused from clients (code 1, "Not allowed from clients. Grant items and set scores from a server script event."); scripts call `SetScoreInLeaderBoard` |
-| 109/110 | GetInventory | {invName} / {(name, count)[]} | `IPlayerInventory.GetInventory` |
+| 26/27 | GetLeaderboard | {byte type Top/Around/Me, name, [count], [offset]} / {byte type, playerRank, count, entries: {playerId, userName, score, entryTime}[]} | `GetLeaderboardHandler`, `ILeaderBoard("{gameKey}_L_{name}")`: Me fills playerRank, Around playerRank and entries, Top count (entries on the board) and entries; ranks count from 0, -1 for a player without a score; count is capped at 100 entries; code 1 for a negative count or offset and an unknown type. The answer repeats the query type (step 6b; the SDK used to guess it from the fields, which failed for empty results) |
+| 28/29 | SetLeaderboard | {name, int score} / empty | `RefusedClientGrantsHandler`: refused from clients, with or without a session (code 1, "Not allowed from clients. Grant items and set scores from a server script event."); scripts call `SetScoreInLeaderBoard` |
+| 109/110 | GetInventory | {invName} / {(name, count)[]} | `GetInventoryHandler`, `IPlayerInventory("{gameKey}_{playerId}_[{invName}_]inv").GetInventory`; an empty name is the main inventory |
 | 111..114 | AddItemToInventory, SetItemToInventory | {invName, (item, count)[]} / inventory list | refused from clients like 28; scripts call `AddInventoryItems`, `SetInventoryItems` |
-| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveItem`; code 1 when the player does not hold that many |
-| 119..122 | UnlockInventory, GetInventoryUnlockTime | {invName} | `Unlock`, `GetUnlocktime` |
+| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveInventoryItemHandler`, `RemoveItem`, all or nothing; code 1 when the player does not hold that many or a count is not positive |
+| 119/120 | UnlockInventory | {invName} / the items moved | `UnlockInventoryHandler`, `Unlock`: moves a named inventory into the main one; code 1 while a timed chest (an inventory with a size) is still locked |
+| 121/122 | GetInventoryUnlockTime | {invName} / TimeSpan | `GetInventoryUnlockTimeHandler`, `GetUnlocktime`; zero when it can be unlocked now (it could be negative before step 6b) |
+
+Leaderboards and inventories belong to the game of the request's session (before step 6b the
+inventory used the game of the socket's login, which is empty when the ticket was logged in on
+another socket).
 
 Defined but unhandled (answered with ErrorMsg "Unsupported message type", never relayed): 107/108
 GetDefinedItems, 117/118 BuyItem, 123/124 ConsumeItem, and 44/45 CreateEnvironment (step 4
@@ -280,6 +292,11 @@ Wire format changes, made on both sides at once since the SDK now gets the same 
 - Null strings, arrays, lists and payloads threw when written; they are written as empty.
 - Lengths and counts from the wire were trusted, so a small frame could make the reader allocate
   gigabytes or silently read short arrays; they are checked against the bytes left.
+- Step 6b: `GetLeaderBoardResponse` starts with the query type (one byte, the
+  `GetLeaderBoardRequest.RequestType` value), and `IsPlayerRank`, `IsAroundMeResult` and
+  `IsTopResult` read it. They used to guess from which fields were filled, so a Me or Around
+  query for a player without a score and any query on an empty board matched none of them and
+  the SDK never completed the call.
 
 ## The SDK copy
 

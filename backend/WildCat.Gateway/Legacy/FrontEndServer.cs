@@ -1,6 +1,5 @@
 using WildCat.Interfaces;
 using Orleans;
-using Orleans.Streams;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,23 +19,12 @@ namespace WildCat.Gateway
     {
         private readonly ILogger _Logger;
         private readonly IClusterClient orleansClient;
-        private IStreamProvider streamProvider;
         private const int MaxTrycount = 5;
 
         public FrontEndServer(ILogger<FrontEndServer> logger, IClusterClient clusterClient)
         {
             orleansClient = clusterClient;
             _Logger = logger;
-        }
-
-        /// <summary>
-        /// The player's PlayerConnection stream. FindMatch and LeaveGame answer through it (as they
-        /// always did), so the answer reaches the client after the match events published before it.
-        /// </summary>
-        private IAsyncStream<PlayerConnectionMessage> ConnectionStream(IPlayer player)
-        {
-            streamProvider ??= orleansClient.GetStreamProvider(StreamNames.PROVIDER_NAME);
-            return streamProvider.GetStream<PlayerConnectionMessage>(StreamNames.PlayerConnection(player.GetPrimaryKeyString()));
         }
 
         /// <summary>Handles one request of a type listed in <see cref="LegacyAdapterHandler"/>.</summary>
@@ -53,37 +41,7 @@ namespace WildCat.Gateway
             _Logger.LogTrace("Legacy handling of {MessageType} with a {Size} byte payload", msg.msgType, msg.RawData.Length);
             switch (msg.msgType)
             {
-                case WildCatMsgType.GetInventoryRequest:
-                    await ProcessGetInventoryRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetInventoryUnlockTimeRequest:
-                    await ProcessGetInventoryUnlockTimeRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.UnlockInventoryRequest:
-                    await ProcessUnlockInventoryRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.AddItemToInventoryRequest:
-                    await RejectClientGrant(connection, msg, WildCatMsgType.AddItemToInventoryResponse);
-                    break;
-                case WildCatMsgType.SetItemToInventoryRequest:
-                    await RejectClientGrant(connection, msg, WildCatMsgType.SetItemToInventoryResponse);
-                    break;
-                case WildCatMsgType.RemoveInventoryItemRequest:
-                    await ProcessRemoveInventoryRequest(session, player, connection, channelId, msg, ticket);
-                    break;
 
-                case WildCatMsgType.FindMatchRequest:
-                    await ProcessFindMatchRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.SetMatchPropertyRequest:
-                    await ProcessSetMatchPropertyRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.RejoinMatchRequest:
-                    await ProcessRejoinMatchRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetPlayerPendingMatchesRequest:
-                    await ProcessGetPlayerPendingMatchesRequest(session, player, connection, channelId, msg, ticket);
-                    break;
                 case WildCatMsgType.GetPlayerChallengesRequest:
                     await ProcessGetPlayerChallengesRequest(session, player, connection, channelId, msg, ticket);
                     break;
@@ -99,15 +57,6 @@ namespace WildCat.Gateway
                 case WildCatMsgType.DenyFriendRequest:
                     await ProcessDenyFriendsRequest(session, player, connection, channelId, msg, ticket);
                     break;
-                case WildCatMsgType.GetLeaderboardRequest:
-                    await ProcessGetLeaderBoardRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.SetLeaderboardRequest:
-                    await RejectClientGrant(connection, msg, WildCatMsgType.SetLeaderboardResponse);
-                    break;
-                case WildCatMsgType.LeaveGameRequest:
-                    await ProcessLeaveGameMessage(session, player, connection, channelId, msg, ticket, isReliable, 0);
-                    break;
                 case WildCatMsgType.StartChallengeRequest:
                     await ProcessStartChallengeMessage(session, player, connection, channelId, msg, ticket,
                         isReliable, 0);
@@ -122,213 +71,6 @@ namespace WildCat.Gateway
                     break;
                 default:
                     throw new InvalidOperationException($"The legacy gateway code has no case for {msg.msgType}.");
-            }
-        }
-
-        private async Task ProcessGetInventoryRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-                        var name = msg.GetPayload<StringMessage>();
-            OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
-            try
-            {
-                var inv = orleansClient.GetGrain<IPlayerInventory>(
-                    ResourcesUtility.GetPlayerInventoryKey(connection.GameKey.ToString(), player.GetPrimaryKeyString(),
-                        name.value));
-                (string, int)[] stuff = await GetInventoryItems(inv);
-                GetInventoryResponseMessage responseData = new GetInventoryResponseMessage
-                {
-                    items = stuff
-                };
-                response.Succeed(responseData);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetInventory Error: {x.ToString()}", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetInventoryResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetInventoryUnlockTimeRequest(SessionGameInfo session, IPlayer player,
-            GatewayConnection connection, int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-                        var name = msg.GetPayload<StringMessage>();
-            OptionalResponse<GetInventoryUnlockTimeResponseMessage> response =
-                new OptionalResponse<GetInventoryUnlockTimeResponseMessage>();
-            try
-            {
-                var inv = orleansClient.GetGrain<IPlayerInventory>(
-                    ResourcesUtility.GetPlayerInventoryKey(connection.GameKey.ToString(), player.GetPrimaryKeyString(),
-                        name.value));
-                var (status, time) = await inv.GetUnlocktime();
-                response.Succeed(new GetInventoryUnlockTimeResponseMessage
-                {
-                    time = time
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetInventoryUnlockTime Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetInventoryUnlockTimeResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessUnlockInventoryRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-                        var name = msg.GetPayload<StringMessage>();
-            OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
-            try
-            {
-                var inv = orleansClient.GetGrain<IPlayerInventory>(
-                    ResourcesUtility.GetPlayerInventoryKey(connection.GameKey.ToString(), player.GetPrimaryKeyString(),
-                        name.value));
-                (string, int)[] stuff = await UnlockInventoryItems(inv);
-                GetInventoryResponseMessage responseData = new GetInventoryResponseMessage
-                {
-                    items = stuff
-                };
-                response.Succeed(responseData);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"UnlockInventory Error: {x.ToString()}", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.UnlockInventoryResponse, msg);
-            connection.Send(returning);
-        }
-
-        /// <summary>
-        /// Answers 28 (SetLeaderboard), 111 (AddItemToInventory) and 113 (SetItemToInventory) with
-        /// an error. Clients used to grant themselves items and pick their own scores with these;
-        /// grants and scores now come from server script events (WildCatScriptApi). Removing items
-        /// (115) stays allowed because players may spend their own items.
-        /// </summary>
-        private Task RejectClientGrant(GatewayConnection connection, WildCatMessageBase msg, WildCatMsgType responseType)
-        {
-            _Logger.LogInformation("Rejected {MessageType} from connection {ConnectionId}: clients may not grant items or set scores",
-                msg.msgType, connection.Id);
-            // A failed response carries no payload, so the payload type does not matter on the wire.
-            var response = new OptionalResponse<EmptyMessage>();
-            response.Fail(GatewayErrors.ClientGrantRejected, 1);
-            var returning = WildCatMessageBase.CreateResponse(response, responseType, msg);
-            connection.Send(returning);
-            return Task.CompletedTask;
-        }
-
-        private async Task ProcessRemoveInventoryRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-                        var req = msg.GetPayload<RemoveItemInventoryRequestMessage>();
-            OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
-            try
-            {
-                var inv = orleansClient.GetGrain<IPlayerInventory>(
-                    ResourcesUtility.GetPlayerInventoryKey(connection.GameKey.ToString(), player.GetPrimaryKeyString(),
-                        req.inventoryName));
-                // IInventoryItem has two grain classes (items and packages), so the class has to be
-                // named; without it the lookup threw and no removal ever worked.
-                bool removed = await inv.RemoveItem(
-                    req.items.Select(x =>
-                        orleansClient.GetGrain<IInventoryItem>(
-                            ResourcesUtility.GetItemKey(connection.GameKey.ToString(), x.Item1),
-                            ResourcesUtility.GetGameItemsClassName())).ToArray(),
-                    req.items.Select(x => x.Item2).ToArray());
-                if (removed)
-                {
-                    (string, int)[] stuff = await GetInventoryItems(inv);
-                    GetInventoryResponseMessage responseData = new GetInventoryResponseMessage
-                    {
-                        items = stuff
-                    };
-                    response.Succeed(responseData);
-                }
-                else
-                {
-                    // RemoveItem changes nothing when a count is not positive or more than the
-                    // player holds.
-                    response.Fail("The inventory does not hold these items in these amounts.", 1);
-                }
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"RemoveInventoryRequest Error: {x.ToString()}", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.RemoveInventoryItemResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task<(string, int)[]> GetInventoryItems(IPlayerInventory inv)
-        {
-            var readItems = await inv.GetInventory();
-            if (readItems != null && readItems.items != null)
-            {
-                var tasks = readItems.items.Select(async x => ((await x.Item.GetName()), x.Count)).ToArray();
-                (string, int)[] stuff = await Task.WhenAll(tasks);
-                return stuff;
-            }
-            else
-            {
-                return new (string, int)[0];
-            }
-        }
-
-        private async Task<(string, int)[]> UnlockInventoryItems(IPlayerInventory inv)
-        {
-            var readItems = await inv.Unlock();
-            var tasks = readItems.Select(async x => ((await x.Item.GetName()), x.Count)).ToArray();
-            (string, int)[] stuff = await Task.WhenAll(tasks);
-            return stuff;
-        }
-
-        private async Task ProcessLeaveGameMessage(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket, bool reliable, int count)
-        {
-                        if (msg.HasGameTarget)
-            {
-                OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-                try
-                {
-                    var game = orleansClient.GetGrain<IRelayServerGame>(Guid.Parse(msg.game),
-                        session.GameKey.ToString(), null);
-                    await game.PlayerFinished(player);
-                    response.Succeed(new EmptyMessage());
-                }
-                catch (GameNotRunningException x)
-                {
-                    _Logger.LogError((int) msg.msgType, "LeaveGame NotRunningGame Error:", x);
-                    response.Fail("Game not running", 1);
-                }
-                catch (Exception x)
-                {
-                    _Logger.LogError((int) msg.msgType, "LeaveGame Error:", x);
-                    if (count < MaxTrycount)
-                    {
-                        _Logger.LogTrace((int) msg.msgType, "Retrying LeaveGame message {0}", count);
-                        await Task.Delay(MaxTrycount * 10);
-                        await ProcessLeaveGameMessage(session, player, connection, channelId, msg, ticket, reliable,
-                            count + 1);
-                        return;
-                    }
-                    else
-                    {
-                        _Logger.LogError((int) msg.msgType, $"LeaveGame Failed after {MaxTrycount}");
-                        response.Fail(x.Message, -1);
-                    }
-                }
-
-                WildCatMessageBase returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.LeaveGameResponse, msg);
-                await ConnectionStream(player).OnNextAsync(new PlayerConnectionMessage
-                {
-                    player = player, connectionId = connection.Id, channelId = channelId, data = WireCodec.Encode(returning),
-                    eventType = PlayerConnectionMessage.EventType.DataTransfer
-                });
             }
         }
 
@@ -443,78 +185,6 @@ namespace WildCat.Gateway
             connection.Send(returning);
         }
 
-        private async Task ProcessSetMatchPropertyRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<SetMatchPropertyData>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                var game = orleansClient.GetGrain<IRelayServerGame>(request.Game, session.GameKey.ToString(), null);
-                if (request.isPlayerProperty)
-                    await game.SetPlayerProperty(player, request.key, request.value);
-                else
-                    await game.SetGameProperty(request.key, request.value);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"SetMatchProperty Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetMatchPropertyResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessRejoinMatchRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<GuidMessage>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                var game = orleansClient.GetGrain<IRelayServerGame>(request.value, session.GameKey.ToString(), null);
-
-                await player.RejoinMatch(game);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"RejoinMatch Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.RejoinMatchResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPlayerPendingMatchesRequest(SessionGameInfo session, IPlayer player,
-            GatewayConnection connection, int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<EmptyMessage>();
-            OptionalResponse<PendingMatchesCollectionData> response = new OptionalResponse<PendingMatchesCollectionData>();
-            try
-            {
-                var matches = await player.GetPendingMatches();
-                PendingMatchesCollectionData data = new PendingMatchesCollectionData();
-                data.matches = new PendingMatchesCollectionData.PendingMatchInfo[matches.Count];
-                for (int i = 0; i < matches.Count; ++i)
-                    data.matches[i] = new PendingMatchesCollectionData.PendingMatchInfo
-                    {
-                        startTime = matches[i].StartTime,
-                        matchId = matches[i].MatchId,
-                        players = matches[i].players.Select(x => x.GetPrimaryKeyString()).ToArray()
-                    };
-                response.Succeed(data);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetPendingMatches Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerMatchesResponse, msg);
-            connection.Send(returning);
-        }
-
         private async Task ProcessGetPlayerChallengesRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
@@ -554,54 +224,6 @@ namespace WildCat.Gateway
             }
             var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerChallengesResponse, msg);
             connection.Send(returning);
-        }
-
-        private async Task ProcessFindMatchRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-                        var request = msg.GetPayload<FindMatchRequest>();
-
-            var mm = orleansClient.GetGrain<ICustomMatchMaker>(session.GameKey, request.matchType, null);
-            string gk = "";
-            OptionalResponse<FindMatchResponse> response = new OptionalResponse<FindMatchResponse>();
-            try
-            {
-                var foundMatchResponse = await mm.FindMatch(player, request.skill, request.waitTime);
-                if (foundMatchResponse == null)
-                {
-                    response.Fail("Match not found", 1);
-                }
-                else
-                {
-                    FindMatchResponse responseToSend = new FindMatchResponse();
-                    responseToSend.gameId = foundMatchResponse.game.GetPrimaryKey(out gk);
-                    responseToSend.players = (await foundMatchResponse.game.GetPlayers())
-                        .Select(x => x.GetPrimaryKeyString())
-                        .ToArray();
-                    responseToSend.data = "";
-                    response.Succeed(responseToSend);
-                }
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"FindMatch Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-
-            var returningMsg =
-                WildCatMessageBase.CreateResponse(response, WildCatMsgType.FindMatchResponse, msg);
-            if (response.isSuccesful)
-            {
-                //TODO remove this and make it none automatic
-                await orleansClient.GetGrain<IRelayServerGame>(response.msg.gameId, gk, null)
-                    .PlayerStarted(player);
-            }
-
-            await ConnectionStream(player).OnNextAsync(new PlayerConnectionMessage
-            {
-                player = player, connectionId = connection.Id, channelId = channelId, data = WireCodec.Encode(returningMsg),
-                eventType = PlayerConnectionMessage.EventType.DataTransfer
-            });
         }
 
         private async Task ProcessGetFriendsRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
@@ -766,60 +388,6 @@ namespace WildCat.Gateway
             }
             var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.DenyFriendResponse, msg);
             connection.Send(returning);
-        }
-
-        private async Task ProcessGetLeaderBoardRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<GetLeaderBoardRequest>();
-            OptionalResponse<GetLeaderBoardResponse> response = new OptionalResponse<GetLeaderBoardResponse>();
-            try
-            {
-                GetLeaderBoardResponse responseToSend = new GetLeaderBoardResponse();
-                var leaderBoard = orleansClient.GetGrain<ILeaderBoard>(
-                    ResourcesUtility.GetLeaderBoardKey(session.GameKey.ToString(), request.leaderBoardName));
-                switch (request.type)
-                {
-                    case GetLeaderBoardRequest.RequestType.Me:
-                        int rank = await leaderBoard.GetPlayerRank(player);
-                        responseToSend.playerRank = rank;
-                        break;
-                    case GetLeaderBoardRequest.RequestType.Around:
-                        var aroundEntries = await leaderBoard.GetAroundMe(player, request.count);
-                        responseToSend.playerRank = aroundEntries.Item1;
-                        FillReturningLeaderBoardEntries(responseToSend, aroundEntries.Item2);
-                        break;
-                    case GetLeaderBoardRequest.RequestType.Top:
-                        var topEntries = await leaderBoard.GetTopEntries(request.count, request.offset);
-                        FillReturningLeaderBoardEntries(responseToSend, topEntries.Item2);
-                        responseToSend.count = topEntries.Item1;
-                        break;
-                }
-
-                response.Succeed(responseToSend);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetLeaderBoardRequest Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetLeaderboardResponse, msg);
-            connection.Send(returning);
-        }
-
-        private static void FillReturningLeaderBoardEntries(GetLeaderBoardResponse responseToSend,
-            List<WildCat.Interfaces.LeaderBoardEntry> aroundEntries)
-        {
-            foreach (var item in aroundEntries)
-            {
-                responseToSend.entries.Add(new WildCat.Protocol.LeaderBoardEntry
-                {
-                    score = item.Score,
-                    userName = item.Name,
-                    playerId = item.PlayerID,
-                    entryTime = item.EntryTime
-                });
-            }
         }
 
     }

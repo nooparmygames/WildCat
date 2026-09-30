@@ -212,7 +212,7 @@ namespace WildCat.Scripting
             return CallAsync(async _ =>
             {
                 var topEntries = await LeaderBoard(leaderBoard).GetTopEntries(count, offset);
-                GetLeaderBoardResponse resp = new GetLeaderBoardResponse();
+                GetLeaderBoardResponse resp = new GetLeaderBoardResponse { type = GetLeaderBoardRequest.RequestType.Top };
                 resp.count = topEntries.Item1;
                 FillReturningLeaderBoardEntries(resp, topEntries.Item2, true, 0, "", offset);
                 return resp;
@@ -230,7 +230,7 @@ namespace WildCat.Scripting
             {
                 IPlayer playerGrain = grainFactory.GetGrain<IPlayer>(player);
                 var aroundMeEntries = await LeaderBoard(leaderBoard).GetAroundMe(playerGrain, count);
-                GetLeaderBoardResponse resp = new GetLeaderBoardResponse();
+                GetLeaderBoardResponse resp = new GetLeaderBoardResponse { type = GetLeaderBoardRequest.RequestType.Around };
                 resp.playerRank = aroundMeEntries.Item1;
                 FillReturningLeaderBoardEntries(resp, aroundMeEntries.Item2, false, aroundMeEntries.Item1, player, 0);
                 return resp;
