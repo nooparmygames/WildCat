@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <UserSecretsId>wildcat-host</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,12 +16,6 @@
     <ProjectReference Include="..\WildCat.Grains\WildCat.Grains.csproj" />
     <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />
     <ProjectReference Include="..\WildCat.Gateway\WildCat.Gateway.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="devsconfig.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>

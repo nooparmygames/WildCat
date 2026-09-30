@@ -1,14 +1,116 @@
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using WildCat.Interfaces;
+using Orleans.Configuration;
 using Orleans.Hosting;
 
 namespace WildCat.Grains
 {
     /// <summary>
-    /// Silo configuration shared by the silo host (WildCat.Host/Program.cs) and the test cluster
-    /// (WildCat.Tests/ClusterFixture.cs), so the two stay in sync.
+    /// Silo configuration shared by the silo host (WildCat.Host/Program.cs) and the tests
+    /// (WildCat.Tests/ClusterFixture.cs and the PostgreSql*Tests.cs files), so they stay in sync.
     /// </summary>
     public static class SiloBuilderExtensions
     {
+        // Grain storage names the grains use: "Default" for every Grain<T> and [PersistentState]
+        // without a provider name, "blob" for the leaderboards, and "PubSubStore" for the stream
+        // subscriptions of the memory streams.
+        private const string BlobStorageName = "blob";
+        private const string PubSubStorageName = "PubSubStore";
+
+        /// <summary>
+        /// Configures clustering, ids, endpoints, grain storage and reminders from
+        /// <paramref name="options"/> by calling <see cref="AddWildCatClustering"/> and
+        /// <see cref="AddWildCatStorage"/>. <paramref name="connectionString"/> is only used, and
+        /// then required, by the PostgreSQL provider. Streams are configured separately with
+        /// <see cref="AddGameStreams"/> and stay in memory with either provider.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The options are invalid, or the provider is
+        /// PostgreSQL and the connection string is empty.</exception>
+        public static ISiloBuilder AddWildCatProviders(this ISiloBuilder builder, OrleansHostingOptions options, string connectionString)
+        {
+            builder.AddWildCatClustering(options, connectionString);
+            builder.AddWildCatStorage(options, connectionString);
+            return builder;
+        }
+
+        /// <summary>
+        /// Sets ClusterId, ServiceId and the silo and gateway ports, and picks the membership
+        /// provider: localhost clustering on loopback for Memory, ADO.NET clustering for
+        /// PostgreSQL (listening on every address and advertising
+        /// <see cref="OrleansHostingOptions.AdvertisedHost"/> or the first non-loopback IPv4
+        /// address). Test clusters that bring their own membership skip this and call
+        /// <see cref="AddWildCatStorage"/> only.
+        /// </summary>
+        public static ISiloBuilder AddWildCatClustering(this ISiloBuilder builder, OrleansHostingOptions options, string connectionString)
+        {
+            Validate(options);
+            builder.Configure<ClusterOptions>(o =>
+            {
+                o.ClusterId = options.ClusterId;
+                o.ServiceId = options.ServiceId;
+            });
+
+            switch (options.Provider)
+            {
+                case OrleansProvider.Memory:
+                    builder.UseLocalhostClustering(options.SiloPort, options.GatewayPort,
+                        primarySiloEndpoint: null, serviceId: options.ServiceId, clusterId: options.ClusterId);
+                    break;
+
+                case OrleansProvider.PostgreSQL:
+                    string cs = RequireConnectionString(connectionString);
+                    IPAddress advertised = ResolveAdvertisedAddress(options.AdvertisedHost);
+                    builder.ConfigureEndpoints(advertised, options.SiloPort, options.GatewayPort, listenOnAnyHostAddress: true);
+                    builder.UseAdoNetClustering(o =>
+                    {
+                        o.Invariant = OrleansHostingOptions.PostgreSqlInvariant;
+                        o.ConnectionString = cs;
+                    });
+                    break;
+            }
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers the grain storage providers ("Default", "blob", "PubSubStore") and the
+        /// reminder service for the selected provider: memory for Memory, ADO.NET on PostgreSQL
+        /// for PostgreSQL. The ADO.NET providers load the Npgsql factory by its invariant name
+        /// themselves, so nothing has to be registered with DbProviderFactories.
+        /// </summary>
+        public static ISiloBuilder AddWildCatStorage(this ISiloBuilder builder, OrleansHostingOptions options, string connectionString)
+        {
+            Validate(options);
+            switch (options.Provider)
+            {
+                case OrleansProvider.Memory:
+                    builder.AddMemoryGrainStorageAsDefault();
+                    builder.AddMemoryGrainStorage(BlobStorageName);
+                    builder.AddMemoryGrainStorage(PubSubStorageName);
+                    builder.UseInMemoryReminderService();
+                    break;
+
+                case OrleansProvider.PostgreSQL:
+                    string cs = RequireConnectionString(connectionString);
+                    void Storage(AdoNetGrainStorageOptions o)
+                    {
+                        o.Invariant = OrleansHostingOptions.PostgreSqlInvariant;
+                        o.ConnectionString = cs;
+                    }
+                    builder.AddAdoNetGrainStorageAsDefault(Storage);
+                    builder.AddAdoNetGrainStorage(BlobStorageName, Storage);
+                    builder.AddAdoNetGrainStorage(PubSubStorageName, Storage);
+                    builder.UseAdoNetReminderService(o =>
+                    {
+                        o.Invariant = OrleansHostingOptions.PostgreSqlInvariant;
+                        o.ConnectionString = cs;
+                    });
+                    break;
+            }
+            return builder;
+        }
+
         /// <summary>
         /// Memory streams for the game provider (<see cref="StreamNames.PROVIDER_NAME"/>).
         /// Memory streams deliver through pulling agents that poll their queues on a timer, 100 ms
@@ -16,7 +118,7 @@ namespace WildCat.Grains
         /// to the direct delivery of the legacy SMS provider. Polling every 10 ms is a stopgap until
         /// the gateway moves to a push mechanism. Clients that subscribe still need
         /// AddMemoryStreams(StreamNames.PROVIDER_NAME) on their own builder, and the silo needs a
-        /// "PubSubStore" grain storage.
+        /// "PubSubStore" grain storage (see <see cref="AddWildCatStorage"/>).
         /// </summary>
         public static ISiloBuilder AddGameStreams(this ISiloBuilder builder)
         {
@@ -34,6 +136,59 @@ namespace WildCat.Grains
         {
             builder.AddOutgoingGrainCallFilter<CallChainReentrancyFilter>();
             return builder;
+        }
+
+        private static void Validate(OrleansHostingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            if (!Enum.IsDefined(options.Provider))
+                throw new InvalidOperationException(
+                    $"{OrleansHostingOptions.SectionName}:Provider has the unknown value {options.Provider}; use Memory or PostgreSQL.");
+            if (string.IsNullOrWhiteSpace(options.ClusterId) || string.IsNullOrWhiteSpace(options.ServiceId))
+                throw new InvalidOperationException(
+                    $"{OrleansHostingOptions.SectionName}:ClusterId and ServiceId must not be empty.");
+            if (options.SiloPort is < 1 or > 65535 || options.GatewayPort is < 1 or > 65535 || options.SiloPort == options.GatewayPort)
+                throw new InvalidOperationException(
+                    $"{OrleansHostingOptions.SectionName}:SiloPort ({options.SiloPort}) and GatewayPort ({options.GatewayPort}) " +
+                    "must be two different ports between 1 and 65535.");
+        }
+
+        private static string RequireConnectionString(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException(
+                    $"{OrleansHostingOptions.SectionName}:Provider is PostgreSQL but the connection string " +
+                    $"ConnectionStrings:{OrleansHostingOptions.ConnectionStringName} is empty. Set it with user secrets or " +
+                    $"the ConnectionStrings__{OrleansHostingOptions.ConnectionStringName} environment variable, for example " +
+                    "\"Host=localhost;Port=5432;Database=wildcat;Username=wildcat;Password=...\".");
+            return connectionString;
+        }
+
+        /// <summary>
+        /// Returns the address other silos should use to reach this one: the configured host
+        /// (an IP address, or a name resolved through DNS to its first IPv4 address), or the first
+        /// non-loopback IPv4 address of an interface that is up.
+        /// </summary>
+        private static IPAddress ResolveAdvertisedAddress(string advertisedHost)
+        {
+            if (!string.IsNullOrWhiteSpace(advertisedHost))
+            {
+                if (IPAddress.TryParse(advertisedHost, out var parsed))
+                    return parsed;
+                var resolved = Dns.GetHostAddresses(advertisedHost)
+                    .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+                return resolved ?? throw new InvalidOperationException(
+                    $"{OrleansHostingOptions.SectionName}:AdvertisedHost '{advertisedHost}' did not resolve to an IPv4 address.");
+            }
+
+            var address = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                .Select(a => a.Address)
+                .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a));
+            return address ?? throw new InvalidOperationException(
+                "No non-loopback IPv4 address was found to advertise to other silos. " +
+                $"Set {OrleansHostingOptions.SectionName}:AdvertisedHost.");
         }
     }
 }

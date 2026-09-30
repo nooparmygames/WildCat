@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using WildCat.Grains.Resources;
 using WildCat.Interfaces;
 using Orleans;
 using Orleans.Concurrency;
@@ -24,6 +26,15 @@ namespace WildCat.Grains
 
         private IAsyncStream<PlayerConnectionMessage> connectionStream;
         private IStreamProvider streamProvider;
+
+        private readonly IEmailSender emailSender;
+        private readonly ILogger<Player> logger;
+
+        public Player(IEmailSender emailSender, ILogger<Player> logger)
+        {
+            this.emailSender = emailSender;
+            this.logger = logger;
+        }
 
         public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
@@ -299,7 +310,7 @@ namespace WildCat.Grains
                 .SetAccountID(this.GetPrimaryKeyString());
             if (isMappingAdded)
             {
-                string activationCode = EmailSenderUtility.RandomString(RANDOM_TOKEN_LENGTH);
+                string activationCode = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
                 State.Emails.Add(email,
                     new Dictionary<string, string>
                     {
@@ -307,8 +318,18 @@ namespace WildCat.Grains
                         {STATUS_KEY, STATUS_NOT_ACTIVE},
                         {CODE_KEY, activationCode}
                     });
-                EmailSenderUtility.SendEmail(EmailSenderUtility.SENDER_ADDRESS, email, "Activation code", activationCode);
                 await WriteStateAsync();
+                // The account exists once the state is written, so a failed send is logged rather
+                // than failing the call. A reset code (SendPasswordChangeCodeToEmail) also
+                // activates the address, which is the way to get a new code.
+                try
+                {
+                    await emailSender.SendAsync(email, EmailTexts.ActivationSubject, EmailTexts.ActivationBody(activationCode));
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Could not send the activation email for player {PlayerId}", this.GetPrimaryKeyString());
+                }
                 return AdditionResult.Success;
             }
             else
@@ -482,10 +503,11 @@ namespace WildCat.Grains
         {
             if (!State.Emails.ContainsKey(email))
                 throw new ArgumentException("The email doesn't exist");
-            string code = EmailSenderUtility.RandomString(RANDOM_TOKEN_LENGTH);
+            string code = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
             State.Emails[email][CODE_KEY] = code;
-            EmailSenderUtility.SendEmail(EmailSenderUtility.SENDER_ADDRESS, email, "Security code", code);
             await WriteStateAsync();
+            // Unlike activation, a failed send fails the call: the caller asked for this email.
+            await emailSender.SendAsync(email, EmailTexts.ResetSubject, EmailTexts.ResetBody(code));
             return code;
         }
 

@@ -33,7 +33,9 @@ and talked to a REST API that was never checked in, so it is rewritten from scra
 - .NET SDK 10.0 is installed. Node and npm are installed for the panel. Docker is available.
   No database server is installed locally; use Docker. In a fresh cloud container without
   `dotnet`, install it with `apt-get install -y dotnet-sdk-10.0` (the dot.net install script
-  host is blocked by the proxy; the Ubuntu archive is not).
+  host is blocked by the proxy; the Ubuntu archive is not). The Docker daemon may need starting
+  (`dockerd > /tmp/dockerd.log 2>&1 &`), and Docker Hub pulls can hit the anonymous rate limit
+  (429); `mirror.gcr.io/library/postgres:17` is the same image.
 - Everything targets net10.0 on Orleans 10.3.1 except `WildCat.Protocol` (netstandard2.0, shared
   with Unity). Shared settings live in `backend/Directory.Build.props` and package versions in
   `backend/Directory.Packages.props` (central package management):
@@ -51,16 +53,55 @@ dotnet build backend/WildCat.sln
 dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --filter "FullyQualifiedName~LeaderBoardTests"
 ```
 
-- Run the host: one process runs the silo (localhost clustering, memory storage, memory
-  streams, in-memory reminders) and the WebSocket gateway at `/ws` on port 5000:
+  The fixture registers `CapturingEmailSender`, so tests can read the emails the grains send.
+  The PostgreSQL provider tests (`PostgreSqlStorageTests`, `PostgreSqlHostTests`) are skipped
+  unless `WILDCAT_TEST_POSTGRES` holds a connection string to a database with the Orleans scripts
+  from `deploy/postgres` applied; each run uses its own ClusterId and ServiceId:
+
+```bash
+WILDCAT_TEST_POSTGRES="Host=localhost;Port=5432;Database=wildcat;Username=wildcat;Password=..." \
+  dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --filter "FullyQualifiedName~PostgreSql"
+```
+
+- Run the host: one process runs the silo and the WebSocket gateway at `/ws` on port 5000.
+  Configuration is in `backend/WildCat.Host/appsettings.json`, which holds the structure with
+  empty values; real values come from user secrets (`dotnet user-secrets --project
+  backend/WildCat.Host set ...`) or environment variables (`__` for `:`). The sections:
+  - `WildCat:Orleans` (`OrleansHostingOptions`): `Provider` is `Memory` (default: localhost
+    clustering, memory grain storage, in-memory reminders, all lost on exit; outside Development
+    the host logs a warning) or `PostgreSQL` (ADO.NET clustering, grain storage for "Default",
+    "blob" and "PubSubStore", and reminders, invariant `Npgsql`). Also `ClusterId`
+    (`wildcat-dev`), `ServiceId` (`wildcat`, keys all stored data, never change it), `SiloPort`
+    (11111), `GatewayPort` (30000) and `AdvertisedHost` (PostgreSQL only; empty advertises the
+    first non-loopback IPv4 address, and the silo listens on every address). Streams are memory
+    streams (`AddGameStreams()`) with either provider.
+  - `ConnectionStrings:WildCat`: the PostgreSQL connection string. The host refuses to start
+    when the provider is PostgreSQL and it is empty.
+  - `WildCat:Seed` (`SeedOptions`): developers and games (plus leaderboard "l1" per game)
+    created at startup by `SeedHostedService` when missing. Only `appsettings.Development.json`
+    has one: developer `11111111-1111-1111-1111-111111111111` with game
+    `22222222-2222-2222-2222-222222222222` (placeholders for local clients and smoke tests).
+  - `WildCat:Email` (`EmailOptions`): SMTP settings. With `SmtpHost` and `FromAddress` set,
+    `SmtpEmailSender` sends; otherwise `LoggingEmailSender` logs the code at Warning. Texts are
+    in `WildCat.Grains/Resources/EmailTexts.resx`.
+  - `Gateway` (`MaxMessageBytes`, `AllowedOrigins`) and `ForwardedHeaders` (`KnownProxies` as
+    addresses, `KnownNetworks` as CIDR ranges; loopback only by default).
 
 ```bash
 dotnet run --project backend/WildCat.Host
 ```
 
-  Every build uses the memory providers until the PostgreSQL port (roadmap step 5); outside
-  Development the host logs a warning saying so. `backend/WildCat.Host/devsconfig.json` seeds one
-  developer and game with placeholder keys and goes away with the configuration model.
+  Against PostgreSQL (a database created with the scripts in `deploy/postgres`, for example the
+  `postgres` service of the compose file):
+
+```bash
+WildCat__Orleans__Provider=PostgreSQL \
+ConnectionStrings__WildCat="Host=localhost;Port=5432;Database=wildcat;Username=wildcat;Password=..." \
+  dotnet run --project backend/WildCat.Host
+```
+
+  When other hosts run on the same machine, move the ports: `--urls http://localhost:5001`,
+  `WildCat__Orleans__SiloPort` and `WildCat__Orleans__GatewayPort`.
 - The Unity SDK cannot be compiled in a Claude session (no Unity install). The PlayFab
   references were removed at copy time; compiling in Unity is unverified.
 
@@ -91,8 +132,11 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   (A calls B calls A). `WildCat.Grains/CallChainReentrancyFilter.cs`, registered through
   `AddLegacyCallChainReentrancy()` in `WildCat.Grains/SiloBuilderExtensions.cs`, restores that for
   every call. Replace it with targeted `RequestContext.AllowCallChainReentrancy()` calls at the
-  known cycles before removing it. The same extensions class holds the stream setup shared by
-  the host and the test fixture.
+  known cycles before removing it. The same extensions class holds the provider setup
+  (`AddWildCatProviders`, split into `AddWildCatClustering` and `AddWildCatStorage`) and the
+  stream setup shared by the host and the tests.
+- Account emails go through `IEmailSender` (WildCat.Interfaces), injected into the Player grain;
+  `AddWildCatEmail` in WildCat.Grains picks the SMTP or the logging implementation.
 
 ## Decisions (confirmed by the owner on 2026-09-30)
 

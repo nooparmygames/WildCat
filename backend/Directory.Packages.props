@@ -9,6 +9,10 @@
     <PackageVersion Include="Microsoft.Orleans.Streaming" Version="$(OrleansVersion)" />
     <PackageVersion Include="Microsoft.Orleans.Reminders" Version="$(OrleansVersion)" />
     <PackageVersion Include="Microsoft.Orleans.TestingHost" Version="$(OrleansVersion)" />
+    <PackageVersion Include="Microsoft.Orleans.Clustering.AdoNet" Version="$(OrleansVersion)" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.AdoNet" Version="$(OrleansVersion)" />
+    <PackageVersion Include="Microsoft.Orleans.Reminders.AdoNet" Version="$(OrleansVersion)" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using WildCat.Grains;
 using WildCat.Interfaces;
 using Orleans.TestingHost;
@@ -7,23 +8,25 @@ namespace WildCat.Tests
 {
     /// <summary>
     /// One in-process silo plus client shared by every test class in <see cref="ClusterCollection"/>.
-    /// Mirrors the silo configuration in WildCat.Host/Program.cs with memory providers.
+    /// Mirrors the silo configuration in WildCat.Host/Program.cs with the Memory provider, except
+    /// that the test cluster brings its own membership and emails go to <see cref="Emails"/>.
     /// </summary>
     public class ClusterFixture : IAsyncLifetime
     {
         public InProcessTestCluster Cluster { get; private set; }
+
+        /// <summary>Every email the grains sent through <see cref="IEmailSender"/>.</summary>
+        public CapturingEmailSender Emails { get; } = new CapturingEmailSender();
 
         public async Task InitializeAsync()
         {
             var builder = new InProcessTestClusterBuilder(initialSilosCount: 1);
             builder.ConfigureSilo((options, silo) =>
             {
-                silo.AddMemoryGrainStorageAsDefault();
-                silo.AddMemoryGrainStorage("blob");
-                silo.AddMemoryGrainStorage("PubSubStore");
+                silo.AddWildCatStorage(new OrleansHostingOptions { Provider = OrleansProvider.Memory }, connectionString: null);
                 silo.AddGameStreams();
-                silo.UseInMemoryReminderService();
                 silo.AddLegacyCallChainReentrancy();
+                silo.Services.AddSingleton<IEmailSender>(Emails);
             });
             builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));
             Cluster = builder.Build();

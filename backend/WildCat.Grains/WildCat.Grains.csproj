@@ -4,7 +4,13 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" />
     <PackageReference Include="Microsoft.Orleans.Sdk" />
+    <PackageReference Include="Microsoft.Orleans.Server" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
+    <PackageReference Include="Microsoft.Orleans.Reminders" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" />
+    <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" />
+    <PackageReference Include="Npgsql" />
     <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 
