@@ -414,16 +414,16 @@ namespace WildCat.Tests
             Assert.Empty(await AdminApiHost.ReadAsync<List<ScriptEventResponse>>(await host.GetAsync(events, account.Token)));
             await AdminApiHost.ReadProblemAsync(await host.DeleteAsync($"{events}/twice", account.Token), HttpStatusCode.NotFound);
             Assert.False(WildCat.Scripting.ScriptCache.Shared.Contains(cacheKey));
-            var gone = await Assert.ThrowsAsync<InvalidOperationException>(() => compiler.GetInfo());
+            var gone = await Assert.ThrowsAsync<WildCat.Interfaces.ScriptEventNotFoundException>(() => compiler.GetInfo());
             Assert.Contains("does not exist", gone.Message);
             // Gone from storage too, not only from the activation.
             await cluster.Deactivate(compiler);
-            await Assert.ThrowsAsync<InvalidOperationException>(() => compiler.GetInfo());
+            await Assert.ThrowsAsync<WildCat.Interfaces.ScriptEventNotFoundException>(() => compiler.GetInfo());
             var diagnostics = await compiler.GetDiagnostics();
             Assert.False(diagnostics.Success);
 
             // A client that still runs the event gets a clean error instead of the old code.
-            var failed = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.Run(session, "twice", 5).WaitAsync(TestSetup.Timeout));
+            var failed = await Assert.ThrowsAsync<WildCat.Interfaces.ScriptEventNotFoundException>(() => runner.Run(session, "twice", 5).WaitAsync(TestSetup.Timeout));
             Assert.Contains("does not exist", failed.Message);
 
             // The name can be used again, with a different parameter list.

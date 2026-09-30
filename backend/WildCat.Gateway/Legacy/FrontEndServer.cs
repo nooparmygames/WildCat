@@ -53,9 +53,6 @@ namespace WildCat.Gateway
             _Logger.LogTrace("Legacy handling of {MessageType} with a {Size} byte payload", msg.msgType, msg.RawData.Length);
             switch (msg.msgType)
             {
-                case WildCatMsgType.SetPublisherDataRequest_S:
-                    await ProcessSetPublisherDataByDeveloperMessage(session, player, connection, channelId, msg);
-                    break;
                 case WildCatMsgType.GetInventoryRequest:
                     await ProcessGetInventoryRequest(session, player, connection, channelId, msg, ticket);
                     break;
@@ -74,9 +71,6 @@ namespace WildCat.Gateway
                 case WildCatMsgType.RemoveInventoryItemRequest:
                     await ProcessRemoveInventoryRequest(session, player, connection, channelId, msg, ticket);
                     break;
-                case WildCatMsgType.GetPublisherDataRequest_S:
-                    await ProcessGetPublisherDataByDeveloperMessage(session, player, connection, channelId, msg);
-                    break;
 
                 case WildCatMsgType.FindMatchRequest:
                     await ProcessFindMatchRequest(session, player, connection, channelId, msg, ticket);
@@ -93,9 +87,6 @@ namespace WildCat.Gateway
                 case WildCatMsgType.GetPlayerChallengesRequest:
                     await ProcessGetPlayerChallengesRequest(session, player, connection, channelId, msg, ticket);
                     break;
-                case WildCatMsgType.SetNameRequest:
-                    await ProcessSetNameRequest(session, player, connection, channelId, msg, ticket);
-                    break;
                 case WildCatMsgType.InviteFriendRequest:
                     await ProcessInviteFriendsRequest(session, player, connection, channelId, msg, ticket);
                     break;
@@ -107,30 +98,6 @@ namespace WildCat.Gateway
                     break;
                 case WildCatMsgType.DenyFriendRequest:
                     await ProcessDenyFriendsRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetNameRequest:
-                    await ProcessGetNameRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetPlayerNameRequest:
-                    await ProcessGetPlayerNameRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.SetCloudDataRequest:
-                    await ProcessSetCloudDataRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.SetPublicCloudDataRequest:
-                    await ProcessSetPublicCloudDataRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetCloudDataRequest:
-                    await ProcessGetCloudDataRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetPublicCloudDataRequest:
-                    await ProcessGetPublicCloudDataRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetPlayerPublicCloudDataRequest:
-                    await ProcessGetPlayerPublicCloudDataRequest(session, player, connection, channelId, msg, ticket);
-                    break;
-                case WildCatMsgType.GetPublisherDataRequest:
-                    await ProcessGetPublisherDataRequest(session, player, connection, channelId, msg, ticket);
                     break;
                 case WildCatMsgType.GetLeaderboardRequest:
                     await ProcessGetLeaderBoardRequest(session, player, connection, channelId, msg, ticket);
@@ -153,63 +120,9 @@ namespace WildCat.Gateway
                     await ProcessDenyChallengeMessage(session, player, connection, channelId, msg, ticket, isReliable,
                         0);
                     break;
-                case WildCatMsgType.ExecuteScriptEventRequest:
-                    await ProcessExecuteScriptEventRequest(session, player, connection, channelId, msg, ticket);
-                    break;
                 default:
                     throw new InvalidOperationException($"The legacy gateway code has no case for {msg.msgType}.");
             }
-        }
-
-        private async Task ProcessSetPublisherDataByDeveloperMessage(SessionGameInfo session, IPlayer player,
-            GatewayConnection connection, int channelId, WildCatMessageBase msg)
-        {
-            var request = msg.GetPayload<SetPublisherDataRequest>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                var developerStorage = orleansClient.GetGrain<IDeveloperStorage>(request.developerKey);
-                await developerStorage.SetString(request.key, request.value, request.developerSecret);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (InvalidOperationException x)
-            {
-                _Logger.LogError((int) msg.msgType, "SetPublisherData InvalidSecret Error:", x);
-                response.Fail($"Secret is wrong", 1);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, "SetPublisherData Error:", x);
-                response.Fail(x.Message, -1);
-            }
-
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetPublisherDataResponse_S, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPublisherDataByDeveloperMessage(SessionGameInfo session, IPlayer player,
-            GatewayConnection connection, int channelId, WildCatMessageBase msg)
-        {
-            var request = msg.GetPayload<GetPublisherDataRequest>();
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
-            try
-            {
-                var developerStorage = orleansClient.GetGrain<IDeveloperStorage>(request.developerKey);
-                var readValue = await developerStorage.GetStringForDeveloper(request.key, request.developerSecret);
-                response.Succeed(new StringMessage {value = readValue});
-            }
-            catch (InvalidOperationException x)
-            {
-                _Logger.LogError((int) msg.msgType, "GetPublisherData InvalidSecret Error:", x);
-                response.Fail($"Secret is wrong", 1);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, "GetPublisherData Error:", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublisherDataResponse_S, msg);
-            connection.Send(returning);
         }
 
         private async Task ProcessGetInventoryRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
@@ -691,25 +604,6 @@ namespace WildCat.Gateway
             });
         }
 
-        private async Task ProcessSetNameRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<StringMessage>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                await player.SetPlayerName(request.value);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"SetName Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetNameResponse, msg);
-            connection.Send(returning);
-        }
-
         private async Task ProcessGetFriendsRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
@@ -874,98 +768,6 @@ namespace WildCat.Gateway
             connection.Send(returning);
         }
 
-        private async Task ProcessGetCloudDataRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<StringMessage>();
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
-            try
-            {
-                var readValue = (await player.GetPlayerString(request.value)).Item2;
-                response.Succeed(new StringMessage
-                {
-                    value = readValue
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetCloudDataResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPublicCloudDataRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<StringMessage>();
-            OptionalResponse<GetPublicCloudDataResponse> response = new OptionalResponse<GetPublicCloudDataResponse>();
-            try
-            {
-                var readValue = (await player.GetPlayerPublicString(request.value));
-                GetPublicCloudDataResponse responseData = new GetPublicCloudDataResponse();
-                responseData.hasValue = readValue.Item1;
-                if (readValue.Item1)
-                    responseData.value = readValue.Item2;
-                response.Succeed(responseData);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetPublicCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublicCloudDataResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPlayerPublicCloudDataRequest(SessionGameInfo session, IPlayer player,
-            GatewayConnection connection, int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<GetPlayerPublicCloudDataRequest>();
-            OptionalResponse<GetPlayerPublicCloudDataResponse> response =
-                new OptionalResponse<GetPlayerPublicCloudDataResponse>();
-            try
-            {
-                var readValue =
-                    (await orleansClient.GetGrain<IPlayer>(request.player).GetPlayerPublicString(request.key));
-                GetPlayerPublicCloudDataResponse responseData = new GetPlayerPublicCloudDataResponse();
-                responseData.hasValue = readValue.Item1;
-                if (responseData.hasValue) responseData.value = readValue.Item2;
-                response.Succeed(responseData);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetPlayerPublicCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerPublicCloudDataResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPublisherDataRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<StringMessage>();
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
-            try
-            {
-                var readValue = await orleansClient.GetGrain<IDeveloperStorage>(session.DeveloperKey)
-                    .GetString(request.value);
-                response.Succeed(new StringMessage
-                {
-                    value = readValue
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublisherDataResponse, msg);
-            connection.Send(returning);
-        }
-
         private async Task ProcessGetLeaderBoardRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
@@ -1020,142 +822,5 @@ namespace WildCat.Gateway
             }
         }
 
-        private async Task ProcessSetCloudDataRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<SetCloudDataRequest>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                await player.SetPlayerString(request.key, request.value);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"SetCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetCloudDataResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessSetPublicCloudDataRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<SetCloudDataRequest>();
-            OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
-            try
-            {
-                await player.SetPlayerPublicString(request.key, request.value);
-                response.Succeed(new EmptyMessage());
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"SetPublicCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetPublicCloudDataResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessExecuteScriptEventRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<ScriptEventExecutionRequestMessage>();
-            OptionalResponse<ScriptEventExecutionResponseMessage> response =
-                new OptionalResponse<ScriptEventExecutionResponseMessage>();
-            try
-            {
-                ISession sessionGrain = orleansClient.GetGrain<ISession>(ticket);
-
-                object returnValue =
-                    await orleansClient.GetGrain<IScriptEventRunner>(session.GameKey, session.UserID, null)
-                        .Run(sessionGrain, request.eventName, request.parameters);
-                ScriptEventExecutionResponseMessage responseMessage = new ScriptEventExecutionResponseMessage
-                    {hasReturnValue = (returnValue != null)};
-                if (responseMessage.hasReturnValue)
-                {
-                    responseMessage.returnValue = returnValue;
-                    responseMessage.returnType =
-                        (WildCat.Protocol.ParamType) GetReturnType(returnValue);
-                }
-
-                response.Succeed(responseMessage);
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"SetCloudData Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.ExecuteScriptEventResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetNameRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
-            try
-            {
-                var name = await player.GetPlayerName();
-                response.Succeed(new StringMessage
-                {
-                    value = name
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetNameRequest Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetNameResponse, msg);
-            connection.Send(returning);
-        }
-
-        private async Task ProcessGetPlayerNameRequest(SessionGameInfo session, IPlayer player, GatewayConnection connection,
-            int channelId, WildCatMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetPayload<StringMessage>();
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
-            try
-            {
-                var name = await orleansClient.GetGrain<IPlayer>(request.value).GetPlayerName();
-                response.Succeed(new StringMessage
-                {
-                    value = name
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"GetPlayerNameRequest Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerNameResponse, msg);
-            connection.Send(returning);
-        }
-
-        public static EventParameter.ParamType GetReturnType(object returnValue)
-        {
-            Type t = returnValue.GetType();
-            if (t == typeof(int))
-                return EventParameter.ParamType.IntParam;
-            if (t == typeof(short))
-                return EventParameter.ParamType.ShortParam;
-            if (t == typeof(long))
-                return EventParameter.ParamType.LongParam;
-            if (t == typeof(bool))
-                return EventParameter.ParamType.BoolParam;
-            if (t == typeof(byte[]))
-                return EventParameter.ParamType.ByteArrayParam;
-            if (t == typeof(byte))
-                return EventParameter.ParamType.ByteParam;
-            if (t == typeof(float))
-                return EventParameter.ParamType.FloatParam;
-            if (t == typeof(double))
-                return EventParameter.ParamType.DoubleParam;
-            if (t == typeof(string))
-                return EventParameter.ParamType.StringParam;
-            throw new ArgumentException("Invalid argument type");
-        }
     }
 }

@@ -176,18 +176,33 @@ ResendActivation (86) replaces the activation code of an address that is not act
 RecoverPassword and ResendActivation answer success whatever the address, so they do not reveal
 which addresses are registered.
 
-Profile and cloud data (adapter)
+Profile, cloud data, publisher data and script events (handlers since step 6b)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 36..39 | GetName, SetName | {string} | `IPlayer.Get/SetPlayerName` |
-| 68/69 | GetPlayerName | {playerId} / {name} | `IPlayer(id).GetPlayerName` |
-| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `IPlayer.Get/SetPlayerString` |
-| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, [value]} | `IPlayer.*PublicString` |
-| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, [value]} | `IPlayer(player).GetPlayerPublicString` |
-| 34/35 | GetPublisherData | {key} / {value} | `IDeveloperStorage(devKey).GetString` |
-| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage.SetString`, `GetStringForDeveloper` (both check the secret); server to server, no session; payloads in ServerOnly/ |
-| 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `IScriptEventRunner.Run` |
+| 36..39 | GetName, SetName | {string} | `GetNameHandler`, `SetNameHandler`: `IPlayer.Get/SetPlayerName`; any name, "" included |
+| 68/69 | GetPlayerName | {playerId} / {name} | `GetPlayerNameHandler`: `IPlayer(id).GetPlayerName`; "" for an unknown player; code 1 for an empty id |
+| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `GetCloudDataHandler`, `SetCloudDataHandler`: `IPlayer.Get/SetPlayerString`; a missing key reads as "" |
+| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, [value]} | `SetPublicCloudDataHandler`, `GetPublicCloudDataHandler`: `IPlayer.*PublicString` |
+| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, [value]} | `GetPlayerPublicCloudDataHandler`: `IPlayer(player).GetPlayerPublicString`; code 1 for an empty id |
+| 34/35 | GetPublisherData | {key} / {value} | `GetPublisherDataHandler`: `IDeveloperStorage(session's devKey).GetString`; a missing key reads as "" |
+| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `SetPublisherDataServerHandler`, `GetPublisherDataServerHandler`: `IDeveloperStorage.SetString`, `GetStringForDeveloper` (both check the secret); server to server, no session (a header ticket is ignored); code 1 "The developer key or secret is wrong." ("Secret is wrong" before step 6b); payloads in ServerOnly/ |
+| 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `ExecuteScriptEventHandler`: `IScriptEventRunner(gameKey, player).Run`; see below |
+
+All of these but 62..65 need a logged in player. The player's own private and public data live in
+the storage of the game the player last logged in to (`Player.lastGameKey`), and so does the
+public data another player reads with 70, which may be a different game than the reader's.
+
+ExecuteScriptEvent answers with the script's return value, or `has` false for an event that returns
+nothing or null. It fails with code 1 and a text meant for the client when the event does not exist
+("The script event 'name' does not exist."), the arguments do not fit (wrong count, or a value of
+the wrong type), the script ran past its time limit or call depth, the game has too many runs still
+going past their limit, the stored script is no longer valid or returned a type events may not
+return, the script API refused a call (another player's private data), or the script threw
+`Exception`, `InvalidOperationException` or `ArgumentException` (the only exceptions a script can
+create; the message is the script's own, so scripts can refuse a request with a reason). Any other
+failure, such as a `NullReferenceException` in the script, is code -1 "Internal error" and is logged.
+Before step 6b every failure sent the raw exception message with code -1.
 
 Friends (adapter)
 

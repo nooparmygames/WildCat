@@ -45,7 +45,7 @@ namespace WildCat.Scripting
         private void AssertIsCreated()
         {
             if (!State.IsCreated)
-                throw new InvalidOperationException($"The script event {this.GetPrimaryKeyString()} does not exist.");
+                throw new ScriptEventNotFoundException($"The script event '{GetEventName()}' does not exist.");
         }
 
         public Task Initialize(string name, List<EventParameter> parameters, string script)

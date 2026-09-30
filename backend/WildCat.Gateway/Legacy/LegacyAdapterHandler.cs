@@ -15,21 +15,6 @@ namespace WildCat.Gateway
     {
         private static readonly MessageRoute[] LegacyRoutes =
         {
-            // Profile and cloud data, publisher data (6b group 1)
-            Route(WildCatMsgType.GetNameRequest, WildCatMsgType.GetNameResponse),
-            Route(WildCatMsgType.SetNameRequest, WildCatMsgType.SetNameResponse),
-            Route(WildCatMsgType.GetPlayerNameRequest, WildCatMsgType.GetPlayerNameResponse),
-            Route(WildCatMsgType.GetCloudDataRequest, WildCatMsgType.GetCloudDataResponse),
-            Route(WildCatMsgType.SetCloudDataRequest, WildCatMsgType.SetCloudDataResponse),
-            Route(WildCatMsgType.SetPublicCloudDataRequest, WildCatMsgType.SetPublicCloudDataResponse),
-            Route(WildCatMsgType.GetPublicCloudDataRequest, WildCatMsgType.GetPublicCloudDataResponse),
-            Route(WildCatMsgType.GetPlayerPublicCloudDataRequest, WildCatMsgType.GetPlayerPublicCloudDataResponse),
-            Route(WildCatMsgType.GetPublisherDataRequest, WildCatMsgType.GetPublisherDataResponse),
-            // Server to server: the developer key and secret in the payload are the credentials.
-            Route(WildCatMsgType.SetPublisherDataRequest_S, WildCatMsgType.SetPublisherDataResponse_S, SessionRequirement.None),
-            Route(WildCatMsgType.GetPublisherDataRequest_S, WildCatMsgType.GetPublisherDataResponse_S, SessionRequirement.None),
-            // Script events (group 1)
-            Route(WildCatMsgType.ExecuteScriptEventRequest, WildCatMsgType.ExecuteScriptEventResponse),
 
             // Friends and challenges (group 2)
             Route(WildCatMsgType.GetFriendsRequest, WildCatMsgType.GetFriendsResponse),
