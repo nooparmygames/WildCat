@@ -1,12 +1,12 @@
 # Legacy backend notes: grains, flows, dependencies, known bugs
 
-Survey of `backend/` as copied from the Apadana 2 repository on 2026-09-30 (Orleans 3.4.3,
-net5.0, about 18,000 lines), updated after roadmap step 2 removed PlayFab, CafeBazaar, billing
-and the dead subsystems, and after step 4 fixed the bugs marked "Fixed in step 4" in the bug
-list. Removed code keeps a short note here (see "Removed in step 2" at the end) so bug numbers
-and history stay readable. CLAUDE.md describes the Orleans 10 host from step 1. Read this
-before touching a grain. File names are relative to `backend/`. Line numbers
-refer to the copied files.
+Survey of `backend/` as copied from the Apadana 2 repository on 2026-09-30 (Orleans 3.4.3, net5.0,
+about 18,000 lines), updated after roadmap step 2 removed PlayFab, CafeBazaar, billing and the
+dead subsystems, after step 4 fixed the bugs marked "Fixed in step 4" in the bug list, and after
+step 5 added the PostgreSQL providers and the configuration model. Removed code keeps a short note
+here (see "Removed in step 2" at the end) so bug numbers and history stay readable. CLAUDE.md
+describes the Orleans 10 host from step 1. Read this before touching a grain. File names are
+relative to `backend/`. Line numbers refer to the copied files.
 
 Paths and names follow the WildCat rename from roadmap step 3; the table below gives each
 project's legacy name.
@@ -16,17 +16,21 @@ project's legacy name.
 | Project (legacy name) | Role |
 |---|---|
 | `WildCat.Interfaces` (`Interfaces`) | grain interfaces, state classes, DTOs, helpers (`ResourcesUtility` builds grain keys) |
-| `WildCat.Grains` (`Collections`) | grain implementations plus SMTP and Roslyn scripting (namespace `WildCat.Scripting`, was `ScriptingAPI`) |
+| `WildCat.Grains` (`Collections`) | grain implementations plus the email senders and Roslyn scripting (namespace `WildCat.Scripting`, was `ScriptingAPI`) |
 | `WildCat.Protocol` (`Messages`) | `Messages.cs`: the binary wire protocol shared with the Unity SDK (netstandard2.0; namespace was `RealtimeServer`) |
-| `WildCat.Host` (`Silo`) | the host: silo plus WebSocket gateway in one process, memory providers until the PostgreSQL port (Release used MongoDB before step 1); seeds one developer and game from `devsconfig.json` |
+| `WildCat.Host` (`Silo`) | the host: silo plus WebSocket gateway in one process; memory or PostgreSQL providers chosen by `WildCat:Orleans:Provider` (step 5; memory only from step 1 to 4, and the Release build used MongoDB before step 1); seeds developers and games from the `WildCat:Seed` configuration section (a `devsconfig.json` file before step 5) |
 | `WildCat.Gateway` (`FrontEnd`) | WebSocket gateway library mapped at `/ws` by the host, using the silo's `IClusterClient` (a separate Orleans client process before step 1); `FrontEndServer.cs`, one class of over 2,000 lines, dispatches every message |
 | `WildCat.Tests` (`Tests`) | xUnit on `InProcessTestCluster` (`TestCluster` before step 1), one shared cluster per collection |
 
 Environment facts that apply everywhere: only `LeaderBoard` names a storage provider ("blob");
-every other `Grain<T>` uses the default provider. All streams go through one memory stream
-provider, "game", with ids built by `WildCat.Interfaces/StreamNames.cs` (the "SMS" provider
-before step 1). No grain uses transactions; the 3.4.3 silo called `UseTransactions()` anyway and
-the port dropped it.
+every other `Grain<T>` uses the default provider. `WildCat:Orleans:Provider` decides what backs
+the storage names "Default", "blob" and "PubSubStore": memory storage for `Memory` (the default,
+also used by the tests), or ADO.NET storage in PostgreSQL for `PostgreSQL`, which also puts
+clustering and reminders in that database (schema scripts in `deploy/postgres`). In PostgreSQL
+mode written grain state, Session included, survives a restart. All streams go through one memory
+stream provider, "game", in both modes, with ids built by `WildCat.Interfaces/StreamNames.cs` (the
+"SMS" provider before step 1). No grain uses transactions; the 3.4.3 silo called
+`UseTransactions()` anyway and the port dropped it.
 
 ## Grain inventory
 
@@ -40,7 +44,7 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | Grain<PlayerInventoryState> in its own grain storage (a JSON blob in PlayerStorage before step 4) | add/set/buy/consume/remove items, packages, timed unlock chests |
 | PlayerFriendList | IPlayerFriendList, G+S | FriendListState; produces on the FriendEvents stream for (gameKey, playerId); the `[AlwaysInterleave]` on its status setters was ignored by 3.x and removed in the port | invite handshake, friend list with public data and presence fan-out |
 | PlayerChallengeHandler | IPlayerChallengeHandler, G+S | PlayerChallengesState; produces on the ChallengeEvents stream for (gameKey, playerId) | direct 1v1 challenges; on accept creates a RelayServerGame with the default mode |
-| Session | ISession, G | SessionState, written on initialize, user binding and end; touches write at most once a minute (not persisted before step 4) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
+| Session | ISession, G | SessionState, written on initialize, user binding and end; touches write at most once a minute (not persisted before step 4; kept across restarts in PostgreSQL mode) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
 | Developer | IDeveloper, G | DeveloperState | publisher account: PBKDF2 password hash (SHA1 before step 4), developer secret, game registry, `InitializeSession(gameKey)` creates the ticket |
 | DeveloperManager | IDeveloperManager, S ("main") | DeveloperManagerState | email to developer key index |
 | DeveloperStorage | IDeveloperStorage, G | DeveloperStorageState | publisher key/value data; writes, removes and the server-to-server read (`GetStringForDeveloper`) require the developer secret |
@@ -56,13 +60,15 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | TimeService | ITimeService, G | stateless worker, reentrant | server time as a culture-dependent string |
 | CustomIDToAccountIDMap, EmailToAccountIdMap, UserIdToAccountIdMap, NameToAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
 
-Non-grain classes: `EmailSenderUtility` (SMTP, sends only in `MASTER` builds, otherwise prints
-the code), `PasswordHasher` (PBKDF2 for player and developer passwords, step 4),
-`ScriptCompilationUtility` and `WildCat.Scripting.WildCatScriptApi` (the script sandbox,
-`ScriptingAPI.Apadana` before step 3). Step 2 removed `PlayfabManager` (the DI singleton wrapping
-the PlayFab APIs), `HttpClientUtility` and `ApadanaAPI` (an older, unused script API). Step 4
-removed `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All` and grain reference
-converters, used only by PlayerStorage).
+Non-grain classes: the email senders (step 5: `IEmailSender` in WildCat.Interfaces,
+`SmtpEmailSender` and `LoggingEmailSender` in WildCat.Grains, texts in
+`Resources/EmailTexts.resx`; before that `EmailSenderUtility` sent through hardcoded SMTP settings
+only in `MASTER` builds and printed the code otherwise), `PasswordHasher` (PBKDF2 for player and
+developer passwords, step 4), `ScriptCompilationUtility` and `WildCat.Scripting.WildCatScriptApi`
+(the script sandbox, `ScriptingAPI.Apadana` before step 3). Step 2 removed `PlayfabManager` (the
+DI singleton wrapping the PlayFab APIs), `HttpClientUtility` and `ApadanaAPI` (an older, unused
+script API). Step 4 removed `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All`
+and grain reference converters, used only by PlayerStorage).
 
 ## Flows
 
@@ -109,8 +115,14 @@ touches the session and is marshalled back onto the grain scheduler. Runs are li
 
 ## External dependencies
 
-- SMTP: EmailSenderUtility, from Player activation and password reset. Credentials were removed;
-  wire to configuration.
+- PostgreSQL (step 5): Npgsql with the Orleans ADO.NET clustering, persistence and reminders
+  packages, used when `WildCat:Orleans:Provider` is `PostgreSQL`; the connection string is
+  `ConnectionStrings:WildCat`. The Orleans schema scripts are vendored in `deploy/postgres`.
+  MongoDB, which the legacy Release build used, went away in step 1.
+- SMTP: `SmtpEmailSender` (System.Net.Mail), from Player activation and password reset, set up
+  under `WildCat:Email`. Without an SMTP host and sender address the host registers
+  `LoggingEmailSender`, which logs the code instead. The legacy credentials were removed at copy
+  time.
 - Roslyn scripting: Microsoft.CodeAnalysis.CSharp.Scripting (5.0.0 since the port, 3.10 before).
 
 Removed in step 2: PlayFab (`PlayFabAllSDK`; it backed PlayerStorage with entity files, set the
@@ -132,7 +144,8 @@ Security:
    removes take the secret, and secrets are compared in constant time.
 5. Fixed in step 4: `CreateNewAccountRequest` never checked the session and
    `CreateEnvironmentRequest` was unauthenticated; account creation now validates the session
-   and the CreateEnvironment handler is gone (the host seeds dev data from `devsconfig.json`).
+   and the CreateEnvironment handler is gone (the host seeds developers and games from the
+   `WildCat:Seed` configuration section, which replaced `devsconfig.json` in step 5).
 6. Scripts can read and write any player's private data by id (open, step 9).
    Fixed in step 4: passwords (client MD5, then unsalted SHA1) now travel plain over TLS and
    are stored as salted PBKDF2-SHA512; activation and reset codes use `RandomNumberGenerator`;
@@ -216,8 +229,9 @@ Fixed in step 3 (old -> new; enum values did not change):
   `ResendActivaitonResponse` -> `ResendActivationResponse`, `SetPresenseStatus` ->
   `SetPresenceStatus`, `AutomaticallyConsummed` -> `AutomaticallyConsumed`.
 
-Persian strings remain in `EmailSenderUtility.EMAIL_TEXT` (the activation email template). The
-Persian comments in `IIAPVerificationManager.cs` went with CafeBazaar in step 2.
+The Persian activation email template (`EmailSenderUtility.EMAIL_TEXT`) was replaced in step 5 by
+English texts in `WildCat.Grains/Resources/EmailTexts.resx`; translations go in satellite `.resx`
+files. The Persian comments in `IIAPVerificationManager.cs` went with CafeBazaar in step 2.
 
 ## Removed in step 2
 

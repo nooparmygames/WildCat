@@ -18,6 +18,7 @@ appsettings.*.local.json
 *.secrets.json
 .env
 .env.*
+!.env.example
 
 # Node / web panel
 node_modules/

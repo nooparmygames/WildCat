@@ -1,8 +1,0 @@
-services:
-  wildcat:
-    image: ${DOCKER_REGISTRY-}wildcat
-    build:
-      context: .
-      dockerfile: WildCat.Host/Dockerfile
-    ports:
-      - "5000:5000"

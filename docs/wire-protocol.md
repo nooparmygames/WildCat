@@ -133,7 +133,8 @@ Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dr
 response): 84-87 RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem,
 123/124 ConsumeItem. The grain logic behind them exists; only the gateway handlers are missing.
 44/45 CreateEnvironment falls to `default` too: step 4 deleted its unauthenticated handler (the
-SDK never sent it) and the host seeds dev data from `devsconfig.json`.
+SDK never sent it) and the host seeds developers and games from the `WildCat:Seed` configuration
+section (`devsconfig.json` before step 5).
 The ConsumeItem payload class (`ConsumeItemInventoryRequestMessage`) was removed in step 2 because
 nothing used it; a future handler defines its own payload.
 
