@@ -16,7 +16,7 @@ project's legacy name.
 |---|---|
 | `WildCat.Interfaces` (`Interfaces`) | grain interfaces, state classes, DTOs, helpers (`ResourcesUtility` builds grain keys) |
 | `WildCat.Grains` (`Collections`) | grain implementations plus SMTP and Roslyn scripting (namespace `WildCat.Scripting`, was `ScriptingAPI`) |
-| `WildCat.Protocol` (`Messages`) | `uNetMessages.cs`: the binary wire protocol shared with the Unity SDK (netstandard2.0; namespace was `RealtimeServer`) |
+| `WildCat.Protocol` (`Messages`) | `Messages.cs`: the binary wire protocol shared with the Unity SDK (netstandard2.0; namespace was `RealtimeServer`) |
 | `WildCat.Host` (`Silo`) | the host: silo plus WebSocket gateway in one process, memory providers until the PostgreSQL port (Release used MongoDB before step 1); seeds one developer and game from `devsconfig.json` |
 | `WildCat.Gateway` (`FrontEnd`) | WebSocket gateway library mapped at `/ws` by the host, using the silo's `IClusterClient` (a separate Orleans client process before step 1); `FrontEndServer.cs`, one class of over 2,000 lines, dispatches every message |
 | `WildCat.Tests` (`Tests`) | xUnit on `InProcessTestCluster` (`TestCluster` before step 1), one shared cluster per collection |
@@ -47,13 +47,13 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | RelayServerGame | IRelayServerGame, G+S (matchId + gameKey) | RelayServerGameState | match membership, status, game and player properties (10 KB cap), relays opaque byte[] to other players through `IPlayer.SendDataToConnection` |
 | GameModeManager | IGameModeManager, G | GameModeManagerState | CRUD for GameMode (min/max players, finish on one disconnect, criteria list) |
 | LeaderBoard | ILeaderBoard, S "{gameKey}_L_{name}" | LeaderBoardState on provider "blob"; full sorted list in memory, chunks in LeaderBoardStorage | add score, top, around me, rank, rewards |
-| LeaderBoardStorage | IleaderBoardStorage, S | LeaderBoardStorageState | one chunk of entries |
+| LeaderBoardStorage | ILeaderBoardStorage, S | LeaderBoardStorageState | one chunk of entries |
 | Item, PackageContainer | IItem, IPackageContainer, S | ItemState, PackageContainerState | catalog definitions; random drops not implemented |
 | ResourceManager | IResourceManager, S | ResourceManagerState | registry of named resources per game (leaderboards, scripts); can emit a C# constants class for SDKs |
 | ScriptEventCompiler | IScriptEventCompiler, S "{gameKey}_G_{event}" | ScriptEventState | stores and compiles a developer's C# event script (Roslyn) into a per-silo static cache |
 | ScriptEventRunner | IScriptEventRunner, G+S | stateless | runs a compiled script with `Globals { args, WildCat }` |
 | TimeService | ITimeService, G | stateless worker, reentrant | server time as a culture-dependent string |
-| CustomIDToAccountIDMap, EmailAccountMapId, UserAccountIdMap, NameAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
+| CustomIDToAccountIDMap, EmailToAccountIdMap, UserIdToAccountIdMap, NameToAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
 
 Non-grain classes: `EmailSenderUtility` (SMTP, sends only in `MASTER` builds, otherwise prints
 the code), `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All` and grain
@@ -88,7 +88,7 @@ matchmaker and create the game directly.
 
 Relay: the backend never parses game payloads. `SendToAllBut(player, channel, bytes)` forwards
 to every other InGame player via `IPlayer.SendDataToConnection`, which publishes a
-`UNetConnectionDataTransferMessage` on the player's PlayerConnection stream; the gateway node
+`PlayerConnectionMessage` on the player's PlayerConnection stream; the gateway node
 holding the socket is subscribed and writes the bytes out. Channel 0 carries system events
 (player added, removed, rejoined, rejoin sync, property changed, game finished). Statuses:
 Started, SomeJoined, AllJoined, SomeFinished, AllFinished, FinishedWithDisconnect. Disconnect
@@ -175,7 +175,7 @@ Correctness:
     challenges deadlock.
 19. Removed in step 2: `PlayfabManager` had an endless retry loop ending in
     `Environment.Exit(1)`, a wrong ticket check and an unsafe HashSet; PlayFab is gone.
-20. `NameAccountIdMap.SetId` is never called, so name lookups always return null.
+20. `NameToAccountIdMap.SetId` is never called, so name lookups always return null.
 21. Gateway: LeaveGame response always throws (empty ticket assert); SessionRequired error goes to
     a stream nobody subscribes to; GetPlayerChallenges puts received into sent;
     `GetFriendsRequestMessage` deserializes into an empty array (the deserializers with null
@@ -184,12 +184,21 @@ Correctness:
     delay on non-idempotent operations; unawaited `OnDataReceived` so messages from one socket
     run concurrently and out of order.
 
-Naming to fix: `iPlayer.cs`, `iLeaderBoard.cs`, `IleaderBoardStorage`, `EmailAccountMapId` vs
-`IEmailToAccountIdMap`, `UserWithPassowrd`, `AuthenticationExtentions`,
-`GetInventoryUnlockTimeResquest`, `ResendActivaitonResponse`, Consummed, Presense,
-`IUNetConnectionObserver.cs` (now holds only `UNetConnectionDataTransferMessage`), and the
-UNet/uNet prefix left over from Unity's old transport. (`iGame.cs`, `iMatchMaker.cs`,
-`AddGameRespnse` and `GuidEvent` went away in step 2.)
+Fixed in step 3 (old -> new; enum values did not change):
+- Files: `iPlayer.cs` -> `IPlayer.cs`, `iLeaderBoard.cs` -> `ILeaderBoard.cs`,
+  `uNetMessages.cs` -> `Messages.cs` (both protocol copies), and in WildCat.Tests
+  `UNetMsgSerializationTests.cs` -> `MessageSerializationTests.cs` and `TimServiceTests.cs` ->
+  `TimeServiceTests.cs` (classes too).
+- Types, with their files: `IleaderBoardStorage` -> `ILeaderBoardStorage`,
+  `AuthenticationExtentions` -> `AuthenticationExtensions`, `IGrantableResorce` ->
+  `IGrantableResource`, `UNetConnectionDataTransferMessage` (in `IUNetConnectionObserver.cs`) ->
+  `PlayerConnectionMessage` (in `PlayerConnectionMessage.cs`).
+- Grain classes, now named like their interfaces: `EmailAccountMapId` -> `EmailToAccountIdMap`,
+  `NameAccountIdMap` -> `NameToAccountIdMap`, `UserAccountIdMap` -> `UserIdToAccountIdMap`.
+- Members: `LoginType.UserWithPassowrd` -> `UserWithPassword`,
+  `GetInventoryUnlockTimeResquest` -> `GetInventoryUnlockTimeRequest`,
+  `ResendActivaitonResponse` -> `ResendActivationResponse`, `SetPresenseStatus` ->
+  `SetPresenceStatus`, `AutomaticallyConsummed` -> `AutomaticallyConsumed`.
 
 Persian strings remain in `EmailSenderUtility.EMAIL_TEXT` (the activation email template). The
 Persian comments in `IIAPVerificationManager.cs` went with CafeBazaar in step 2.

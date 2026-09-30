@@ -90,8 +90,9 @@ Collections, Messages, Silo, FrontEnd and Tests.
   - Grain-only fan-out with implicit subscribers: `AddBroadcastChannel("...")` with
     `[ImplicitChannelSubscription]` and `IOnBroadcastChannelSubscribed`.
 - `IUNetConnectionObserver` / `UNetConnectionDataTransferMessage` (an observer-based push from
-  grains to the gateway) maps to `IGrainObserver` with `ObserverManager` and `[OneWay]`; the
-  observer interface methods must return `Task`/`ValueTask`, not `void`.
+  grains to the gateway; the message is `PlayerConnectionMessage` since step 3) maps to
+  `IGrainObserver` with `ObserverManager` and `[OneWay]`; the observer interface methods must
+  return `Task`/`ValueTask`, not `void`.
 
 ## 6. Transactions
 

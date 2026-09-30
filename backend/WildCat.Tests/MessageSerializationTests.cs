@@ -14,7 +14,7 @@ using OnlineStatus = WildCat.Protocol.OnlineStatus;
 namespace WildCat.Tests
 {
     [Collection(ClusterCollection.Name)]
-    public class UNetMsgSerializationTests
+    public class MessageSerializationTests
     {
         [Fact]
         public void FindMatchRequestSerialization()

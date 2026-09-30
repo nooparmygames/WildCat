@@ -125,8 +125,8 @@ namespace WildCat.Tests
             LoginResult res2 = await p2.LoginWithDeviceID(guid2, sessionKeys[1].Item1,  t);
             Assert.False(string.IsNullOrEmpty(res1.ticket));
             Assert.False(string.IsNullOrEmpty(res2.ticket));
-            await p1.SetPresenseStatus(OnlineStatus.Offline);
-            await p2.SetPresenseStatus(OnlineStatus.Offline);
+            await p1.SetPresenceStatus(OnlineStatus.Offline);
+            await p2.SetPresenceStatus(OnlineStatus.Offline);
             var c1 = cluster.Client.GetGrain<IPlayerChallengeHandler>(sessionKeys[0].Item3, p1.GetPrimaryKeyString(), null);
             var c2 = cluster.Client.GetGrain<IPlayerChallengeHandler>(sessionKeys[1].Item3, p2.GetPrimaryKeyString(), null);
             var requestResult = await c1.SendChallengeRequest(p2, new byte[] { 13 }, 13, true);

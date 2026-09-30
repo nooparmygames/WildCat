@@ -8,7 +8,7 @@ using Orleans;
 
 namespace WildCat.Grains
 {
-    class EmailAccountMapId : Grain<EmailAccountIDMapState>, IEmailToAccountIdMap
+    class EmailToAccountIdMap : Grain<EmailAccountIDMapState>, IEmailToAccountIdMap
     {
         public Task Clear()
         {

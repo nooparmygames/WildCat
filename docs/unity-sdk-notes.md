@@ -20,7 +20,7 @@ Removed in step 2: `VerifyCafeReceipt` with `CafeVerificationStatusResults`; the
 `SetQuestProgress` and `SetMatchResult` with their result tables, handlers and `Client` senders
 (plus the unused login, quest, achievement and main data senders); the developer-only
 `DevGetPublisherData` and `DevSetPublisherData`, which sent the developer secret from the
-client; and the `ENABLE_PLAYFABSERVER_API` scripting define. The SDK's `uNetMessages.cs` lost
+client; and the `ENABLE_PLAYFABSERVER_API` scripting define. The SDK's `Messages.cs` lost
 the same message types and enum members as the server copy and pins the same explicit ids
 (see docs/wire-protocol.md).
 
@@ -33,7 +33,7 @@ Assets/Backend/Plugins/BackendPlatform.cs   the public API, about 2,000 lines, s
 Assets/Backend/Plugins/Result.cs            Result, Result<T>, Result<T,Q>: poll or `yield return r.Wait()`
 Assets/Backend/Plugins/LowLevelAPI/         Client (request/response plumbing), WebSocketNetworkTransmitter
                                             (websocket-sharp), NetworkTransmitter (dead UNet LLAPI),
-                                            RequestIdGenerator, uNetMessages.cs (protocol copy)
+                                            RequestIdGenerator, Messages.cs (protocol copy)
 Assets/Backend/Plugins/Sample/              Sample.cs IMGUI demo, TimestampedBuffer (interpolation), test.unity
 Assets/Backend/Plugins/Prefabs/WildCat.prefab   references a missing script GUID (broken)
 ```

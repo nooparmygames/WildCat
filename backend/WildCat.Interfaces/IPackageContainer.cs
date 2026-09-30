@@ -7,7 +7,7 @@ using Orleans;
 
 namespace WildCat.Interfaces
 {
-    public interface IPackageContainer : IInventoryItem, IGrantableResorce
+    public interface IPackageContainer : IInventoryItem, IGrantableResource
     {
         Task Initialize(string name, string description, List<PackageContainerState.PackageItemInfo> items, bool isLocked, List<PlayerInventoryState.InInventoryItemState> unLockItems, bool isRandom, int randomCount, List<PlayerInventoryState.InInventoryItemState> price, int capacity);
         Task SetProperties(string name, string description, List<PackageContainerState.PackageItemInfo> items, bool isLocked, List<PlayerInventoryState.InInventoryItemState> unLockItems, bool isRandom, int randomCount, List<PlayerInventoryState.InInventoryItemState> price, int capacity);

@@ -5,7 +5,7 @@ using Orleans;
 
 namespace WildCat.Interfaces
 {
-    public interface IleaderBoardStorage : IGrainWithStringKey
+    public interface ILeaderBoardStorage : IGrainWithStringKey
     {
         Task<List<LeaderBoardEntry>> GetEntries();
 

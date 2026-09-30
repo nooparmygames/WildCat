@@ -1,7 +1,7 @@
 # Wire protocol between the Unity SDK and the gateway
 
-Defined in `backend/WildCat.Protocol/uNetMessages.cs` (server copy) and
-`unity-sdk/Assets/Backend/Plugins/LowLevelAPI/uNetMessages.cs` (client copy, diverged: the
+Defined in `backend/WildCat.Protocol/Messages.cs` (server copy) and
+`unity-sdk/Assets/Backend/Plugins/LowLevelAPI/Messages.cs` (client copy, diverged: the
 server copy defaults strings to ""). Documented from the code on 2026-09-30 and updated after
 roadmap step 2, which removed the same message types from both copies. The two copies must
 become one shared source.

@@ -4,7 +4,7 @@ using Orleans;
 
 namespace WildCat.Grains
 {
-    public class NameAccountIdMap : Grain<NameAccountIDMapState>, INameToAccountIdMap
+    public class NameToAccountIdMap : Grain<NameAccountIDMapState>, INameToAccountIdMap
     {
         public Task Clear()
         {

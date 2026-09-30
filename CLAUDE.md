@@ -78,7 +78,7 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   game key, receives a Guid ticket, logs in as a player, and sends every later message with the
   ticket.
 - The gateway (`backend/WildCat.Gateway/FrontEndServer.cs`, one class of over 2,000 lines)
-  decodes the binary protocol in `backend/WildCat.Protocol/uNetMessages.cs`, calls grains, and
+  decodes the binary protocol in `backend/WildCat.Protocol/Messages.cs`, calls grains, and
   pushes server events back through Orleans memory streams (provider `game`, ids built by
   `WildCat.Interfaces/StreamNames.cs`).
   It runs inside the silo process and uses the silo's `IClusterClient`.

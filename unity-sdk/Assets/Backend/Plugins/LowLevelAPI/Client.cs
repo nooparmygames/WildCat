@@ -167,7 +167,7 @@ public class Client : WebSocketNetworkTransmitter
             AutoCreate = autoCreate,
             ticket = sessionKey.ToString()
         };
-        if (req.AutoCreate && (req.LoginType != LoginType.Device && req.LoginType != LoginType.UserWithPassowrd))
+        if (req.AutoCreate && (req.LoginType != LoginType.Device && req.LoginType != LoginType.UserWithPassword))
             throw new ArgumentException("AutoCreate can only be true for user and device requests");
         uint requestId = IdGen.GetNextId();
         var msgToSend = WildCatMessageBase.CreateWithRequestID(req, WildCatMsgType.AuthenticateRequest, WildCatMsgHeader.normal, requestId);

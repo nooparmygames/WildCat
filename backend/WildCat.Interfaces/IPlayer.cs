@@ -24,7 +24,7 @@ namespace WildCat.Interfaces
         [AlwaysInterleave]
         Task<IPlayerStorage> GetStorageGrain();
         Task<LoginResult> LoginWithUserNameAndPassword(string userName, string password, Guid sessionKey, Guid sentLoginTimeTicket);
-        Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPassowrdPairs();
+        Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPasswordPairs();
         Task<LoginResult> LoginWithEmail(string email, string password, Guid sessionKey, Guid sentLoginTimeTicket);
         Task<Dictionary<string, Dictionary<string, string>>> GetPlayerEmailAccounts();
         Task Disconnected(Guid sentLoginTimeTicket);
@@ -58,7 +58,7 @@ namespace WildCat.Interfaces
         Task RejoinMatch(IRelayServerGame game);
 
         Task HeartBeat();
-        Task SetPresenseStatus(OnlineStatus status);
+        Task SetPresenceStatus(OnlineStatus status);
         public Task SendDataToConnection(IPlayer player, int channel, byte[] data);
     }
 

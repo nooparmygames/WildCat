@@ -43,7 +43,7 @@ POST `/developers/resetpassword/` with `{resetKey, oldPassword?, newPassword: md
 Activation at `/page/activation/:code` (also emailed): POST `/developers/activate/:code` on load.
 
 The client-side MD5 is a legacy quirk. The backend hashes again with SHA1 (see
-`WildCat.Interfaces/AuthenticationExtentions.cs`). A rewrite should replace this with a proper
+`WildCat.Interfaces/AuthenticationExtensions.cs`). A rewrite should replace this with a proper
 password hash on the server and TLS in transit.
 
 ### Developers (admin only, `/developers`)
@@ -76,11 +76,11 @@ Leaderboards: GET `/games/:g/leaderboards` returns `[{name, key, bestScore}]`. C
 
 Items (virtual goods, maps to `WildCat.Interfaces/IItem.cs` and `IPackageContainer.cs`): GET and
 POST `/games/:g/items`. Dialog fields: name, description, effect time (min/hour/day), stackable,
-maxAllowedToHave, isConsumable (+ automaticallyConsummed), isRegenerating (+ regenerationAmount,
-regenerationPeriod), metaData rows `{name, value}`, price rows `{item, count}` (priced in other
-items). Only list and create were wired; edit and delete called API functions that did not exist
-and the payload had several binding bugs. Confirm the wire format against the grain interfaces
-before building this tab.
+maxAllowedToHave, isConsumable (+ automaticallyConsumed, spelled automaticallyConsummed by the old
+panel), isRegenerating (+ regenerationAmount, regenerationPeriod), metaData rows `{name, value}`,
+price rows `{item, count}` (priced in other items). Only list and create were wired; edit and
+delete called API functions that did not exist and the payload had several binding bugs. Confirm
+the wire format against the grain interfaces before building this tab.
 
 In-app purchase: CafeBazaar OAuth only. Dropped. Do not rebuild.
 

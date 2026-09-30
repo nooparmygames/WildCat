@@ -6,7 +6,7 @@ using Orleans;
 
 namespace WildCat.Grains
 {
-    public class LeaderBoardStorage : Grain<LeaderBoardStorageState>, IleaderBoardStorage
+    public class LeaderBoardStorage : Grain<LeaderBoardStorageState>, ILeaderBoardStorage
     {
         public Task<List<LeaderBoardEntry>> GetEntries()
         {
@@ -28,10 +28,10 @@ namespace WildCat.Grains
         //     if (index < 0)
         //     {
         //         var name = await player.GetPlayerName();
-        //         var data = await GrainFactory.GetGrain<IleaderBoardStorage>(State.StorageGrainKeys[listID]).GetEntries();
+        //         var data = await GrainFactory.GetGrain<ILeaderBoardStorage>(State.StorageGrainKeys[listID]).GetEntries();
         //         if (data.Count < State.MaxListLength)
         //         {
-        //             await GrainFactory.GetGrain<IleaderBoardStorage>(State.StorageGrainKeys[listID])
+        //             await GrainFactory.GetGrain<ILeaderBoardStorage>(State.StorageGrainKeys[listID])
         //                 .AddPlayerScore(player, score);
         //         }
         //         State.entries.Add(new LeaderBoardEntry(player.GetPrimaryKeyString(), name, score, DateTime.Now));

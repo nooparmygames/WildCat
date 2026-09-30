@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace WildCat.Interfaces
 {
-    public interface IGrantableResorce
+    public interface IGrantableResource
     {
         Task<List<PlayerInventoryState.InInventoryItemState>> Grant();
 

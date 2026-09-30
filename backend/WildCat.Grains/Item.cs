@@ -59,13 +59,13 @@ namespace WildCat.Grains
             return Task.FromResult(State.Name);
         }
 
-        public Task Initialize(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsummed, TimeSpan effectTime, bool isConsummable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price)
+        public Task Initialize(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsumed, TimeSpan effectTime, bool isConsumable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Name should not be null or whitespace");
             State.IsCreated = true;
             _IsCreated = true;
-            return SetItemProperties(name, description, metaData, maxAllowed, stackable, automaticallyConsummed, effectTime, isConsummable, isRegenerating, regenerationAmount, regenerationPeriod,price);
+            return SetItemProperties(name, description, metaData, maxAllowed, stackable, automaticallyConsumed, effectTime, isConsumable, isRegenerating, regenerationAmount, regenerationPeriod,price);
         }
 
         public Task SetDescription(string description)
@@ -75,7 +75,7 @@ namespace WildCat.Grains
             return WriteStateAsync();
         }
 
-        public Task SetItemProperties(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsummed, TimeSpan effectTime, bool isConsummable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price)
+        public Task SetItemProperties(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsumed, TimeSpan effectTime, bool isConsumable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price)
         {
             AssertIsCreated();
             State.Name = name;
@@ -83,9 +83,9 @@ namespace WildCat.Grains
             State.MetaData = metaData;
             State.MaxAllowedToHave = maxAllowed;
             State.Stackable = stackable;
-            State.AutomaticallyConsummed = automaticallyConsummed;
+            State.AutomaticallyConsumed = automaticallyConsumed;
             State.EffectTime = effectTime;
-            State.IsConsumable = isConsummable;
+            State.IsConsumable = isConsumable;
             State.IsRegenerating = isRegenerating;
             State.RegenerationAmount = regenerationAmount;
             State.RegenerationPeriod = regenerationPeriod;

@@ -25,7 +25,7 @@ namespace WildCat.Grains
             var tasks = new List<Task<List<LeaderBoardEntry>>>();
             for (int i = 0; i < State.NumberOfLists; i++)
             {
-                tasks[i] =  GrainFactory.GetGrain<IleaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
+                tasks[i] =  GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
             }
             var lists = await Task.WhenAll(tasks);
             for (int i = 0; i < lists.Length; i++)
@@ -58,14 +58,14 @@ namespace WildCat.Grains
                 _leaderBoardData.Sort((x, y) => y.Score - x.Score);
                 for (int i = 0; i < _leaderBoardData.Count / State.MaxListLength; i++)
                 {
-                    await GrainFactory.GetGrain<IleaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}")
+                    await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}")
                         .WriteEntries(_leaderBoardData.GetRange(i*State.MaxListLength, State.MaxListLength));
                 }
 
                 var lastChunkIndex = ((_leaderBoardData.Count / State.MaxListLength) + 1);
                 if (lastChunkIndex * State.MaxListLength < _leaderBoardData.Count)
                 {
-                    await GrainFactory.GetGrain<IleaderBoardStorage>($"{this.GetPrimaryKeyString()}{lastChunkIndex}")
+                    await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{lastChunkIndex}")
                         .WriteEntries(_leaderBoardData.GetRange(lastChunkIndex*State.MaxListLength, _leaderBoardData.Count - (lastChunkIndex*State.MaxListLength)));
                     State.NumberOfLists = _leaderBoardData.Count / State.MaxListLength + 1;
                 }
@@ -91,7 +91,7 @@ namespace WildCat.Grains
             List<LeaderBoardEntry> data = new List<LeaderBoardEntry>();
             for (int i = 0; i < State.NumberOfLists; i++)
             {
-                data = await GrainFactory.GetGrain<IleaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
+                data = await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
                 var index = data.FindIndex(x => x.PlayerID == player.GetPrimaryKeyString());
                 if (index >= 0)
                 {

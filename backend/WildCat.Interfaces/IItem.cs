@@ -8,9 +8,9 @@ namespace WildCat.Interfaces
 {
     public interface IItem : IInventoryItem
     {
-        Task Initialize(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsummed, TimeSpan effectTime, bool isConsummable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price);
+        Task Initialize(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsumed, TimeSpan effectTime, bool isConsumable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price);
         Task<ItemState> GetItemInfo();
-        Task SetItemProperties(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsummed, TimeSpan effectTime, bool isConsummed, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price);
+        Task SetItemProperties(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsumed, TimeSpan effectTime, bool isConsumed, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price);
         Task SetName(string name);
         Task SetDescription(string description);
         
@@ -27,7 +27,7 @@ namespace WildCat.Interfaces
         [Id(3)] public Dictionary<string, string> MetaData { get; set; }
         [Id(4)] public int MaxAllowedToHave { get; set; }
         [Id(5)] public bool Stackable { get; set; }
-        [Id(6)] public bool AutomaticallyConsummed { get; set; }
+        [Id(6)] public bool AutomaticallyConsumed { get; set; }
         [Id(7)] public TimeSpan EffectTime { get; set; }
         [Id(8)] public bool IsConsumable { get; set; }
         [Id(9)] public bool IsRegenerating { get; set; }

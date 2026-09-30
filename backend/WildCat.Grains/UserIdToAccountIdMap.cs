@@ -8,7 +8,7 @@ using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    class UserAccountIdMap : Grain<UserIdAccountIDMapState>, IUserIdToAccountIdMap
+    class UserIdToAccountIdMap : Grain<UserIdAccountIDMapState>, IUserIdToAccountIdMap
     {
         public Task Clear()
         {

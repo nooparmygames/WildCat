@@ -46,7 +46,7 @@ namespace WildCat.Gateway
             clientConnections[id] = new PlayerInfo(connection);
         }
 
-        private async Task RegisterConnectionStream(IAsyncStream<UNetConnectionDataTransferMessage> stream)
+        private async Task RegisterConnectionStream(IAsyncStream<PlayerConnectionMessage> stream)
         {
             for (int i = 0; i < 5; ++i)
             {
@@ -61,7 +61,7 @@ namespace WildCat.Gateway
             }
         }
 
-        private async Task UnRegisterConnectionStream(IAsyncStream<UNetConnectionDataTransferMessage> stream, int id)
+        private async Task UnRegisterConnectionStream(IAsyncStream<PlayerConnectionMessage> stream, int id)
         {
             for (int i = 0; i < 5; ++i)
             {
@@ -81,11 +81,11 @@ namespace WildCat.Gateway
             }
         }
 
-        private async Task OnServerEvent(UNetConnectionDataTransferMessage eventData)
+        private async Task OnServerEvent(PlayerConnectionMessage eventData)
         {
             switch (eventData.eventType)
             {
-                case UNetConnectionDataTransferMessage.EventType.DataTransfer:
+                case PlayerConnectionMessage.EventType.DataTransfer:
                     await Send(eventData.player, eventData.data);
                     break;
             }
@@ -117,7 +117,7 @@ namespace WildCat.Gateway
             var isReliable = true;
             var channelId = 0;
             var connectionStream =
-                streamProvider.GetStream<UNetConnectionDataTransferMessage>(
+                streamProvider.GetStream<PlayerConnectionMessage>(
                     StreamNames.PlayerConnection(GetConnectionGrainId(connectionId)));
 
             WildCatMessageBase msg = new WildCatMessageBase(message);
@@ -134,10 +134,10 @@ namespace WildCat.Gateway
                     WildCatMsgHeader.normal);
                 if (msg.hasRequestID)
                     returning.SetRequestID(msg.requestID);
-                await connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+                await connectionStream.OnNextAsync(new PlayerConnectionMessage
                 {
                     player = null, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
-                    eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+                    eventType = PlayerConnectionMessage.EventType.DataTransfer
                 });
                 return;
             }
@@ -182,7 +182,7 @@ namespace WildCat.Gateway
                 case WildCatMsgType.GetInventoryRequest:
                     await ProcessGetInventoryRequest(session, player, connectionId, channelId, msg, ticket);
                     break;
-                case WildCatMsgType.GetInventoryUnlockTimeResquest:
+                case WildCatMsgType.GetInventoryUnlockTimeRequest:
                     await ProcessGetInventoryUnlockTimeRequest(session, player, connectionId, channelId, msg, ticket);
                     break;
                 case WildCatMsgType.UnlockInventoryRequest:
@@ -843,10 +843,10 @@ namespace WildCat.Gateway
                 WildCatMessageBase returning = WildCatMessageBase.CreateWithGameTarget(response,
                     WildCatMsgType.LeaveGameResponse, WildCatMsgHeader.normal, msg.game, "");
                 returning.SetRequestID(msg.requestID);
-                await playerInfo.connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+                await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
                 {
                     player = player, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
-                    eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+                    eventType = PlayerConnectionMessage.EventType.DataTransfer
                 });
             }
         }
@@ -987,7 +987,7 @@ namespace WildCat.Gateway
                 {
                     accountRes = await orleansClient.GetGrain<IPlayerCreator>(0).CreateAccountWithDevice(request.Id);
                 }
-                else if (request.LoginType == LoginType.UserWithPassowrd)
+                else if (request.LoginType == LoginType.UserWithPassword)
                 {
                     accountRes = await orleansClient.GetGrain<IPlayerCreator>(0)
                         .CreateAccountWithUserAndPassword(request.Id, request.PasswordHash);
@@ -1233,10 +1233,10 @@ namespace WildCat.Gateway
                     .PlayerStarted(player);
             }
 
-            await playerInfo.connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+            await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
                 player = player, connectionId = connectionId, channelId = channelId, data = returningMsg.ToByteArray(),
-                eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+                eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
         }
 
@@ -1485,7 +1485,7 @@ namespace WildCat.Gateway
                     case LoginType.Email:
                         addition = await player.AddPlayerEmail(request.Id, request.PasswordHash);
                         break;
-                    case LoginType.UserWithPassowrd:
+                    case LoginType.UserWithPassword:
                         addition = await player.AddPlayerUserAndPassword(request.Id, request.PasswordHash);
                         break;
                 }
@@ -1925,7 +1925,7 @@ namespace WildCat.Gateway
                             .GetGrain<ICustomIDToAccountIDMap>(UserMappingUtility.GetDeviceIdMappingId(request.Id))
                             .GetAccountID();
                         break;
-                    case LoginType.UserWithPassowrd:
+                    case LoginType.UserWithPassword:
                         account = await orleansClient.GetGrain<IUserIdToAccountIdMap>(request.Id).GetAccountID();
                         break;
                     case LoginType.Email:
@@ -1946,7 +1946,7 @@ namespace WildCat.Gateway
                             .CreateAccountWithDevice(request.Id);
                         isNewlyCreated = true;
                     }
-                    else if (request.AutoCreate && request.LoginType == LoginType.UserWithPassowrd)
+                    else if (request.AutoCreate && request.LoginType == LoginType.UserWithPassword)
                     {
                         accountRes = await orleansClient.GetGrain<IPlayerCreator>(0)
                             .CreateAccountWithUserAndPassword(request.Id, request.PasswordHash);
@@ -1974,7 +1974,7 @@ namespace WildCat.Gateway
                         case WildCat.Protocol.LoginType.Device:
                             loginResponse = await p.LoginWithDeviceID(request.Id, sessionKey, playerInfo.loginTimeRandomKey);
                             break;
-                        case LoginType.UserWithPassowrd:
+                        case LoginType.UserWithPassword:
                             loginResponse = await p.LoginWithUserNameAndPassword(request.Id, request.PasswordHash,
                                 sessionKey, playerInfo.loginTimeRandomKey);
                             break;
@@ -2032,7 +2032,7 @@ namespace WildCat.Gateway
             playerInfo.ConnectionId = connectionId;
             playerInfo.GameKey = gameKey;
             playerInfo.connectionStream =
-                streamProvider.GetStream<UNetConnectionDataTransferMessage>(
+                streamProvider.GetStream<PlayerConnectionMessage>(
                     StreamNames.PlayerConnection(p.GetPrimaryKeyString()));
             await UnRegisterConnectionStream(playerInfo.connectionStream, playerInfo.ConnectionId);
             await RegisterConnectionStream(playerInfo.connectionStream);
@@ -2149,10 +2149,10 @@ namespace WildCat.Gateway
         //        msg.requestID);
         //    try
         //    {
-        //        await playerInfo.connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+        //        await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
         //        {
         //            player = player, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
-        //            eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+        //            eventType = PlayerConnectionMessage.EventType.DataTransfer
         //        });
         //    }
         //    catch (Exception ex)
@@ -2224,7 +2224,7 @@ namespace WildCat.Gateway
         public int ConnectionId { get; set; }
         public DateTime lastSentHeartBeat;
 
-        public IAsyncStream<UNetConnectionDataTransferMessage> connectionStream;
+        public IAsyncStream<PlayerConnectionMessage> connectionStream;
         public IAsyncStream<ChallengeEventData> ChallengesStream;
         public IAsyncStream<FriendListEventData> friendListStream;
         public StreamSubscriptionHandle<ChallengeEventData> challengesHandle;
@@ -2286,10 +2286,10 @@ namespace WildCat.Gateway
             }
 
             WildCatMessageBase returning = WildCatMessageBase.Create(response, msgType, WildCatMsgHeader.normal);
-            await connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+            await connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
                 player = Player, connectionId = ConnectionId, channelId = 0,
-                data = returning.ToByteArray(), eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+                data = returning.ToByteArray(), eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
         }
 
@@ -2330,10 +2330,10 @@ namespace WildCat.Gateway
             }
 
             WildCatMessageBase returning = WildCatMessageBase.Create(response, msgType, WildCatMsgHeader.normal);
-            connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
+            connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
                 player = Player, connectionId = ConnectionId, channelId = 0, data = returning.ToByteArray(),
-                eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
+                eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
             return Task.CompletedTask;
         }

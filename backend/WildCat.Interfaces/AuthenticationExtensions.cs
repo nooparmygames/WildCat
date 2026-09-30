@@ -4,7 +4,7 @@ using System.Text;
 
 namespace WildCat.Interfaces
 {
-    public static class AuthenticationExtentions
+    public static class AuthenticationExtensions
     {
 
         public static string ToSha1(this string str)

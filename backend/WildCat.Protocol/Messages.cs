@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -21,7 +21,7 @@ namespace WildCat.Protocol
     /// Different kinds of login types, should
     /// be synced with WildCat.Interfaces.LoginType in IPlayer
     /// </summary>
-    public enum LoginType : byte { Device, UserWithPassowrd, Email }
+    public enum LoginType : byte { Device, UserWithPassword, Email }
 
     /// <summary>
     /// Online status of a friend
@@ -123,7 +123,7 @@ namespace WildCat.Protocol
         RecoverPasswordRequest = 84,
         RecoverPasswordResponse = 85,
         ResendActivationRequest = 86,
-        ResendActivaitonResponse = 87,
+        ResendActivationResponse = 87,
 
         GetFriendsRequest = 88,
         GetFriendsResponse = 89,
@@ -154,7 +154,7 @@ namespace WildCat.Protocol
         BuyItemResponse = 118,
         UnlockInventoryRequest = 119,
         UnlockInventoryResponse = 120,
-        GetInventoryUnlockTimeResquest = 121,
+        GetInventoryUnlockTimeRequest = 121,
         GetInventoryUnlockTimeResponse = 122,
         ConsumeItemRequest = 123,
         ConsumeItemResponse = 124,
@@ -226,7 +226,7 @@ namespace WildCat.Protocol
         /// <remarks>
         /// Only used for messages which are authenticated. The header should have the HasAuthData flag set
         /// </remarks>
-        public string ticket;
+        public string ticket = "";
 
         /// <summary>
         /// Game target if applicable.
@@ -234,7 +234,7 @@ namespace WildCat.Protocol
         /// <remarks>
         /// Only applicable if a message is targeted at a game and the HasGameTarget flag is set in the header
         /// </remarks>
-        public string game;
+        public string game = "";
 
         /// <summary>
         /// Player targets if applicable.
@@ -595,15 +595,15 @@ namespace WildCat.Protocol
 
     public class CreateEnvironmentRequest : MessageBase
     {
-        public string FirstName;
-        public string LastName;
-        public string PasswordHash;
-        public string Email;
-        public string PhoneNumber;
-        public string Address;
-        public string Description;
+        public string FirstName = "";
+        public string LastName = "";
+        public string PasswordHash = "";
+        public string Email = "";
+        public string PhoneNumber = "";
+        public string Address = "";
+        public string Description = "";
 
-        public string GameName;
+        public string GameName = "";
 
         public override void Serialize(BinaryWriter writer)
         {
@@ -1245,6 +1245,8 @@ namespace WildCat.Protocol
         }
     }
 
+
+
     public class GetPublisherDataRequest : MessageBase
     {
         public string key;
@@ -1452,8 +1454,8 @@ namespace WildCat.Protocol
 
     public class FriendlistEntry : MessageBase
     {
-        public string userId;
-        public string name;
+        public string userId = "";
+        public string name = "";
         public OnlineStatus status;
         public Dictionary<string, string> data;
 
@@ -1521,9 +1523,9 @@ namespace WildCat.Protocol
     public class FriendInvitation : MessageBase
     {
         public DateTime creationTime;
-        public string otherPlayerName;
-        public string OtherPlayerId;
-        public byte[] data;
+        public string otherPlayerName = "";
+        public string OtherPlayerId = "";
+        public byte[] data = new byte[0];
 
 
         public override void Serialize(BinaryWriter writer)
@@ -1531,6 +1533,8 @@ namespace WildCat.Protocol
             writer.Write(OtherPlayerId);
             writer.Write(otherPlayerName);
             writer.Write(creationTime.ToString());
+            if (data == null)
+                data = new byte[] { };
             writer.WriteBytesFull(data);
         }
 
@@ -1743,7 +1747,7 @@ namespace WildCat.Protocol
         /// <summary>
         /// The current session's ticket
         /// </summary>
-        public string ticket;
+        public string ticket = "";
 
         /// <summary>
         /// The type of login
@@ -1754,12 +1758,12 @@ namespace WildCat.Protocol
         /// The Id based on LoginType which can be email, user ID, device ID
         /// or anyting else for custom type
         /// </summary>
-        public string Id;
+        public string Id = "";
 
         /// <summary>
         /// MD5 hash of the password
         /// </summary>
-        public string PasswordHash;
+        public string PasswordHash = "";
 
         /// <summary>
         /// Should we automatically create an account if one doesn't exist, only applicable to User and Password and 
@@ -1770,7 +1774,7 @@ namespace WildCat.Protocol
         /// <summary>
         /// A set of arbitrary data for the custom login types
         /// </summary>
-        public Dictionary<string, string> data;
+        public Dictionary<string, string> data = new Dictionary<string, string>();
 
 
         public override void Serialize(BinaryWriter writer)
@@ -1780,7 +1784,8 @@ namespace WildCat.Protocol
             writer.Write(Id);
             writer.Write(PasswordHash);
             writer.Write(AutoCreate);
-
+            if (data == null)
+                data = new Dictionary<string, string>();
             writer.Write((byte)data.Count);
             foreach (var kvp in data)
             {
@@ -2412,7 +2417,7 @@ namespace WildCat.Protocol
 
     public class StringMessage : MessageBase
     {
-        public string value;
+        public string value = "";
 
         public StringMessage()
         {

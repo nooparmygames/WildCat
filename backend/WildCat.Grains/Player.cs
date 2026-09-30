@@ -22,13 +22,13 @@ namespace WildCat.Grains
 
         private IGrainTimer timer;
 
-        private IAsyncStream<UNetConnectionDataTransferMessage> connectionStream;
+        private IAsyncStream<PlayerConnectionMessage> connectionStream;
         private IStreamProvider streamProvider;
 
         public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             streamProvider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
-            connectionStream = streamProvider.GetStream<UNetConnectionDataTransferMessage>(StreamNames.PlayerConnection(this.GetPrimaryKeyString()));
+            connectionStream = streamProvider.GetStream<PlayerConnectionMessage>(StreamNames.PlayerConnection(this.GetPrimaryKeyString()));
             await base.OnActivateAsync(cancellationToken);
         }
 
@@ -36,7 +36,7 @@ namespace WildCat.Grains
         {
             if (this.GetPrimaryKeyString() == player.GetPrimaryKeyString())
             {
-                connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage { player = player, channelId = channel, data = data });
+                connectionStream.OnNextAsync(new PlayerConnectionMessage { player = player, channelId = channel, data = data });
             }
             return Task.CompletedTask;
         }
@@ -45,7 +45,7 @@ namespace WildCat.Grains
         {
             if ((DateTime.Now - State.LastHeartBeat).TotalSeconds > 20)
             {
-                await SetPresenseStatus(OnlineStatus.Offline);
+                await SetPresenceStatus(OnlineStatus.Offline);
             }
         }
 
@@ -132,12 +132,12 @@ namespace WildCat.Grains
 
         public async Task Logout()
         {
-            await SetPresenseStatus(OnlineStatus.Offline);
+            await SetPresenceStatus(OnlineStatus.Offline);
             State.IsLoggedIn = false;
             await GrainFactory.GetGrain<ISession>(State.sessionToken).EndSession();
         }
 
-        public async Task SetPresenseStatus(OnlineStatus status)
+        public async Task SetPresenceStatus(OnlineStatus status)
         {
             State.OnlineStatus = status;
             if (State.OnlineStatus == OnlineStatus.Offline)
@@ -154,7 +154,7 @@ namespace WildCat.Grains
             State.sessionToken = sessionKey;
             State.lastGameKey = (await session.GetDeveloperKey()).GameKey;
             State.LastHeartBeat = DateTime.Now;
-            await SetPresenseStatus(OnlineStatus.Online);
+            await SetPresenceStatus(OnlineStatus.Online);
             for (int i = State.RunningGames.Count - 1; i >= 0; --i)
             {
                 bool isValid = await State.RunningGames[i].IsValidGame();
@@ -272,7 +272,7 @@ namespace WildCat.Grains
             return await CreateSessionOrFailBasedOnLoginCondition(sessionKey, sentLoginTimeTicket);
         }
 
-        public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPassowrdPairs()
+        public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPasswordPairs()
         {
             return Task.FromResult(State.UserNamePasswordPairs);
         }

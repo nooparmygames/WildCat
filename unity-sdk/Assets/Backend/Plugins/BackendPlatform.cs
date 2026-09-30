@@ -1144,7 +1144,7 @@ namespace WildCat
         /// </remarks>
         public Result<AuthenticationResponse> AuthenticateWithUserAndPassword(string userName, string password, bool autoCreate)
         {
-            return Authenticate(LoginType.UserWithPassowrd, userName, password, autoCreate, new Dictionary<string, string>());
+            return Authenticate(LoginType.UserWithPassword, userName, password, autoCreate, new Dictionary<string, string>());
         }
 
         /// <summary>
@@ -1185,7 +1185,7 @@ namespace WildCat
         /// <returns>A yieldable result which shows the success/failure of the operation</returns>
         public Result AddUserNameAndPasswordToAccount(string userName, string password)
         {
-            return AddAuthenticationMechanismToAccount(LoginType.UserWithPassowrd, userName, password, new Dictionary<string, string>());
+            return AddAuthenticationMechanismToAccount(LoginType.UserWithPassword, userName, password, new Dictionary<string, string>());
         }
 
         /// <summary>
@@ -1235,7 +1235,7 @@ namespace WildCat
         /// <returns>A yieldable result which shows the success of the operation and contains the account's userId (not the name you use but the ID of the account)</returns>
         public Result<string> CreateAccountWithUserAndPassword(string userId, string password, Action<string> OnSuccess = null, Action<int, string> OnFailure = null)
         {
-            return CreateAccount(LoginType.UserWithPassowrd, userName, password, new Dictionary<string, string>(), OnSuccess, OnFailure);
+            return CreateAccount(LoginType.UserWithPassword, userName, password, new Dictionary<string, string>(), OnSuccess, OnFailure);
         }
 
         /// <summary>
