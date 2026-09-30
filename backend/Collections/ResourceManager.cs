@@ -65,9 +65,11 @@ namespace Collections
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.ResourceManagerState")]
     public class ResourceManagerState
     {
-        public Dictionary<string, string> resources { get; set; }
+        [Id(0)] public Dictionary<string, string> resources { get; set; }
 
         public ResourceManagerState()
         {

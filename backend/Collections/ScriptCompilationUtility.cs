@@ -220,10 +220,13 @@ namespace ScriptingAPI
             await Task.WhenAny(state, Task.Delay(3000));
             if (!state.IsCompleted)
             {
-                t.Abort();
+                // The legacy code called t.Abort() here, which throws PlatformNotSupportedException on
+                // .NET 5 and later. The script is abandoned instead: the caller still gets the timeout
+                // after 3 seconds, but a runaway script keeps its thread. Real limits come with the
+                // sandbox hardening (roadmap step 9).
                 throw new TimeoutException("Script timed out");
             }
-            return state.Result.ReturnValue;
+            return (await state).ReturnValue;
         }
 
         public static EventParameter.ParamType GetReturnType(object returnValue)

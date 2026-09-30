@@ -198,45 +198,56 @@ namespace Collections
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.SessionExpiredException")]
     public class SessionExpiredException : Exception
     {
         public SessionExpiredException()
         {
         }
 
-        public SessionExpiredException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext ctx) : base(info, ctx)
+        public SessionExpiredException(string message) : base(message)
         {
-
         }
 
-
+        public SessionExpiredException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.SessionNotInitializedException")]
     public class SessionNotInitializedException : Exception
     {
         public SessionNotInitializedException()
         {
-
         }
 
-        public SessionNotInitializedException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext ctx) : base(info, ctx)
+        public SessionNotInitializedException(string message) : base(message)
         {
+        }
 
+        public SessionNotInitializedException(string message, Exception innerException) : base(message, innerException)
+        {
         }
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.InvalidGameException")]
     public class InvalidGameException : Exception
     {
         public InvalidGameException()
         {
-
         }
 
-        public InvalidGameException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext ctx) : base(info, ctx)
+        public InvalidGameException(string message) : base(message)
         {
+        }
 
+        public InvalidGameException(string message, Exception innerException) : base(message, innerException)
+        {
         }
     }
 

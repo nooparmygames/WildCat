@@ -207,12 +207,14 @@ namespace Collections
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.GameState")]
     public class GameState
     {
-        public List<PlayerInGameData<float>> Players { get; set; }
-        public int Cost { get; set; }
-        public int maxPlayers { get; set; }
-        public GameFinalState finishState = GameFinalState.NotStarted;
+        [Id(0)] public List<PlayerInGameData<float>> Players { get; set; }
+        [Id(1)] public int Cost { get; set; }
+        [Id(2)] public int maxPlayers { get; set; }
+        [Id(3)] public GameFinalState finishState = GameFinalState.NotStarted;
 
         public PlayerInGameData<float> GetPlayerData(IPlayer player)
         {

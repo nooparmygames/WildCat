@@ -83,10 +83,12 @@ namespace Collections
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.DeveloperStorageState")]
     public class DeveloperStorageState
     {
-        public Dictionary<string, string> StringValues { get; set; }
-        public Dictionary<string, byte[]> BinaryValues { get; set; }
+        [Id(0)] public Dictionary<string, string> StringValues { get; set; }
+        [Id(1)] public Dictionary<string, byte[]> BinaryValues { get; set; }
 
         public DeveloperStorageState()
         {
