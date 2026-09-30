@@ -1,0 +1,146 @@
+# Builds and tests the backend (with the PostgreSQL provider tests against a real database), lints,
+# tests and builds the panel, and checks that the host's Docker image still builds.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch or pull request cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: wildcat
+          POSTGRES_USER: wildcat
+          # A fixed password is fine here: this database lives only inside this job's runner, holds
+          # nothing but test data and is thrown away when the job ends. Service containers start
+          # before any step runs, so a value generated in a step could not reach it anyway. Keep
+          # it in sync with PGPASSWORD and WILDCAT_TEST_POSTGRES below.
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        # Checks over TCP for the same reason as compose.yaml: a socket check can pass too early.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U wildcat -d wildcat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 10s
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # setup-dotnet's own cache needs packages.lock.json files, which this repo does not use, so
+      # the NuGet folder is cached by hand, keyed on the central package versions and the projects.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'backend/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build
+        run: dotnet build backend/WildCat.sln -c Release
+
+      # The postgres image only runs /docker-entrypoint-initdb.d scripts from a mounted folder, and
+      # the checkout does not exist yet when service containers start, so the Orleans scripts are
+      # applied here instead, in name order as deploy/postgres/README.md asks.
+      - name: Create the Orleans tables in PostgreSQL
+        env:
+          PGPASSWORD: ci-only-password
+          # Hides the NOTICE lines the scripts print for every %TYPE reference.
+          PGOPTIONS: -c client_min_messages=warning
+        run: |
+          for f in deploy/postgres/*.sql; do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=1 -h localhost -p 5432 -U wildcat -d wildcat -q -f "$f"
+          done
+
+      - name: Test
+        env:
+          # Turns on the PostgreSQL provider tests (PostgreSqlStorageTests, PostgreSqlHostTests).
+          WILDCAT_TEST_POSTGRES: Host=localhost;Port=5432;Database=wildcat;Username=wildcat;Password=ci-only-password
+        run: >-
+          dotnet test backend/WildCat.Tests/WildCat.Tests.csproj -c Release --no-build
+          --blame-hang-timeout 4m --logger trx
+
+      # Hang dumps from --blame-hang-timeout can be hundreds of megabytes, so only the results and
+      # the blame sequence files (which name the test that was running) are kept.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-results
+          path: |
+            backend/WildCat.Tests/TestResults/**/*.trx
+            backend/WildCat.Tests/TestResults/**/Sequence_*.xml
+          retention-days: 14
+
+  panel:
+    name: Panel lint, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: panel
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: panel/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Host Docker image
+    needs: backend
+    # Pull requests and pushes to the default branch (master in this repository) only.
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # The GitHub Actions layer cache needs a BuildKit builder, which setup-buildx provides.
+      - uses: docker/setup-buildx-action@v4
+
+      # Same build context and Dockerfile as the wildcat service in compose.yaml. The image is only
+      # built to prove that it builds; nothing is pushed.
+      - name: Build the host image
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          file: backend/WildCat.Host/Dockerfile
+          push: false
+          tags: wildcat:ci
+          cache-from: type=gha,scope=wildcat-host
+          cache-to: type=gha,mode=max,scope=wildcat-host

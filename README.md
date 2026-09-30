@@ -128,6 +128,7 @@ deploy/postgres/          Orleans PostgreSQL scripts, run when the database is c
 docs/                     design notes, see Documentation
 compose.yaml              PostgreSQL plus the host
 .env.example              template for .env, which compose.yaml reads
+.github/workflows/        CI (GitHub Actions), see Continuous integration
 ```
 
 ## Running the tests
@@ -157,6 +158,29 @@ dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --filter "FullyQualifiedN
 The same database serves the host from source: set `WildCat__Orleans__Provider=PostgreSQL` and
 `ConnectionStrings__WildCat` to that connection string before `dotnet run`.
 `docker rm -f -v wildcat-postgres` throws it away.
+
+## Continuous integration
+
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every push and pull
+request. A newer push to the same branch or pull request cancels the run still going for the
+older one. The jobs:
+
+- `backend`: builds `backend/WildCat.sln` in Release and runs the whole test suite with
+  `--blame-hang-timeout 4m`. A PostgreSQL 17 service container gets the scripts from
+  `deploy/postgres` and `WILDCAT_TEST_POSTGRES` points at it, so the PostgreSQL provider tests run
+  too. The trx results are kept as the `backend-test-results` artifact, also when tests fail.
+- `panel`: `npm ci`, `npm run lint`, `npm test` and `npm run build` in `panel/` on Node 22.
+- `docker`: once `backend` passes, builds the host image from the same build context and
+  Dockerfile as `compose.yaml`, without pushing it. It runs for pull requests and for pushes to
+  the default branch only, and keeps its layers in the GitHub Actions cache.
+
+The workflow needs no secrets. After editing it, check it with
+[actionlint](https://github.com/rhysd/actionlint) from the repository root:
+
+```bash
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+"$(go env GOPATH)/bin/actionlint"
+```
 
 ## Documentation
 

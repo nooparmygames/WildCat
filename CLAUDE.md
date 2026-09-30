@@ -21,6 +21,7 @@ docs/              legacy-backend-notes.md (grain inventory, flows, bug list),
                    wire-protocol.md (framing and message table),
                    unity-sdk-notes.md (API surface, transport, bugs, cleanup plan),
                    legacy-admin-panel.md (what the old panel did and the REST contract it expected)
+.github/workflows/ci.yml  CI: backend build and tests (with PostgreSQL), panel, host Docker image
 .claude/skills/orleans/   the Orleans 10 skill: SKILL.md plus reference/*.md
 ```
 
@@ -102,6 +103,18 @@ ConnectionStrings__WildCat="Host=localhost;Port=5432;Database=wildcat;Username=w
 
   When other hosts run on the same machine, move the ports: `--urls http://localhost:5001`,
   `WildCat__Orleans__SiloPort` and `WildCat__Orleans__GatewayPort`.
+- CI is `.github/workflows/ci.yml` (GitHub Actions, on every push and pull request; the README
+  describes it). Job `backend` runs the commands above in Release (`dotnet build -c Release`,
+  then `dotnet test -c Release --no-build --blame-hang-timeout 4m --logger trx`) with
+  `WILDCAT_TEST_POSTGRES` pointing at a PostgreSQL 17 service container that got the
+  `deploy/postgres` scripts, so the PostgreSQL tests must pass there too. Job `panel` runs
+  `npm ci`, `lint`, `test` and `build` on Node 22; job `docker` builds the host image from
+  `compose.yaml`'s context. Actions are pinned to major versions. Check the workflow after
+  editing it with actionlint at the repository root (needs Go):
+
+```bash
+go install github.com/rhysd/actionlint/cmd/actionlint@latest && "$(go env GOPATH)/bin/actionlint"
+```
 - The Unity SDK cannot be compiled in a Claude session (no Unity install). The PlayFab
   references were removed at copy time; compiling in Unity is unverified.
 
