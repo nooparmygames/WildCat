@@ -21,7 +21,7 @@ namespace RealtimeServer
     /// Different kinds of login types, should
     /// be synced with Interfaces.LoginType in IPlayer
     /// </summary>
-    public enum LoginType : byte { Device, UserWithPassowrd, Email, Custom }
+    public enum LoginType : byte { Device, UserWithPassowrd, Email }
 
     /// <summary>
     /// Online status of a friend
@@ -35,15 +35,9 @@ namespace RealtimeServer
     public enum ParamType { BoolParam, ByteParam, ShortParam, IntParam, LongParam, FloatParam, DoubleParam, StringParam, ByteArrayParam }
 
     /// <summary>
-    /// Verification status of an IAP message
-    /// Should be synced with Interfaces.VerificationStatus
-    /// </summary>
-    public enum VerificationStatus : byte { Verified, WasFraud, TokenExpired, FailedToConnect }
-
-    /// <summary>
     /// The type of friend invitaiton request 
     /// </summary>
-    public enum InvitationType : byte { AccountId, playerName, Email, UserId, PlayfabId }
+    public enum InvitationType : byte { AccountId, playerName, Email, UserId }
 
     /// <summary>
     /// Different message types which can be sent.
@@ -94,9 +88,6 @@ namespace RealtimeServer
         GetNameResponse = 37,
         SetNameRequest = 38,
         SetNameResponse = 39,
-
-        VerifyStoreReceiptRequest = 40,
-        VerifyStoreReceiptResponse = 41,
 
         GetServerTimeRequest = 42,
         GetServerTimeResponse = 43,
@@ -1059,79 +1050,6 @@ namespace RealtimeServer
                     playerProperties[playerKey][key] = value;
                 }
             }
-        }
-    }
-
-    //add test
-    public class VerifyCafeReceiptRequest : MessageBase
-    {
-        public string Product;
-        public string Receipt;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(Product);
-            writer.Write(Receipt);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            Product = reader.ReadString();
-            Receipt = reader.ReadString();
-        }
-    }
-
-    //add tests
-    public class VerifyCafeReceiptResponse : MessageBase
-    {
-        public VerificationStatus Status;
-        public string Data;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write((byte)Status);
-            writer.Write(Data);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            Status = (VerificationStatus)reader.ReadByte();
-            Data = reader.ReadString();
-        }
-
-    }
-
-    //add test
-    public class AddCafePackageDataRequest : MessageBase
-    {
-        public Guid DeveloperKey;
-        public Guid GameKey;
-        public string ClientID;
-        public string Secret;
-        public string Token;
-        public string RefreshToken;
-        public string PackageName;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.WriteBytesFull(DeveloperKey.ToByteArray());
-            writer.WriteBytesFull(GameKey.ToByteArray());
-            writer.Write(ClientID);
-            writer.Write(Secret);
-            writer.Write(Token);
-            writer.Write(RefreshToken);
-            writer.Write(PackageName);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            DeveloperKey = new Guid(reader.ReadBytesAndSize());
-            GameKey = new Guid(reader.ReadBytesAndSize());
-            ClientID = reader.ReadString();
-            Secret = reader.ReadString();
-            Token = reader.ReadString();
-            RefreshToken = reader.ReadString();
-            PackageName = reader.ReadString();
         }
     }
 
