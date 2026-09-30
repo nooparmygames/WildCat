@@ -32,6 +32,19 @@ scores from a server script event run through `ExecuteScriptEvent`. The SDK neve
 for 113 (SetItemToInventory). The sample's "Send score" button still calls
 `SetScoreInLeaderBoard`, so it gets that error and an obsolete warning.
 
+Changed in step 6: the protocol is no longer a hand-kept copy. `LowLevelAPI/Messages.cs` is gone;
+`Plugins/Protocol/` is generated from `backend/WildCat.Protocol` by `tools/sync-protocol.sh` and
+must not be edited (see docs/wire-protocol.md). Encoding goes through `WireCodec`: frames are sent
+as `WireCodec.Encode(msg)` (was `msg.ToByteArray()`) and read with `WireCodec.Decode(bytes)`
+(was `WildCatMessageBase.CreateMessageFromByteArray`), and payloads are read with
+`msg.GetPayload<T>()` (was `GetData<T>()`). Custom payloads, like the sample's `Vector3Message`,
+override `Serialize(WireWriter)` and `Deserialize(WireReader)` (they used `BinaryWriter`,
+`BinaryReader` and the `WriteBytesFull` extension). The wire format changed with it (UTC tick
+DateTimes, int32 counts, null-safe strings), so an SDK and a server from before and after step 6
+cannot talk to each other. `GetServerTime` reads a UTC `DateTime` from a `DateTimeMessage`
+instead of parsing a culture dependent string, and `SetPlayerMatchProperty(Guid, string,
+MessageBase)` encodes its value through the codec instead of calling itself.
+
 ## Layout
 
 ```
@@ -41,7 +54,8 @@ Assets/Backend/Plugins/BackendPlatform.cs   the public API, about 2,000 lines, s
 Assets/Backend/Plugins/Result.cs            Result, Result<T>, Result<T,Q>: poll or `yield return r.Wait()`
 Assets/Backend/Plugins/LowLevelAPI/         Client (request/response plumbing), WebSocketNetworkTransmitter
                                             (websocket-sharp), NetworkTransmitter (dead UNet LLAPI),
-                                            RequestIdGenerator, Messages.cs (protocol copy)
+                                            RequestIdGenerator
+Assets/Backend/Plugins/Protocol/            generated copy of backend/WildCat.Protocol (do not edit)
 Assets/Backend/Plugins/Sample/              Sample.cs IMGUI demo, TimestampedBuffer (interpolation), test.unity
 Assets/Backend/Plugins/Prefabs/WildCat.prefab   references a missing script GUID (broken)
 ```
@@ -81,7 +95,7 @@ as C# events or public delegate fields.
   `OnMatchPlayerRejoined`, `OnMatchRejoinSyncDataReceived`.
 - Relay: `UpdateGame<T>(game, msg, type, qos)` fire-and-forget with custom message types above
   1023; `RegisterHandler(type, handler)` / `UnregisterHandler` for raw messages, payload via
-  `msg.GetData<T>()`.
+  `msg.GetPayload<T>()`.
 - Challenges: `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`,
   `GetChallenges` (161/162), events
   `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied`.
@@ -89,8 +103,7 @@ as C# events or public delegate fields.
   `GetPlayerPublicCloudData`, `GetPublisherData`.
 - Scripts: `ExecuteScriptEvent(name, params object[] args)` for int, short, long, bool, byte,
   byte[], float, double, string.
-- Time: `GetServerTime()` (needs a ticket despite only checking the connection; culture
-  dependent parse).
+- Time: `GetServerTime()` (UTC; sends the ticket, which the server does not check).
 
 ## Transport
 
@@ -109,15 +122,18 @@ static counter with a small race outside its lock.
   fires twice.
 - `DenyChallengeRequest` registers its response handler on the request type, so its Result
   never completes. (`SetDeck` had the same bug until step 2 removed it.)
-- `SetPlayerMatchProperty(Guid, string, MessageBase)` calls itself (stack overflow).
 - `AddInventoryItems` and `RemoveInventoryItems` never set `inventoryName` and throw on the
   null write.
 - `CreateAccountWithUserAndPassword` sends the `userName` property instead of the argument.
 - Leaderboard responses are identified by guessing from flags; a Top query on an empty board
   never completes.
-- `GetFriendsRequestMessage.Deserialize` never allocates its array; player-target count is
-  int32 vs int16 (see docs/wire-protocol.md). The deserializers with null lists belonged to
-  card-game messages removed in step 2.
+- Fixed in step 6: `GetFriendsRequestMessage.Deserialize` never allocated its array, the
+  player-target count was int32 vs int16, and `SetPlayerMatchProperty(Guid, string,
+  MessageBase)` called itself (see docs/wire-protocol.md). The deserializers with null lists
+  belonged to card-game messages removed in step 2.
+- There is no handler for ErrorMsg (8), so a request the gateway refuses before its handler
+  (no session, not logged in, unknown id) leaves its Result pending, and no calls exist yet for
+  RecoverPassword (84), ResendActivation (86) and ResetPasswordWithCode (163).
 - Sample: leaderboard never displays (`entriesToShow` unassigned), `int.Parse` on empty input,
   null reference in `OnFriendStatusChanged` before the list loads, callbacks re-registered on
   every Start, `TimestampedBuffer.GetValue` divides by zero on equal timestamps, sends at 20 Hz
@@ -133,8 +149,9 @@ static counter with a small race outside its lock.
    coroutine-friendly wrapper.
 3. Make the transport thread-safe (concurrent queue, immutable handler map), add reconnection
    with session resume, and a real heartbeat with RTT.
-4. Share the protocol definition with the server (see docs/wire-protocol.md) instead of a
-   diverged copy.
+4. (Done in step 6) Share the protocol definition with the server: `Plugins/Protocol` is
+   generated from `backend/WildCat.Protocol`; move it into the UPM package's Runtime folder and
+   point `tools/sync-protocol.sh` there.
 5. Rebuild the sample scene and prefab and package as a UPM package (`com.<org>.wildcat`).
    (Step 3 renamed the brand from Apadana to WildCat and pointed the editor menu links at the
    GitHub repository.)

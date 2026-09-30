@@ -120,6 +120,9 @@ environment variable name joins the sections with `__`, so `WildCat:Orleans:Prov
 | `WildCat:Email:FromAddress`, `FromName` | empty, `WildCat` | Sender of account emails. |
 | `Gateway:MaxMessageBytes` | `1048576` | Largest WebSocket message a client may send; bigger ones close the connection. |
 | `Gateway:AllowedOrigins` | empty | Allowed `Origin` headers for WebSocket upgrades; empty accepts any. |
+| `Gateway:AuthAttemptBurst`, `AuthAttemptsPerMinute` | `5`, `6` | Sign-in attempts (logins, account creation, codes, recovery) one connection may make back to back, and how fast they come back. |
+| `Gateway:OutboundQueueCapacity` | `1024` | Messages waiting to be written to one client; a client that stops reading and fills it is disconnected. |
+| `Gateway:MaxConcurrentRequests` | `8` | Requests of one connection handled at the same time. Relayed game messages are not counted and keep their order. |
 | `ForwardedHeaders:KnownProxies` | empty | Proxy addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, besides loopback. |
 
 ## Repository layout
@@ -127,12 +130,13 @@ environment variable name joins the sections with `__`, so `WildCat:Orleans:Prov
 ```
 backend/                  the .NET solution (WildCat.sln)
   WildCat.Host/           the host: silo, gateway, configuration, Dockerfile
-  WildCat.Gateway/        WebSocket gateway library mapped at /ws
+  WildCat.Gateway/        WebSocket gateway library mapped at /ws (docs/gateway.md)
   WildCat.Grains/         grain implementations, email senders, script sandbox
   WildCat.Interfaces/     grain interfaces, state classes, shared helpers
-  WildCat.Protocol/       binary wire protocol (netstandard2.0, shared with the Unity SDK)
+  WildCat.Protocol/       binary wire protocol (netstandard2.1, shared with the Unity SDK)
   WildCat.Tests/          xUnit tests on an in-process Orleans cluster
 unity-sdk/                Unity project holding the client SDK in Assets/Backend
+tools/                    sync-protocol.sh (.ps1): copies the protocol into the SDK
 deploy/postgres/          Orleans PostgreSQL scripts, run when the database is created
 docs/                     design notes, see Documentation
 compose.yaml              PostgreSQL plus the host
@@ -200,7 +204,10 @@ go install github.com/rhysd/actionlint/cmd/actionlint@latest
   Code, which this repository is set up for)
 - [docs/legacy-backend-notes.md](docs/legacy-backend-notes.md): grain inventory, main flows and
   the known bug list
-- [docs/wire-protocol.md](docs/wire-protocol.md): WebSocket framing and the message table
+- [docs/wire-protocol.md](docs/wire-protocol.md): WebSocket framing, value encodings, the codec
+  and the message table
+- [docs/gateway.md](docs/gateway.md): how the gateway handles a frame, and how to add and test a
+  message handler
 - [docs/unity-sdk-notes.md](docs/unity-sdk-notes.md): the Unity SDK's API, transport and cleanup
   plan
 - [docs/legacy-admin-panel.md](docs/legacy-admin-panel.md): what the old admin panel did and the
