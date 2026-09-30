@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Orleans;
 using WildCat.Interfaces;
@@ -9,152 +8,81 @@ using Microsoft.Extensions.Logging;
 
 namespace WildCat.Grains
 {
+    /// <summary>
+    /// A player's named inventory, keyed "{gameKey}_{playerId}_[{name}_]inv". The state lives in
+    /// the grain's own storage (the legacy code stored a JSON blob in PlayerStorage instead). Every
+    /// change is applied to State and written; when a change fails part way or the write fails,
+    /// the last written state is read back so memory and storage agree.
+    /// </summary>
     public class PlayerInventory : Grain<PlayerInventoryState>, IPlayerInventory
     {
-        private string gameKey, playerId, playerInventoryName;
-        private ILogger logger;
+        private string gameKey, playerId;
+        private readonly ILogger logger;
 
         public PlayerInventory(ILogger<IPlayerInventory> logger)
         {
             this.logger = logger;
         }
 
-        public async override Task OnActivateAsync(CancellationToken cancellationToken)
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            if (State.items == null)
-            {
-                State = new PlayerInventoryState(-1);
-            }
-            (gameKey, playerId, playerInventoryName) = ResourcesUtility.GetPlayerInventoryparts(this.GetPrimaryKeyString());
-            var data = await GrainFactory.GetGrain<IPlayerStorage>(ResourcesUtility.GetPlayPlayerStorageKey(gameKey, playerId)).GetPlayerString(this.GetPrimaryKeyString());
-            if (data.Item1)
-            {
-                State = Newtonsoft.Json.JsonConvert.DeserializeObject<PlayerInventoryState>(data.Item2);
-            }
-            await base.OnActivateAsync(cancellationToken);
+            State.items ??= new List<PlayerInventoryState.InInventoryItemState>();
+            (gameKey, playerId, _) = ResourcesUtility.GetPlayerInventoryparts(this.GetPrimaryKeyString());
+            return base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<bool> AddItem(IInventoryItem[] items, int[] counts)
         {
+            AssertSameLength(items, counts);
             if (!State.CanContain(counts.Sum()))
                 return false;
-            var prev = this.State;
-            for (int i = 0; i < items.Length; ++i)
+            return await Apply(nameof(AddItem), () =>
             {
-                int count = counts[i];
-                IInventoryItem item = items[i];
-                State.AddItem(item, count);
-            }
-            try
-            {
-                await Save();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"AddItem Failed to save  {ex.ToString()}");
-                State = prev;
-                throw ex;
-            }
+                for (int i = 0; i < items.Length; ++i)
+                    State.AddItem(items[i], counts[i]);
+                return Task.FromResult(true);
+            });
         }
 
         public async Task SetItem(IInventoryItem[] items, int[] counts)
         {
+            AssertSameLength(items, counts);
             if (!State.CanContain(counts.Sum()))
                 return;
-            var prev = this.State;
-            for (int i = 0; i < items.Length; ++i)
+            await Apply(nameof(SetItem), () =>
             {
-                int count = counts[i];
-                IInventoryItem item = items[i];
-
-                State.SetItem(item, count);
-            }
-            try
-            {
-                await Save();
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"AddItem Failed to save  {ex.ToString()}");
-                State = prev;
-                throw ex;
-            }
+                for (int i = 0; i < items.Length; ++i)
+                    State.SetItem(items[i], counts[i]);
+                return Task.FromResult(true);
+            });
         }
 
-        public async Task<bool> BuyItem(IItem[] items, int[] counts)
+        public Task<bool> BuyItem(IItem[] items, int[] counts)
         {
-            var prev = State;
-            bool done = true;
-            for (int i = 0; i < items.Length; ++i)
+            AssertSameLength(items, counts);
+            return Apply(nameof(BuyItem), async () =>
             {
-                var item = items[i];
-                var count = counts[i];
-                var itemInfo = await item.GetItemInfo();
-                bool haveItems = State.HasItems(itemInfo.Price);
-                bool hasCapacity = State.CanContain(count - itemInfo.Price.Sum(x => x.Count));
-                if (haveItems && hasCapacity)
+                for (int i = 0; i < items.Length; ++i)
                 {
+                    var item = items[i];
+                    var count = counts[i];
+                    var itemInfo = await item.GetItemInfo();
+                    bool haveItems = State.HasItems(itemInfo.Price);
+                    bool hasCapacity = State.CanContain(count - itemInfo.Price.Sum(x => x.Count));
+                    if (!haveItems || !hasCapacity)
+                        return false;
                     foreach (var priceItem in itemInfo.Price)
                         State.RemoveItem(priceItem.Item, priceItem.Count);
                     State.AddItem(item, count);
                 }
-                else
-                {
-                    done = false;
-                    break;
-                }
-            }
-            if (done)
-            {
-                try
-                {
-                    await Save();
-                }
-                catch (Exception ex)
-                {
-                    State = prev;
-                    logger.LogError($"{ex.ToString()}");
-                    done = false;
-                }
-            }
-            return done;
+                return true;
+            });
         }
 
-        private Task Save()
+        public Task<bool> ConsumeItem(IItem[] items, int[] counts)
         {
-            return GrainFactory.GetGrain<IPlayerStorage>(ResourcesUtility.GetPlayPlayerStorageKey(gameKey, playerId)).SetPlayerString(this.GetPrimaryKeyString(), Newtonsoft.Json.JsonConvert.SerializeObject(State));
-        }
-
-        public async Task<bool> ConsumeItem(IItem[] items, int[] counts)
-        {
-            var prev = State;
-            bool done = true;
-            for (int i = 0; i < items.Length; ++i)
-            {
-                var item = items[i];
-                var count = counts[i];
-                var result = State.RemoveItem(item, count);
-                if (!result)
-                {
-                    done = result;
-                    break;
-                }
-            }
-            if (done)
-            {
-                try
-                {
-                    await Save();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError($"Failed to save {ex}");
-                    State = prev;
-                    done = false;
-                }
-            }
-            return done;
+            AssertSameLength(items, counts);
+            return Apply(nameof(ConsumeItem), () => Task.FromResult(RemoveAll(items, counts)));
         }
 
         public Task<PlayerInventoryState> GetInventory()
@@ -162,160 +90,126 @@ namespace WildCat.Grains
             return Task.FromResult(State);
         }
 
-        public async Task<bool> RemoveItem(IInventoryItem[] items, int[] counts)
+        public Task<bool> RemoveItem(IInventoryItem[] items, int[] counts)
         {
-            var prev = State;
-            bool done = true;
-            for (int i = 0; i < items.Length; ++i)
-            {
-                var count = counts[i];
-                var item = items[i];
-                var result = State.RemoveItem(item, count);
-                if (!result)
-                {
-                    done = false;
-                    break;
-                }
-            }
-            if (done)
-            {
-                try
-                {
-                    await Save();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError($"Failed to store {ex}");
-                    State = prev;
-                    done = false;
-                }
-            }
-            return done;
+            AssertSameLength(items, counts);
+            return Apply(nameof(RemoveItem), () => Task.FromResult(RemoveAll(items, counts)));
         }
 
         public async Task<bool> OpenAndUnlockPackage(IPackageContainer package)
         {
-            var prev = State;
-            IInventoryItem uselessItem;
-            if (!State.TryGetItem(package, 1, out uselessItem))
-            {
+            if (!State.TryGetItem(package, 1, out _))
                 return false;
-            }
-            bool shouldGrant = false;
             var packageData = await package.GetInfo();
-            if (!packageData.IsLocked)
-            {
-                shouldGrant = true;
-            }
-            else
-            {
-                var unlockingItems = packageData.UnlockItems;
-                shouldGrant = State.HasItems(unlockingItems);
-            }
-            if (shouldGrant)
-            {
-                var grantedItems = await package.Grant();
-                bool canContain = State.CanContain(grantedItems.Sum(x => x.Count) - packageData.UnlockItems.Sum(x => x.Count));
-                if (canContain)
-                {
-                    if (packageData.IsLocked)
-                    {
-                        foreach (var item in packageData.UnlockItems)
-                            State.RemoveItem(item.Item, item.Count);
-                    }
-
-                    foreach (var item in grantedItems)
-                        State.AddItem(item.Item, item.Count);
-                    try
-                    {
-                        await Save();
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        State = prev;
-                        logger.LogError($"Failed to store {ex.ToString()}");
-                        return false;
-                    }
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else
-            {
+            bool shouldGrant = !packageData.IsLocked || State.HasItems(packageData.UnlockItems);
+            if (!shouldGrant)
                 return false;
-            }
+
+            var grantedItems = await package.Grant();
+            bool canContain = State.CanContain(grantedItems.Sum(x => x.Count) - packageData.UnlockItems.Sum(x => x.Count));
+            if (!canContain)
+                return false;
+
+            return await Apply(nameof(OpenAndUnlockPackage), () =>
+            {
+                if (packageData.IsLocked)
+                {
+                    foreach (var item in packageData.UnlockItems)
+                        State.RemoveItem(item.Item, item.Count);
+                }
+                foreach (var item in grantedItems)
+                    State.AddItem(item.Item, item.Count);
+                return Task.FromResult(true);
+            });
         }
 
         public async Task<bool> BuyPackage(IPackageContainer package, int count)
         {
-            var prev = State;
             var info = await package.GetInfo();
             bool hasPrice = State.HasItems(info.Price);
             bool canContain = State.CanContain(count - info.Price.Sum(x => x.Count));
-            if (hasPrice && canContain)
+            if (!hasPrice || !canContain)
+                return false;
+
+            return await Apply(nameof(BuyPackage), () =>
             {
                 foreach (var priceItem in info.Price)
-                {
                     State.RemoveItem(priceItem.Item, priceItem.Count);
-                }
                 State.AddItem(package, count);
-                try
-                {
-                    await Save();
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    State = prev;
-                    logger.LogError($"Failed to save {ex}");
-                    return false;
-                }
-            }
-            else
-            {
-                return false;
-            }
+                return Task.FromResult(true);
+            });
         }
 
         public async Task SetSize(int size)
         {
-            var prev = State.size;
-            try
+            await Apply(nameof(SetSize), () =>
             {
                 State.SetSize(size);
-                await Save();
-            }
-            catch (Exception ex)
-            {
-                State.SetSize(prev);
-                throw ex;
-            }
+                return Task.FromResult(true);
+            });
         }
 
         public async Task<PlayerInventoryState.InInventoryItemState[]> Unlock()
         {
-            var prev = State;
-            List<PlayerInventoryState.InInventoryItemState> data = State.Unlock();
+            List<PlayerInventoryState.InInventoryItemState> data = null;
+            await Apply(nameof(Unlock), async () =>
+            {
+                data = State.Unlock();
+                // The unlocked items go to the player's main inventory. For the main inventory that
+                // is this grain, a call to itself that the call chain reentrancy filter lets through
+                // (bug 17 in docs/legacy-backend-notes.md).
+                await GrainFactory.GetGrain<IPlayerInventory>(ResourcesUtility.GetPlayerInventoryKey(gameKey, playerId))
+                    .AddItem(data.Select(x => x.Item).ToArray(), data.Select(x => x.Count).ToArray());
+                return true;
+            });
+            return data.ToArray();
+        }
+
+        public Task<(PlayerInventoryState.UnlockStatus, TimeSpan)> GetUnlocktime()
+        {
+            return Task.FromResult((State.status, State.GetUnlockTime()));
+        }
+
+        private bool RemoveAll(IInventoryItem[] items, int[] counts)
+        {
+            for (int i = 0; i < items.Length; ++i)
+            {
+                if (!State.RemoveItem(items[i], counts[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private static void AssertSameLength(Array items, int[] counts)
+        {
+            if (items == null || counts == null || items.Length != counts.Length)
+                throw new ArgumentException("Every item needs exactly one count.");
+        }
+
+        /// <summary>
+        /// Runs <paramref name="change"/> against State and writes the result. When the change
+        /// returns false nothing is written; when it returns false or throws, or the write fails,
+        /// the last written state is read back so a half-applied change does not stay in memory.
+        /// </summary>
+        private async Task<bool> Apply(string operation, Func<Task<bool>> change)
+        {
+            bool applied;
             try
             {
-                await GrainFactory.GetGrain<IPlayerInventory>(ResourcesUtility.GetPlayerInventoryKey(gameKey, playerId)).AddItem(data.Select(x => x.Item).ToArray(), data.Select(x => x.Count).ToArray());
-                await Save();
-                return data.ToArray();
+                applied = await change();
+                if (applied)
+                    await WriteStateAsync();
             }
             catch (Exception ex)
             {
-                logger.LogError($"Failed to store {ex.ToString()}");
-                State = prev;
-                throw ex;
+                logger.LogWarning(ex, "{Operation} failed on inventory {Inventory}", operation, this.GetPrimaryKeyString());
+                await ReadStateAsync();
+                throw;
             }
-        }
 
-        public Task<(PlayerInventoryState.StateValues.Status, TimeSpan)> GetUnlocktime()
-        {
-            return Task.FromResult((State.status, State.GetUnlockTime()));
+            if (!applied)
+                await ReadStateAsync();
+            return applied;
         }
     }
 }

@@ -6,33 +6,33 @@ using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
+    /// <summary>
+    /// Publisher key/value data. Game clients read single values without a secret (messages 34/35);
+    /// everything else needs the developer secret, which is checked against the Developer grain on
+    /// every call so a regenerated secret takes effect at once.
+    /// </summary>
     public class DeveloperStorage : Grain<DeveloperStorageState>, IDeveloperStorage
     {
-        private Guid developerSecret;
-
-        public override async Task OnActivateAsync(CancellationToken cancellationToken)
+        /// <summary>
+        /// Throws <see cref="InvalidOperationException"/> for a wrong secret; the gateway maps that
+        /// exception type to its "Secret is wrong" response.
+        /// </summary>
+        private async Task AssertIsSecretCorrect(Guid secret)
         {
-            var developer = GrainFactory.GetGrain<IDeveloper>(this.GetPrimaryKey());
-            var developerData = await developer.GetDeveloperData();
-            developerSecret = developerData.DeveloperSecret;
-            await base.OnActivateAsync(cancellationToken);
-        }
-
-        private void AssertIsSecretCorrect(Guid secret)
-        {
-            if (secret != developerSecret)
+            bool valid = await GrainFactory.GetGrain<IDeveloper>(this.GetPrimaryKey()).IsSecretValid(secret);
+            if (!valid)
                 throw new InvalidOperationException("The secret is not valid");
         }
 
-        public Task<List<Tuple<string, bool>>> GetAllKeys(Guid secret)
+        public async Task<List<Tuple<string, bool>>> GetAllKeys(Guid secret)
         {
-            AssertIsSecretCorrect(secret);
+            await AssertIsSecretCorrect(secret);
             List<Tuple<string, bool>> returnValues = new List<Tuple<string, bool>>();
             foreach (var key in State.StringValues.Keys)
                 returnValues.Add(Tuple.Create(key, true));
             foreach (var key in State.BinaryValues.Keys)
                 returnValues.Add(Tuple.Create(key, false));
-            return Task.FromResult(returnValues);
+            return returnValues;
         }
 
         public Task<byte[]> GetBinary(string key)
@@ -49,37 +49,44 @@ namespace WildCat.Grains
             return Task.FromResult<string>(null);
         }
 
-        public Task SetBinary(string key, byte[] value, Guid secret)
+        public async Task<string> GetStringForDeveloper(string key, Guid secret)
         {
-            AssertIsSecretCorrect(secret);
+            await AssertIsSecretCorrect(secret);
+            return State.StringValues.TryGetValue(key, out var value) ? value : null;
+        }
+
+        public async Task SetBinary(string key, byte[] value, Guid secret)
+        {
+            await AssertIsSecretCorrect(secret);
             State.BinaryValues[key] = value;
-            return WriteStateAsync();
+            await WriteStateAsync();
         }
 
-        public Task SetString(string key, string value, Guid secret)
+        public async Task SetString(string key, string value, Guid secret)
         {
-            AssertIsSecretCorrect(secret);
+            await AssertIsSecretCorrect(secret);
             State.StringValues[key] = value;
-            return WriteStateAsync();
+            await WriteStateAsync();
         }
 
-        public Task RemoveString(string key)
+        public async Task RemoveString(string key, Guid secret)
         {
-
-            State.StringValues.Remove(key);
-            return WriteStateAsync();
+            await AssertIsSecretCorrect(secret);
+            if (State.StringValues.Remove(key))
+                await WriteStateAsync();
         }
 
-        public Task RemoveBinary(string key)
+        public async Task RemoveBinary(string key, Guid secret)
         {
-            State.BinaryValues.Remove(key);
-            return WriteStateAsync();
+            await AssertIsSecretCorrect(secret);
+            if (State.BinaryValues.Remove(key))
+                await WriteStateAsync();
         }
 
-        public Task<Dictionary<string, string>> GetAllStringData(Guid secret)
+        public async Task<Dictionary<string, string>> GetAllStringData(Guid secret)
         {
-            AssertIsSecretCorrect(secret);
-            return Task.FromResult(State.StringValues);
+            await AssertIsSecretCorrect(secret);
+            return State.StringValues;
         }
     }
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 using Orleans;
 using WildCat.Interfaces;
 using Newtonsoft.Json.Linq;
@@ -85,9 +86,14 @@ namespace WildCat.Grains
             throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Creates the developer. <see cref="DeveloperState.PasswordHash"/> carries the plain
+        /// password on the way in and is replaced by its hash; an empty value creates a developer
+        /// without a password (the seeded development accounts), who cannot log in with one.
+        /// </summary>
         public Task CreateDeveloper(DeveloperState data)
         {
-            data.PasswordHash = data.PasswordHash.ToSha1();
+            data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : PasswordHasher.Hash(data.PasswordHash);
             data.DeveloperSecret = Guid.NewGuid();
             if (data.GameInfos.Count > 0)
                 throw new ArgumentException();
@@ -155,16 +161,36 @@ namespace WildCat.Grains
                 throw new InvalidOperationException($"such developer {this.GetPrimaryKey()} is not created");
         }
 
-        public Task<bool> IsPasswordCorrect(string passwordHash)
+        public Task<bool> IsPasswordCorrect(string password)
         {
-            var Sha1edPassword = passwordHash.ToSha1();
-            return Task.FromResult(State.PasswordHash == Sha1edPassword);
+            return Task.FromResult(isCreated && PasswordHasher.Verify(password, State.PasswordHash));
         }
 
         public Task ChangePassword(string newPassword)
         {
-            State.PasswordHash = newPassword.ToSha1();
+            AssertIsCreated();
+            State.PasswordHash = PasswordHasher.Hash(newPassword);
             return WriteStateAsync();
+        }
+
+        public Task<bool> IsSecretValid(Guid secret)
+        {
+            return Task.FromResult(isCreated && SecretsMatch(State.DeveloperSecret, secret));
+        }
+
+        /// <summary>
+        /// Compares two developer secrets in constant time. Guid.Empty never matches, so a developer
+        /// whose secret was never generated cannot be used with an empty secret.
+        /// </summary>
+        private static bool SecretsMatch(Guid expected, Guid given)
+        {
+            if (expected == Guid.Empty)
+                return false;
+            Span<byte> a = stackalloc byte[16];
+            Span<byte> b = stackalloc byte[16];
+            expected.TryWriteBytes(a);
+            given.TryWriteBytes(b);
+            return CryptographicOperations.FixedTimeEquals(a, b);
         }
     }
 

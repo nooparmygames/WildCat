@@ -92,6 +92,11 @@ namespace WildCat.Grains
 
         public async Task Disconnected(Guid sentLoginTimeTicket)
         {
+            // The gateway passes the ticket of the login that owned the closed socket. When the
+            // player has logged in again since (another device, or a reconnect that beat the old
+            // socket's close), that ticket is stale and must not log out the newer login.
+            if (sentLoginTimeTicket != State.LoginTicket)
+                return;
             for (int i = State.RunningGames.Count - 1; i >= 0; i--)
             {
                 bool result = await State.RunningGames[i].PlayerDisconnected(this.AsReference<IPlayer>());
@@ -115,19 +120,18 @@ namespace WildCat.Grains
             return Task.FromResult(State.IsLoggedIn);
         }
 
-        private Guid loginTimeTicket;
-
-        private async Task<LoginResult> CreateSessionOrFailBasedOnLoginCondition(Guid sessionKey, Guid sentLoginTimeTicket)
+        /// <summary>
+        /// Finishes a login attempt. A failed attempt changes nothing, so a wrong password cannot
+        /// flip the state of a player who is logged in elsewhere. A successful one binds the session
+        /// and stores the gateway's login ticket, which <see cref="Disconnected"/> checks.
+        /// </summary>
+        private async Task<LoginResult> CompleteLogin(bool credentialsValid, Guid sessionKey, Guid sentLoginTimeTicket)
         {
-            if (State.IsLoggedIn)
-            {
-                await AuthorizeSession(sessionKey);
-                loginTimeTicket = sentLoginTimeTicket;
-            }
+            if (!credentialsValid)
+                return null;
 
-            return State.IsLoggedIn
-                ? new LoginResult(this.GetPrimaryKeyString(), State.Name, State.sessionToken.ToString())
-                : null;
+            await AuthorizeSession(sessionKey, sentLoginTimeTicket);
+            return new LoginResult(this.GetPrimaryKeyString(), State.Name, State.sessionToken.ToString());
         }
 
         public async Task Logout()
@@ -147,10 +151,14 @@ namespace WildCat.Grains
             await WriteStateAsync();
         }
 
-        private async Task AuthorizeSession(Guid sessionKey)
+        private async Task AuthorizeSession(Guid sessionKey, Guid loginTicket)
         {
             var session = GrainFactory.GetGrain<ISession>(sessionKey);
             await session.StartAuthenticatedUserSession(State.sessionToken.ToString(), this.GetPrimaryKeyString());
+            // Change the login state only once the session accepted the user, so a login on an
+            // expired or unknown session leaves the current login and its ticket alone.
+            State.IsLoggedIn = true;
+            State.LoginTicket = loginTicket;
             State.sessionToken = sessionKey;
             State.lastGameKey = (await session.GetDeveloperKey()).GameKey;
             State.LastHeartBeat = DateTime.Now;
@@ -216,8 +224,7 @@ namespace WildCat.Grains
         public async Task<LoginResult> LoginWithDeviceID(string deviceID, Guid sessionKey, Guid sentLoginTimeTicket)
         {
             AssertIsCreated();
-            State.IsLoggedIn = State.Devices.Contains(deviceID);
-            return await CreateSessionOrFailBasedOnLoginCondition(sessionKey, sentLoginTimeTicket);
+            return await CompleteLogin(State.Devices.Contains(deviceID), sessionKey, sentLoginTimeTicket);
         }
 
         public Task<List<string>> GetPlayerDevices()
@@ -229,6 +236,7 @@ namespace WildCat.Grains
         {
             if (!user.All(x => IsValidCharacter(x)))
                 throw new ArgumentException($"User name {user} contains invalid characters");
+            PasswordHasher.EnsureAcceptable(password);
 
             if (State.UserNamePasswordPairs.ContainsKey(user))
                 return AdditionResult.AlreadyExisting;
@@ -239,7 +247,7 @@ namespace WildCat.Grains
             if (isMappingAdded)
             {
                 State.UserNamePasswordPairs.Add(user,
-                    new Dictionary<string, string> {{PASSWORD_KEY, password.ToSha1()}});
+                    new Dictionary<string, string> {{PASSWORD_KEY, PasswordHasher.Hash(password)}});
                 await WriteStateAsync();
                 return AdditionResult.Success;
             }
@@ -255,7 +263,7 @@ namespace WildCat.Grains
             {
                 throw new InvalidOperationException("Already created");
             }
-
+            PasswordHasher.EnsureAcceptable(password);
 
             State.IsCreated = true;
             State.Name = "";
@@ -266,10 +274,9 @@ namespace WildCat.Grains
         public async Task<LoginResult> LoginWithUserNameAndPassword(string userName, string password, Guid sessionKey, Guid sentLoginTimeTicket)
         {
             AssertIsCreated();
-            State.IsLoggedIn = State.UserNamePasswordPairs.ContainsKey(userName)
-                               && State.UserNamePasswordPairs[userName][PASSWORD_KEY] == password.ToSha1();
-
-            return await CreateSessionOrFailBasedOnLoginCondition(sessionKey, sentLoginTimeTicket);
+            bool valid = State.UserNamePasswordPairs.TryGetValue(userName, out var account)
+                         && PasswordHasher.Verify(password, account[PASSWORD_KEY]);
+            return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
         }
 
         public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPasswordPairs()
@@ -284,6 +291,7 @@ namespace WildCat.Grains
                 throw new ArgumentException($"Email {email} contains invalid characters");
             if (!email.Contains("@"))
                 throw new ArgumentException($"email {email} is not a valid email address");
+            PasswordHasher.EnsureAcceptable(password);
             if (State.Emails.ContainsKey(email))
                 return AdditionResult.AlreadyExisting;
 
@@ -295,7 +303,7 @@ namespace WildCat.Grains
                 State.Emails.Add(email,
                     new Dictionary<string, string>
                     {
-                        {PASSWORD_KEY, password.ToSha1()},
+                        {PASSWORD_KEY, PasswordHasher.Hash(password)},
                         {STATUS_KEY, STATUS_NOT_ACTIVE},
                         {CODE_KEY, activationCode}
                     });
@@ -324,6 +332,7 @@ namespace WildCat.Grains
             {
                 throw new InvalidOperationException("Already created");
             }
+            PasswordHasher.EnsureAcceptable(password);
 
             State.IsCreated = true;
             State.Name = "";
@@ -336,12 +345,10 @@ namespace WildCat.Grains
         {
             email = email.ToLower();
             AssertIsCreated();
-            State.IsLoggedIn = State.Emails.ContainsKey(email)
-                               && State.Emails[email][PASSWORD_KEY] == password.ToSha1()
-                               && State.Emails[email][STATUS_KEY] == STATUS_ACTIVE;
-
-
-            return await CreateSessionOrFailBasedOnLoginCondition(sessionKey, sentLoginTimeTicket);
+            bool valid = State.Emails.TryGetValue(email, out var account)
+                         && account[STATUS_KEY] == STATUS_ACTIVE
+                         && PasswordHasher.Verify(password, account[PASSWORD_KEY]);
+            return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
         }
 
         public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerEmailAccounts()
@@ -463,7 +470,7 @@ namespace WildCat.Grains
         {
             if (State.Emails.ContainsKey(email))
             {
-                State.Emails[email][PASSWORD_KEY] = newPassword.ToSha1();
+                State.Emails[email][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
                 await WriteStateAsync();
                 return true;
             }
@@ -475,7 +482,7 @@ namespace WildCat.Grains
         {
             if (!State.Emails.ContainsKey(email))
                 throw new ArgumentException("The email doesn't exist");
-            string code = EmailSenderUtility.RandomString(6);
+            string code = EmailSenderUtility.RandomString(RANDOM_TOKEN_LENGTH);
             State.Emails[email][CODE_KEY] = code;
             EmailSenderUtility.SendEmail(EmailSenderUtility.SENDER_ADDRESS, email, "Security code", code);
             await WriteStateAsync();
@@ -484,6 +491,9 @@ namespace WildCat.Grains
 
         public async Task<string> Activate(string code)
         {
+            // A used reset code is stored as "", so an empty code must never match.
+            if (string.IsNullOrWhiteSpace(code))
+                throw new ArgumentException("The code doesn't exist");
             var email = State.Emails.FirstOrDefault(x => x.Value.ContainsKey(CODE_KEY) && x.Value[CODE_KEY] == code);
             if (string.IsNullOrEmpty(email.Key))
                 throw new ArgumentException("The code doesn't exist");
@@ -494,10 +504,13 @@ namespace WildCat.Grains
 
         public async Task<bool> ChangePasswordForEmailByCode(string code, string newPassword)
         {
+            // A used code is stored as "", so an empty code must never match.
+            if (string.IsNullOrWhiteSpace(code))
+                return false;
             var emailKVP = State.Emails.FirstOrDefault(x => x.Value.ContainsKey(CODE_KEY) && x.Value[CODE_KEY] == code);
             if (!string.IsNullOrEmpty(emailKVP.Key))
             {
-                State.Emails[emailKVP.Key][PASSWORD_KEY] = newPassword.ToSha1();
+                State.Emails[emailKVP.Key][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
                 State.Emails[emailKVP.Key][CODE_KEY] = "";
                 await WriteStateAsync();
                 return true;
@@ -510,7 +523,7 @@ namespace WildCat.Grains
         {
             if (State.UserNamePasswordPairs.ContainsKey(user))
             {
-                State.UserNamePasswordPairs[user][PASSWORD_KEY] = newPassword.ToSha1();
+                State.UserNamePasswordPairs[user][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
                 await WriteStateAsync();
                 return true;
             }

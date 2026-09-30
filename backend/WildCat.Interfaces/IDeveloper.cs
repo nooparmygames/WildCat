@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Concurrency;
 
 namespace WildCat.Interfaces
 {
@@ -16,11 +17,21 @@ namespace WildCat.Interfaces
         Task RemoveGame(Guid game);
         Task<bool> IsGameValid(Guid gameKey);
         Task<IEnumerable<GameInfo>> GetGames();
-        Task<bool> IsPasswordCorrect(string passwordHash);
+        /// <summary>
+        /// Checks a plain password against the stored hash (see <see cref="PasswordHasher"/>).
+        /// </summary>
+        Task<bool> IsPasswordCorrect(string password);
         Task<Guid> InitializeSession(Guid gameKey);
         Task UpdateDeveloperData(DeveloperState data);
         Task ChangePassword(string newPassword);
         Task<Guid> GenerateSecret();
+
+        /// <summary>
+        /// True when <paramref name="secret"/> is this developer's current secret. The comparison
+        /// runs in constant time; an uncreated developer has no valid secret.
+        /// </summary>
+        [ReadOnly]
+        Task<bool> IsSecretValid(Guid secret);
     }
 
     [Serializable]

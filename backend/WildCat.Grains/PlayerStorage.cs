@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
 using WildCat.Interfaces;
-using Newtonsoft.Json;
-using Orleans.Serialization;
 
 namespace WildCat.Grains
 {
@@ -12,10 +10,6 @@ namespace WildCat.Grains
     {
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            // PlayerInventory round-trips its state through JsonConvert and relies on these
-            // process-wide settings to handle grain references. Replace both in step 4.
-            var jsonSettings = OrleansJsonSerializer.GetDefaultSerializerSettings(this.GrainFactory);
-            JsonConvert.DefaultSettings = () => jsonSettings;
             var gameKey = this.GetPrimaryKeyString().Split('_')[0];
             if (string.IsNullOrEmpty(State.GameKey))
             {

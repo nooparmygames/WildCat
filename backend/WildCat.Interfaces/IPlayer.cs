@@ -27,6 +27,12 @@ namespace WildCat.Interfaces
         Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPasswordPairs();
         Task<LoginResult> LoginWithEmail(string email, string password, Guid sessionKey, Guid sentLoginTimeTicket);
         Task<Dictionary<string, Dictionary<string, string>>> GetPlayerEmailAccounts();
+
+        /// <summary>
+        /// Tells the player that the socket of one of its logins closed. The call is ignored unless
+        /// <paramref name="sentLoginTimeTicket"/> is the ticket passed to the current login, so a
+        /// stale connection cannot log out a newer one.
+        /// </summary>
         Task Disconnected(Guid sentLoginTimeTicket);
         Task<AdditionResult> AddPlayerUserAndPassword(string user, string password);
         Task<AdditionResult> CreateAccountWithUserAndPassword(string user, string password);
@@ -119,6 +125,12 @@ namespace WildCat.Interfaces
         [Id(12)] public Guid sessionToken { get; set; }
         [Id(13)] public OnlineStatus OnlineStatus { get; set; }
         [Id(14)] public DateTime LastHeartBeat { get; set; }
+
+        /// <summary>
+        /// The gateway's ticket for the current login. <see cref="IPlayer.Disconnected"/> ignores
+        /// a disconnect that carries any other ticket.
+        /// </summary>
+        [Id(15)] public Guid LoginTicket { get; set; }
 
         public PlayerState()
         {

@@ -143,6 +143,32 @@ namespace WildCat.Tests
             Assert.False(validationResult.IsValid);
         }
 
+        [Fact]
+        public async Task ScriptGrantsAndSetsInventoryItems()
+        {
+            var (_, gameKey, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var player = await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, Guid.NewGuid());
+            string playerId = player.GetPrimaryKeyString();
+            var script = GrainFactory.GetGrain<IScriptEventCompiler>(ResourcesUtility.GetEventScriptKey(gameKey.ToString(), "grant"));
+            await script.Initialize("grant", new List<EventParameter> {
+                new EventParameter { Type = EventParameter.ParamType.IntParam }
+            }, "private async Task<int> grant(int coins){" +
+               "bool added = await WildCat.AddInventoryItems(WildCat.CurrentPlayer, \"\", new string[] {\"coin\", \"gem\"}, new int[] {coins, 1});" +
+               "await WildCat.SetInventoryItems(WildCat.CurrentPlayer, \"\", new string[] {\"gem\"}, new int[] {7});" +
+               "return added ? 1 : 0;}");
+
+            var result = await script.Run(GrainFactory.GetGrain<ISession>(sessionKey), playerId, 5);
+
+            Assert.Equal(1, (int)result);
+            var inventory = await GrainFactory.GetGrain<IPlayerInventory>(
+                ResourcesUtility.GetPlayerInventoryKey(gameKey.ToString(), playerId)).GetInventory();
+            Assert.Equal(2, inventory.items.Count);
+            Assert.Equal(ResourcesUtility.GetItemKey(gameKey.ToString(), "coin"), inventory.items[0].Item.GetPrimaryKeyString());
+            Assert.Equal(5, inventory.items[0].Count);
+            Assert.Equal(ResourcesUtility.GetItemKey(gameKey.ToString(), "gem"), inventory.items[1].Item.GetPrimaryKeyString());
+            Assert.Equal(7, inventory.items[1].Count);
+        }
+
         private async Task<Tuple<Guid, Guid, Guid>> CreateDeveloperAndSession(string developerName)
         {
             var developerKey = await GrainFactory.GetGrain<IDeveloperManager>("main").AddDeveloper(CreateDeveloper(developerName));

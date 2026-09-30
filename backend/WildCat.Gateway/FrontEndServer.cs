@@ -568,7 +568,7 @@ namespace WildCat.Gateway
             try
             {
                 var developerStorage = orleansClient.GetGrain<IDeveloperStorage>(request.developerKey);
-                var readValue = await developerStorage.GetString(request.key);
+                var readValue = await developerStorage.GetStringForDeveloper(request.key, request.developerSecret);
                 response.Succeed(new StringMessage {value = readValue});
             }
             catch (InvalidOperationException x)

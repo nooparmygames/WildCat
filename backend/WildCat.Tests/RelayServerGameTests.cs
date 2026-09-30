@@ -83,9 +83,8 @@ namespace WildCat.Tests
         {
             Guid t = Guid.NewGuid();
             var p1 = GrainFactory.GetGrain<IPlayer>("RG5");
-            var p2 = GrainFactory.GetGrain<IPlayer>("RG6");
+            var p2 = await CreateLoggedInPlayer(t);
             await p1.CreateAccountWithDevice("d1");
-            await p2.CreateAccountWithDevice("d2");
             var gameID = Guid.NewGuid();
             var game = GrainFactory.GetGrain<IRelayServerGame>(gameID, "gamekey", null);
             var state = await game.GetGameState();
@@ -126,9 +125,8 @@ namespace WildCat.Tests
         {
             Guid t = Guid.NewGuid();
             var p1 = GrainFactory.GetGrain<IPlayer>("RG7");
-            var p2 = GrainFactory.GetGrain<IPlayer>("RG8");
+            var p2 = await CreateLoggedInPlayer(t);
             await p1.CreateAccountWithDevice("d1");
-            await p2.CreateAccountWithDevice("d2");
             var gameID = Guid.NewGuid();
             var game = GrainFactory.GetGrain<IRelayServerGame>(gameID, "gamekey", null);
             var state = await game.GetGameState();
@@ -170,9 +168,8 @@ namespace WildCat.Tests
         {
             Guid t = Guid.NewGuid();
             var p1 = GrainFactory.GetGrain<IPlayer>("RG9");
-            var p2 = GrainFactory.GetGrain<IPlayer>("RG10");
+            var p2 = await CreateLoggedInPlayer(t);
             await p1.CreateAccountWithDevice("d1");
-            await p2.CreateAccountWithDevice("d2");
             var gameID = Guid.NewGuid();
             var game = GrainFactory.GetGrain<IRelayServerGame>(gameID, "gamekey", null);
             var state = await game.GetGameState();
@@ -208,11 +205,10 @@ namespace WildCat.Tests
         public async Task StartGameAndJoinPlayersAndDisconnectAndRejoin()
         {
             Guid t = Guid.NewGuid();
-            var sessionKey = (await CreateDeveloperAndSession("developer6667")).Item1;
+            var (developerKey, gameKey, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
             var p1 = GrainFactory.GetGrain<IPlayer>("R11");
-            var p2 = GrainFactory.GetGrain<IPlayer>("RG12");
+            var p2 = await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, t);
             await p1.CreateAccountWithDevice("d1");
-            await p2.CreateAccountWithDevice("d2");
             var gameID = Guid.NewGuid();
             var game = GrainFactory.GetGrain<IRelayServerGame>(gameID, "gamekey", null);
             var state = await game.GetGameState();
@@ -242,7 +238,9 @@ namespace WildCat.Tests
             Assert.Equal(RelayServerGameStatus.SomeJoined, state);
             p2Status = await game.GetPlayerStatus(p2);
             Assert.Equal(RelayServerPlayerGameStatus.Disconnected, p2Status);
-            await p2.LoginWithDeviceID("d2", sessionKey, t);
+            // The disconnect logged the player out and ended its session, so it comes back on a new one.
+            var newSessionKey = await GrainFactory.GetGrain<IDeveloper>(developerKey).InitializeSession(gameKey);
+            Assert.NotNull(await p2.LoginWithDeviceID(p2.GetPrimaryKeyString(), newSessionKey, Guid.NewGuid()));
             var matches = await p2.GetPendingMatches();
             Assert.True(matches.Count == 1, matches.Count.ToString());
             Assert.True(matches[0].MatchId == gameID);
@@ -253,23 +251,14 @@ namespace WildCat.Tests
             Assert.Equal(RelayServerGameStatus.AllJoined, state);
         }
 
-        private async Task<Tuple<Guid, Guid, Guid>> CreateDeveloperAndSession(string developerName)
+        /// <summary>
+        /// Creates a device account logged in with <paramref name="loginTicket"/>. Player.Disconnected
+        /// ignores any ticket but the current login's, so the disconnect tests need a real login.
+        /// </summary>
+        private async Task<IPlayer> CreateLoggedInPlayer(Guid loginTicket)
         {
-            var developerKey = await GrainFactory.GetGrain<IDeveloperManager>("main").AddDeveloper(CreateDeveloper(developerName));
-            var developer = GrainFactory.GetGrain<IDeveloper>(developerKey);
-            var gameKey = await developer.AddGame(new GameInfo { Name = "game1" });
-            var sessionKey = await developer.InitializeSession(gameKey);
-            return Tuple.Create(sessionKey, developerKey, gameKey);
-        }
-
-        private DeveloperState CreateDeveloper(string name)
-        {
-            DeveloperState data = new DeveloperState
-            {
-                FirstName = name,
-                Email = $"{name}@{name}.com"
-            };
-            return data;
+            var (_, _, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            return await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, loginTicket);
         }
     }
 }

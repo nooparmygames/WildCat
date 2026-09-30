@@ -13,16 +13,18 @@ namespace WildCat.Interfaces
         Task EndSession();
 
         /// <summary>
-        /// Marks the session as used now. A session expires after 60 idle minutes, and
-        /// InitializeSession does not start that clock, so the gateway touches a new session
-        /// right after creating it.
+        /// Checks that the session is initialized and not expired, then marks it as used now.
+        /// A session expires after 60 idle minutes by default (SessionOptions.IdleTimeout in
+        /// WildCat.Grains); the clock starts in <see cref="InitializeSession"/>. Throws
+        /// SessionNotInitializedException for an unknown or ended session and
+        /// SessionExpiredException for an expired one, which is cleared.
         /// </summary>
         Task Touch();
         Task<bool> IsExpired();
 
         /// <summary>
-        /// Touches the session, then checks that it has not expired and returns its developer,
-        /// game and user. Touching first means a session that is in use never expires.
+        /// Same checks as <see cref="Touch"/>, then returns the session's developer, game and user.
+        /// The expiry check runs before the touch, so an idle session is rejected, not revived.
         /// </summary>
         Task<SessionGameInfo> TouchAndGetInfo();
 

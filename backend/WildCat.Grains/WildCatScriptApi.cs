@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using WildCat.Interfaces;
@@ -58,7 +59,7 @@ namespace WildCat.Scripting
             await (await Task.Factory.StartNew(async () =>
             {
                 await session.Touch();
-                return grainFactory.GetGrain<IPlayer>(player).SetPlayerString(key, value);
+                await grainFactory.GetGrain<IPlayer>(player).SetPlayerString(key, value);
             }, CancellationToken.None, TaskCreationOptions.None, scheduler));
         }
 
@@ -90,8 +91,70 @@ namespace WildCat.Scripting
             {
                 var sessionInfo = await session.TouchAndGetInfo();
                 IPlayer playerGrain = grainFactory.GetGrain<IPlayer>(player);
-                return grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard)).AddPlayerScore(playerGrain, score);
+                await grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard)).AddPlayerScore(playerGrain, score);
             },CancellationToken.None,TaskCreationOptions.None,scheduler));
+        }
+
+        /// <summary>
+        /// Grants items to a player's inventory in the current game. Game clients cannot grant
+        /// items themselves, so rewards, purchases and drops go through a script event that calls
+        /// this. Items are named as in the game's item catalog.
+        /// </summary>
+        /// <param name="player">Account id of the player.</param>
+        /// <param name="inventory">Inventory name; empty or null for the main inventory.</param>
+        /// <param name="items">Item names.</param>
+        /// <param name="counts">How many of each item to add, one positive count per item.</param>
+        /// <returns>False when the inventory has no room; nothing is added then.</returns>
+        public async Task<bool> AddInventoryItems(string player, string inventory, string[] items, int[] counts)
+        {
+            ValidateInventoryChange(player, items, counts, allowZero: false);
+            return await (await Task.Factory.StartNew(async () =>
+            {
+                var sessionInfo = await session.TouchAndGetInfo();
+                var (inventoryGrain, itemGrains) = GetInventoryAndItems(sessionInfo, player, inventory, items);
+                return await inventoryGrain.AddItem(itemGrains, counts);
+            }, CancellationToken.None, TaskCreationOptions.None, scheduler));
+        }
+
+        /// <summary>
+        /// Sets the counts of items in a player's inventory in the current game, adding items that
+        /// are not there yet. Same parameters as <see cref="AddInventoryItems"/>, except that a
+        /// count may be zero.
+        /// </summary>
+        public async Task SetInventoryItems(string player, string inventory, string[] items, int[] counts)
+        {
+            ValidateInventoryChange(player, items, counts, allowZero: true);
+            await (await Task.Factory.StartNew(async () =>
+            {
+                var sessionInfo = await session.TouchAndGetInfo();
+                var (inventoryGrain, itemGrains) = GetInventoryAndItems(sessionInfo, player, inventory, items);
+                await inventoryGrain.SetItem(itemGrains, counts);
+            }, CancellationToken.None, TaskCreationOptions.None, scheduler));
+        }
+
+        private static void ValidateInventoryChange(string player, string[] items, int[] counts, bool allowZero)
+        {
+            if (string.IsNullOrEmpty(player))
+                throw new ArgumentException("A player id is required.", nameof(player));
+            if (items == null || counts == null || items.Length != counts.Length)
+                throw new ArgumentException("Every item needs exactly one count.", nameof(counts));
+            for (int i = 0; i < items.Length; ++i)
+            {
+                if (string.IsNullOrEmpty(items[i]))
+                    throw new ArgumentException("Item names cannot be empty.", nameof(items));
+                if (counts[i] < 0 || (counts[i] == 0 && !allowZero))
+                    throw new ArgumentException($"Invalid count {counts[i]} for item {items[i]}.", nameof(counts));
+            }
+        }
+
+        private (IPlayerInventory, IInventoryItem[]) GetInventoryAndItems(SessionGameInfo sessionInfo, string player, string inventory, string[] items)
+        {
+            string gameKey = sessionInfo.GameKey.ToString();
+            var inventoryGrain = grainFactory.GetGrain<IPlayerInventory>(ResourcesUtility.GetPlayerInventoryKey(gameKey, player, inventory));
+            var itemGrains = items
+                .Select(name => grainFactory.GetGrain<IInventoryItem>(ResourcesUtility.GetItemKey(gameKey, name), ResourcesUtility.GetGameItemsClassName()))
+                .ToArray();
+            return (inventoryGrain, itemGrains);
         }
 
         /// <summary>

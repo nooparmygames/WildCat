@@ -167,6 +167,69 @@ namespace WildCat.Tests
 
 
         }
+
+        private IInventoryItem GetItem(string game, string name)
+        {
+            return GrainFactory.GetGrain<IInventoryItem>(ResourcesUtility.GetItemKey(game, name), ResourcesUtility.GetGameItemsClassName());
+        }
+
+        [Fact]
+        public async Task InventorySurvivesDeactivation()
+        {
+            string game = Guid.NewGuid().ToString();
+            string playerId = TestSetup.UniqueId("player");
+            var coin = GetItem(game, "coin");
+            var gem = GetItem(game, "gem");
+            var inventory = GrainFactory.GetGrain<IPlayerInventory>(ResourcesUtility.GetPlayerInventoryKey(game, playerId));
+            var bag = GrainFactory.GetGrain<IPlayerInventory>(ResourcesUtility.GetPlayerInventoryKey(game, playerId, "bag"));
+            Assert.True(await inventory.AddItem(new[] { coin, gem }, new[] { 10, 2 }));
+            await bag.SetSize(5);
+            await bag.AddItem(new[] { gem }, new[] { 1 });
+            var bagBefore = await bag.GetInventory();
+
+            await cluster.Deactivate(inventory);
+            await cluster.Deactivate(bag);
+
+            var after = await inventory.GetInventory();
+            Assert.Equal(2, after.items.Count);
+            Assert.Equal(coin.GetPrimaryKeyString(), after.items[0].Item.GetPrimaryKeyString());
+            Assert.Equal(10, after.items[0].Count);
+            Assert.Equal(gem.GetPrimaryKeyString(), after.items[1].Item.GetPrimaryKeyString());
+            Assert.Equal(2, after.items[1].Count);
+
+            var bagAfter = await bag.GetInventory();
+            Assert.Single(bagAfter.items);
+            Assert.Equal(5, bagAfter.size);
+            Assert.Equal(PlayerInventoryState.UnlockStatus.CountingTimeForUnlock, bagAfter.status);
+            Assert.Equal(bagBefore.endTime, bagAfter.endTime, TimeSpan.FromMilliseconds(1));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => bag.Unlock());
+
+            // The reloaded state keeps working.
+            Assert.True(await inventory.RemoveItem(new[] { coin }, new[] { 4 }));
+            Assert.Equal(6, (await inventory.GetInventory()).items[0].Count);
+        }
+
+        [Fact]
+        public async Task RemoveItemRejectsNegativeAndExcessCountsAndChangesNothing()
+        {
+            string game = Guid.NewGuid().ToString();
+            var coin = GetItem(game, "coin");
+            var gem = GetItem(game, "gem");
+            var inventory = GrainFactory.GetGrain<IPlayerInventory>(
+                ResourcesUtility.GetPlayerInventoryKey(game, TestSetup.UniqueId("player")));
+            await inventory.AddItem(new[] { coin }, new[] { 10 });
+
+            // Message 115 is allowed from clients, so a negative count must not grant items.
+            Assert.False(await inventory.RemoveItem(new[] { coin }, new[] { -5 }));
+            Assert.False(await inventory.RemoveItem(new[] { coin }, new[] { 11 }));
+            // The coin removal is undone when the second item is missing.
+            Assert.False(await inventory.RemoveItem(new[] { coin, gem }, new[] { 1, 1 }));
+            await Assert.ThrowsAsync<ArgumentException>(() => inventory.RemoveItem(new[] { coin }, new[] { 1, 1 }));
+
+            var state = await inventory.GetInventory();
+            Assert.Single(state.items);
+            Assert.Equal(10, state.items[0].Count);
+        }
     }
 }
 #endif

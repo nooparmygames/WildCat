@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Security.Cryptography;
 
 namespace WildCat.Grains
 {
@@ -155,8 +156,6 @@ namespace WildCat.Grains
   </body> 
 </html> ";
 
-        private static Random rnd;
-
         public static void SendEmail(string senderEmail, string receiver, string subject, string bodyParam)
         {
             // SMTP settings were removed with the secrets and come back from configuration later.
@@ -186,13 +185,14 @@ namespace WildCat.Grains
 #endif
         }
 
+        /// <summary>
+        /// Returns a random code of upper-case letters and digits for email activation and password
+        /// reset. It uses the cryptographic generator so codes cannot be predicted from earlier ones.
+        /// </summary>
         public static string RandomString(int length)
         {
-            if (rnd == null)
-                rnd = new Random();
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            return new string(Enumerable.Repeat(chars, length)
-              .Select(s => s[rnd.Next(s.Length)]).ToArray());
+            return RandomNumberGenerator.GetString(chars, length);
         }
     }
 }
