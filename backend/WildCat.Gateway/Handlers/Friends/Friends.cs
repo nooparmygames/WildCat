@@ -28,7 +28,7 @@ namespace WildCat.Gateway
         {
             if (string.IsNullOrWhiteSpace(accountId))
                 return null;
-            var player = grains.GetGrain<IPlayer>(accountId);
+            var player = grains.GetGrain<IPlayer>(InputLimits.PlayerId(accountId));
             try
             {
                 await player.GetState();
@@ -44,7 +44,8 @@ namespace WildCat.Gateway
         /// <summary>
         /// The player an InviteFriend request names: by account id, player name, email or user
         /// name. Null when nobody matches. Player names are looked up in the name map, which
-        /// nothing fills yet (docs/legacy-backend-notes.md bug 20), so they never match.
+        /// nothing fills yet (docs/legacy-backend-notes.md bug 20), so they never match. A value
+        /// longer than an id, name or address can be is error code 1.
         /// </summary>
         public static async Task<IPlayer> FindAsync(IGrainFactory grains, InvitationType type, string value)
         {
@@ -56,13 +57,14 @@ namespace WildCat.Gateway
                 case InvitationType.AccountId:
                     return await FindByAccountIdAsync(grains, value);
                 case InvitationType.playerName:
-                    accountId = await grains.GetGrain<INameToAccountIdMap>(value).GetId();
+                    accountId = await grains.GetGrain<INameToAccountIdMap>(InputLimits.Name(value, "player name")).GetId();
                     break;
                 case InvitationType.Email:
                     accountId = await grains.GetGrain<IEmailToAccountIdMap>(SignIn.NormalizeEmail(value)).GetAccountID();
                     break;
                 case InvitationType.UserId:
-                    accountId = await grains.GetGrain<IUserIdToAccountIdMap>(value).GetAccountID();
+                    accountId = await grains.GetGrain<IUserIdToAccountIdMap>(InputLimits.Check(value, InputLimits.MaxIdLength, "user name"))
+                        .GetAccountID();
                     break;
                 default:
                     return null;

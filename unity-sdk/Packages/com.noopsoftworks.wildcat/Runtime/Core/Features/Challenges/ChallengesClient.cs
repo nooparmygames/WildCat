@@ -40,7 +40,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(playerId, "playerId");
+                RequirePlayerId(playerId, "playerId");
                 return Request<EmptyMessage>(WildCatMsgType.StartChallengeRequest,
                     new ChallengeMessage { Player = playerId, TimeOut = timeoutSeconds, data = data ?? new byte[0] },
                     WildCatMsgType.StartChallengeResponse, cancellationToken);
@@ -52,7 +52,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(playerId, "playerId");
+                RequirePlayerId(playerId, "playerId");
                 return Request<EmptyMessage>(WildCatMsgType.AcceptChallengeRequest,
                     new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
                     WildCatMsgType.AcceptChallengeResponse, cancellationToken);
@@ -64,7 +64,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(playerId, "playerId");
+                RequirePlayerId(playerId, "playerId");
                 return Request<EmptyMessage>(WildCatMsgType.DenyChallengeRequest,
                     new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
                     WildCatMsgType.DenyChallengeResponse, cancellationToken);

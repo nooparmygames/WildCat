@@ -13,7 +13,8 @@ namespace WildCat.Gateway
     /// define plays by the default rules, two players) and waits for a match. On a match it joins
     /// the player to it (RelayServerGame.PlayerStarted, which pushes GamePlayerAddedEvent to the
     /// players already in the match) and answers with the match id and its players. Error code 1,
-    /// "Match not found", when the wait runs out, and for an empty mode name.
+    /// "Match not found", when the wait runs out, and for an empty mode name or one longer than
+    /// <see cref="InputLimits.MaxNameLength"/>.
     /// </summary>
     /// <remarks>
     /// The request waits up to its wait time in one of the connection's request slots; the
@@ -38,6 +39,7 @@ namespace WildCat.Gateway
             // Orleans refuses an empty key extension, so this used to be an internal error.
             if (string.IsNullOrWhiteSpace(request.matchType))
                 throw new RequestFailedException(GatewayErrors.Refused, NoGameMode);
+            InputLimits.Name(request.matchType, "game mode name");
 
             var matchMaker = context.Grains.GetGrain<ICustomMatchMaker>(context.Session.GameKey, request.matchType, null);
             FoundRelayMatchResult found = await matchMaker.FindMatch(context.Player, request.skill,

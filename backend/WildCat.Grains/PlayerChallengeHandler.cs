@@ -88,7 +88,8 @@ namespace WildCat.Grains
                 otherPlayer = accepter,
                 data = data,
                 Type = ChallengeEventData.EventType.Started,
-                gameID = gameId
+                gameID = gameId,
+                Timeout = req.Timeout
             };
 
             ChallengeEventData accepterStreamEventData = new ChallengeEventData
@@ -97,7 +98,8 @@ namespace WildCat.Grains
                 otherPlayer = player,
                 data = data,
                 Type = ChallengeEventData.EventType.Started,
-                gameID = gameId
+                gameID = gameId,
+                Timeout = req.Timeout
             };
 
             challengeEvents.OnNextAsync(myStreamEventData).Ignore();
@@ -141,8 +143,10 @@ namespace WildCat.Grains
         {
             // Only a pending challenge to the denying player is denied and reported; before, any
             // player could push a ChallengeDeniedEvent to any other player of the game.
-            if (!State.RequestsSent.Any(x => IsPending(x, denyer)))
+            int index = State.RequestsSent.FindLastIndex(x => IsPending(x, denyer));
+            if (index < 0)
                 return;
+            uint timeout = State.RequestsSent[index].Timeout;
             State.RequestsSent.RemoveAll(x => IsFrom(x, denyer));
             await state.WriteStateAsync();
             ChallengeEventData myStreamEventData = new ChallengeEventData
@@ -150,14 +154,15 @@ namespace WildCat.Grains
                 TitleKey = this.gameKey,
                 otherPlayer = denyer,
                 data = data,
-                Type = ChallengeEventData.EventType.Deny
+                Type = ChallengeEventData.EventType.Deny,
+                Timeout = timeout
             };
             challengeEvents.OnNextAsync(myStreamEventData).Ignore();
             GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, denyer.GetPrimaryKeyString(), null).RemovedFromReceivedList(player).Ignore();
         }
 
         //called by other player's PlayerChallengeHandler
-        public async Task<ChallengeAcceptionStatus> ChallengeRequested(IPlayer challenger, byte[] data, bool acceptIfOffline)
+        public async Task<ChallengeAcceptionStatus> ChallengeRequested(IPlayer challenger, byte[] data, uint timeout, bool acceptIfOffline)
         {
             if (!acceptIfOffline)
             {
@@ -181,13 +186,16 @@ namespace WildCat.Grains
                     TitleKey = this.gameKey,
                     otherPlayer = challenger,
                     data = data,
-                    Type = ChallengeEventData.EventType.Request
+                    Type = ChallengeEventData.EventType.Request,
+                    Timeout = timeout
                 };
                 // A new challenge from the same player replaces the pending one.
                 State.RequestsReceived.RemoveAll(x => IsPending(x, challenger));
                 State.RequestsReceived.Add(new ChallengeRequestState
                 {
                     Player = challenger,
+                    RequestTime = DateTime.UtcNow,
+                    Timeout = timeout,
                     data = data
                 });
                 await state.WriteStateAsync();
@@ -201,7 +209,7 @@ namespace WildCat.Grains
         public async Task<ChallengeAcceptionStatus> SendChallengeRequest(IPlayer challengee, byte[] data, uint timeout, bool isAcceptedOffline)
         {
 
-            var requestResult = await (GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, challengee.GetPrimaryKeyString(), null)).ChallengeRequested(player, data, isAcceptedOffline);
+            var requestResult = await (GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, challengee.GetPrimaryKeyString(), null)).ChallengeRequested(player, data, timeout, isAcceptedOffline);
             if (requestResult == ChallengeAcceptionStatus.Received)
             {
                 State.RequestsSent.RemoveAll(x => IsPending(x, challengee));

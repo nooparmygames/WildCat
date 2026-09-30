@@ -29,11 +29,25 @@ namespace WildCat.Gateway
 
         /// <summary>
         /// Email addresses are stored and mapped in lower case (Player.AddPlayerEmail), so lookups
-        /// have to lower the address too.
+        /// have to lower the address too. An address longer than
+        /// <see cref="InputLimits.MaxEmailLength"/> is error code 1.
         /// </summary>
         public static string NormalizeEmail(string email)
         {
-            return (email ?? "").Trim().ToLowerInvariant();
+            return InputLimits.Check((email ?? "").Trim(), InputLimits.MaxEmailLength, "email address").ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// Checks the length of a login id: a device id or user name up to
+        /// <see cref="InputLimits.MaxIdLength"/> characters (error code 1 otherwise). Email
+        /// addresses are checked by <see cref="NormalizeEmail"/>.
+        /// </summary>
+        public static void CheckLoginId(WildCat.Protocol.LoginType type, string id)
+        {
+            if (type == WildCat.Protocol.LoginType.Device)
+                InputLimits.Check(id, InputLimits.MaxIdLength, "device id");
+            else if (type == WildCat.Protocol.LoginType.UserWithPassword)
+                InputLimits.Check(id, InputLimits.MaxIdLength, "user name");
         }
 
         /// <summary>

@@ -36,7 +36,7 @@ namespace WildCat
         public async Task<MatchInfo> FindMatchAsync(string gameMode, uint skill = 0, TimeSpan? maxWait = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(gameMode, "gameMode");
+            RequireName(gameMode, "gameMode");
             TimeSpan wait = maxWait ?? DefaultMaxWait;
             if (wait <= TimeSpan.Zero)
                 throw new ArgumentOutOfRangeException(nameof(maxWait), "The matchmaking time must be positive.");

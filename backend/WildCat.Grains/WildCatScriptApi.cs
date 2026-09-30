@@ -45,6 +45,12 @@ namespace WildCat.Scripting
             ReferenceLoopHandling = ReferenceLoopHandling.Error
         };
 
+        private static readonly object ServerFaultMark = new object();
+
+        /// <summary>Exceptions thrown by this run's grain calls; see <see cref="IsServerFault"/>.</summary>
+        private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object> serverFaults =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object>();
+
         private readonly IGrainFactory grainFactory;
         private readonly ISession session;
         private readonly Guid gameKey;
@@ -376,7 +382,7 @@ namespace WildCat.Scripting
             var work = Task.Factory.StartNew(async () =>
             {
                 var info = await GetSessionInfo();
-                return await call(info);
+                return await ServerCall(() => call(info));
             }, budget.Token, TaskCreationOptions.None, scheduler).Unwrap();
             try
             {
@@ -388,11 +394,39 @@ namespace WildCat.Scripting
             }
         }
 
+        /// <summary>
+        /// Runs grain calls and remembers any exception they throw, so a run that ends with it is
+        /// not taken for a failure of the script (<see cref="IsServerFault"/>): an
+        /// InvalidOperationException from a grain or from Orleans carries server details, not a
+        /// message for the client.
+        /// </summary>
+        private async Task<T> ServerCall<T>(Func<Task<T>> call)
+        {
+            try
+            {
+                return await call();
+            }
+            catch (Exception ex)
+            {
+                serverFaults.AddOrUpdate(ex, ServerFaultMark);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// True when <paramref name="ex"/> is an exception a grain call of this API threw, passed
+        /// on by the script as it was (not caught and replaced by an exception of its own).
+        /// </summary>
+        internal bool IsServerFault(Exception ex)
+        {
+            return ex != null && serverFaults.TryGetValue(ex, out _);
+        }
+
         private async Task<SessionGameInfo> GetSessionInfo()
         {
             if (session == null)
                 throw new InvalidOperationException("This script run has no session, so it cannot use the WildCat API.");
-            var info = await session.TouchAndGetInfo();
+            var info = await ServerCall(() => session.TouchAndGetInfo());
             if (info.GameKey != gameKey)
                 throw new UnauthorizedAccessException("The session belongs to a different game than this script event.");
             if (!string.Equals(info.UserID, CurrentPlayer, StringComparison.Ordinal))

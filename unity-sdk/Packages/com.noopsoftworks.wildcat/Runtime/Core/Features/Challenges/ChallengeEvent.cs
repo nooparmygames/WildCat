@@ -20,8 +20,8 @@ namespace WildCat
         public string PlayerName { get; }
 
         /// <summary>
-        /// For a received challenge: how long it stays open, in seconds. The server does not pass
-        /// the challenger's value on yet, so this is always 15 for now.
+        /// How long the challenge stays open, in seconds, as the challenger asked (for an accepted
+        /// or denied challenge, what it was sent with). Servers before this fix always sent 15.
         /// </summary>
         public uint TimeoutSeconds { get; }
 

@@ -237,11 +237,13 @@ namespace WildCat.Tests
         [Fact]
         public void StringMapsOfAnySizeRoundTrip()
         {
-            // The count used to be written as one byte, so a map of 256 entries or more broke.
-            var request = new AuthenticationRequest { Id = "d" };
+            // The count used to be written as one byte, so a map of 256 entries or more broke. (The
+            // login messages' maps, where the bug was found, now take at most
+            // WireLimits.MaxLoginDataEntries; a friend's public data map has no limit.)
+            var entry = new FriendlistEntry { userId = "d" };
             for (int i = 0; i < 300; ++i)
-                request.data[$"k{i}"] = $"v{i}";
-            var copy = WireCodec.DecodePayload<AuthenticationRequest>(WireCodec.EncodePayload(request));
+                entry.data[$"k{i}"] = $"v{i}";
+            var copy = WireCodec.DecodePayload<FriendlistEntry>(WireCodec.EncodePayload(entry));
             Assert.Equal(300, copy.data.Count);
             Assert.Equal("v299", copy.data["k299"]);
         }

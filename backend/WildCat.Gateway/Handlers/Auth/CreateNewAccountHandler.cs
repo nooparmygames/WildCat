@@ -23,6 +23,7 @@ namespace WildCat.Gateway
 
         protected override async Task<StringMessage> HandleAsync(MessageContext context, CreateAccountRequest request)
         {
+            SignIn.CheckLoginId(request.LoginType, request.Id);
             await SignIn.TouchPayloadTicketAsync(context.Grains, request.ticket);
             var creator = context.Grains.GetGrain<IPlayerCreator>(0);
             AccountCreationResult result;

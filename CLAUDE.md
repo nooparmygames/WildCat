@@ -104,9 +104,14 @@ WILDCAT_TEST_POSTGRES="Host=localhost;Port=5432;Database=wildcat;Username=wildca
     `SmtpEmailSender` sends; otherwise `LoggingEmailSender` logs the code at Warning. Texts are
     in `WildCat.Grains/Resources/EmailTexts.resx`.
   - `Gateway` (`GameGatewayOptions`: `MaxMessageBytes`, `AllowedOrigins`, `AuthAttemptBurst`,
-    `AuthAttemptsPerMinute`, `OutboundQueueCapacity`, `MaxConcurrentRequests`) and
-    `ForwardedHeaders` (`KnownProxies` as addresses, `KnownNetworks` as CIDR ranges; loopback
-    only by default).
+    `AuthAttemptsPerMinute` (per connection), `AuthAttemptsPerAddressBurst` (30, 0 turns it off)
+    and `AuthAttemptsPerAddressPerMinute` (30) (per client address over all its sockets; the
+    forwarded address, IPv6 per /64, loopback not limited), `OutboundQueueCapacity` (1024 frames)
+    and `OutboundQueueBytes` (8 MiB) for a connection's outbound queue, `RelayQueueBytes` (4 MiB)
+    for its relay queue, `MaxConcurrentRequests`) and `ForwardedHeaders` (`KnownProxies` as
+    addresses, `KnownNetworks` as CIDR ranges; loopback only by default). String length limits
+    for what clients send are fixed in `WildCat.Protocol/Codec/WireLimits.cs` (with the collection
+    count limits the decoder enforces) and checked by the gateway's `InputLimits`.
 
 ```bash
 dotnet run --project backend/WildCat.Host

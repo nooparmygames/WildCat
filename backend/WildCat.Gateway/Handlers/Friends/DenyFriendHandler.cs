@@ -19,7 +19,7 @@ namespace WildCat.Gateway
         {
             if (string.IsNullOrWhiteSpace(request.stringValue))
                 throw new RequestFailedException(GatewayErrors.Refused, FriendListException.NoInvitation);
-            var inviter = context.Grains.GetGrain<IPlayer>(request.stringValue);
+            var inviter = context.Grains.GetGrain<IPlayer>(InputLimits.PlayerId(request.stringValue));
             await Friends.RefusalsAsErrors(Friends.ListOf(context).DenyInvitation(inviter, request.byteArrayValue));
             return new EmptyMessage();
         }

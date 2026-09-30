@@ -44,12 +44,48 @@ namespace WildCat.Gateway
         public double AuthAttemptsPerMinute { get; set; } = 6;
 
         /// <summary>
+        /// Sign-in attempts one client address may make back to back, over all its connections
+        /// to this gateway node (the same messages as <see cref="AuthAttemptBurst"/>). A new socket
+        /// gets a full per-connection allowance, so without this a client could open sockets to
+        /// keep guessing. Defaults to 30; 0 turns the per-address limit off. The address is the one
+        /// the forwarded headers middleware reports, so list a reverse proxy in
+        /// ForwardedHeaders:KnownProxies or KnownNetworks or all its clients share one allowance.
+        /// IPv6 addresses count per /64; loopback addresses are not limited (see
+        /// <see cref="AddressAttemptLimiter"/>). Raise it when many players share an address.
+        /// </summary>
+        public int AuthAttemptsPerAddressBurst { get; set; } = 30;
+
+        /// <summary>
+        /// How fast an address earns sign-in attempts back after using up
+        /// <see cref="AuthAttemptsPerAddressBurst"/>. Defaults to 30 a minute.
+        /// </summary>
+        public double AuthAttemptsPerAddressPerMinute { get; set; } = 30;
+
+        /// <summary>
         /// Messages one connection may have waiting to be written to its socket: responses, pushed
         /// events and relayed game messages. Nothing that produces a message waits for the socket;
-        /// when a client reads so slowly that the queue fills up, the gateway logs a warning and
-        /// closes the connection with PolicyViolation. Defaults to 1024.
+        /// when a client reads so slowly that the queue fills up (in messages or in
+        /// <see cref="OutboundQueueBytes"/>), the gateway logs a warning and closes the connection
+        /// with PolicyViolation. Defaults to 1024.
         /// </summary>
         public int OutboundQueueCapacity { get; set; } = 1024;
+
+        /// <summary>
+        /// Bytes one connection may have waiting to be written to its socket, counting the message
+        /// being written; past it the connection is closed like one whose queue is full. A single
+        /// message larger than this still goes out when nothing else is waiting. Defaults to 8 MiB,
+        /// so a stalled client holds at most that much (1024 messages of up to 1 MiB would be a
+        /// gigabyte).
+        /// </summary>
+        public int OutboundQueueBytes { get; set; } = 8 * 1024 * 1024;
+
+        /// <summary>
+        /// Bytes of game messages one connection may have waiting to be relayed to the other
+        /// players of its match (at most 256 messages either way). When the relay falls behind,
+        /// the gateway stops reading that client's socket until there is room. A single message
+        /// larger than this still goes through when nothing else is waiting. Defaults to 4 MiB.
+        /// </summary>
+        public int RelayQueueBytes { get; set; } = 4 * 1024 * 1024;
 
         /// <summary>
         /// Requests of one connection the gateway works on at the same time; the next one is read

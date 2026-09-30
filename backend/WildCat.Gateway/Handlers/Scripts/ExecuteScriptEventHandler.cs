@@ -1,5 +1,4 @@
 using System;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using WildCat.Interfaces;
 using WildCat.Protocol;
@@ -13,27 +12,28 @@ namespace WildCat.Gateway
     /// that returns nothing or null.
     /// <para>
     /// Error code 1 with a text the client can show when the run fails for a reason of the script
-    /// or the request: the event does not exist; the arguments do not fit (wrong count, or a value
-    /// of the wrong type); the script ran past its time limit or call depth; the game has too many
-    /// runs still going past their limit; the stored script is no longer valid or returned a type
-    /// events may not return; the script API refused a call; or the script threw Exception,
-    /// InvalidOperationException or ArgumentException, the only exceptions a script can create,
-    /// whose messages the developer wrote for the game client. Anything else, such as a
-    /// NullReferenceException in the script or a failure of the cluster, is an internal error
-    /// (code -1). The old code sent every exception message with code -1.
+    /// or the request: the event does not exist; its name is longer than
+    /// <see cref="InputLimits.MaxNameLength"/>; the script ran past its time limit or call depth;
+    /// the game has too many runs still going past their limit; or the runner reports a
+    /// <see cref="ScriptFailedException"/> (the arguments do not fit, the stored script is no
+    /// longer valid or returned a type events may not return, the script API refused a call, or the
+    /// script threw one of the exceptions it can create, whose messages the developer wrote for the
+    /// game client). Anything else, such as a NullReferenceException in the script or a failure of
+    /// a grain the script called, is an internal error (code -1). The old code sent every
+    /// exception message with code -1, and until the runner wrapped script failures this handler
+    /// passed on the message of any InvalidOperationException, grains' and Orleans' included.
     /// </para>
     /// </summary>
     internal sealed class ExecuteScriptEventHandler
         : RequestHandler<ScriptEventExecutionRequestMessage, ScriptEventExecutionResponseMessage>
     {
-        private static readonly Regex ParameterSuffix = new Regex(@" \(Parameter '[^']*'\)$", RegexOptions.CultureInvariant);
-
         public override WildCatMsgType RequestType => WildCatMsgType.ExecuteScriptEventRequest;
         public override WildCatMsgType ResponseType => WildCatMsgType.ExecuteScriptEventResponse;
 
         protected override async Task<ScriptEventExecutionResponseMessage> HandleAsync(MessageContext context,
             ScriptEventExecutionRequestMessage request)
         {
+            InputLimits.Name(request.eventName, "script event name");
             var runner = context.Grains.GetGrain<IScriptEventRunner>(context.Session.GameKey, context.Session.UserID, null);
             object result;
             try
@@ -42,7 +42,7 @@ namespace WildCat.Gateway
             }
             catch (Exception ex) when (IsScriptFailure(ex))
             {
-                throw new RequestFailedException(GatewayErrors.Refused, TextFor(ex));
+                throw new RequestFailedException(GatewayErrors.Refused, ex.Message);
             }
 
             var response = new ScriptEventExecutionResponseMessage { hasReturnValue = result != null };
@@ -57,28 +57,15 @@ namespace WildCat.Gateway
         /// <summary>
         /// Whether <paramref name="ex"/> is a failure of the script run whose message is written
         /// for the developer and the client (by the sandbox, the script API or the script itself)
-        /// rather than a server fault.
+        /// rather than a server fault. Only these types: the runner decides what is the script's.
         /// </summary>
         private static bool IsScriptFailure(Exception ex)
         {
-            return ex is ScriptEventNotFoundException
+            return ex is ScriptFailedException
+                || ex is ScriptEventNotFoundException
                 || ex is ScriptTimeoutException
                 || ex is ScriptThrottledException
-                || ex is ScriptRecursionLimitException
-                || ex is InvalidOperationException
-                || ex is ArgumentException
-                || ex is UnauthorizedAccessException
-                || ex is InvalidCastException
-                || ex.GetType() == typeof(Exception);
-        }
-
-        /// <summary>
-        /// The exception's message, without the " (Parameter 'name')" .NET appends to an
-        /// ArgumentException's (matched as text, since it may have crossed a grain call).
-        /// </summary>
-        private static string TextFor(Exception ex)
-        {
-            return ex is ArgumentException ? ParameterSuffix.Replace(ex.Message, "") : ex.Message;
+                || ex is ScriptRecursionLimitException;
         }
 
         /// <summary>

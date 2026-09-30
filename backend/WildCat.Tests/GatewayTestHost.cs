@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans;
@@ -42,9 +43,13 @@ namespace WildCat.Tests
         /// <param name="configure">Changes to the gateway options.</param>
         /// <param name="timeProvider">A clock to use in place of the system clock (sign-in limit).</param>
         /// <param name="configureServices">More services, for example extra <see cref="IMessageHandler"/> instances.</param>
+        /// <param name="forwardedHeaders">
+        /// Runs the forwarded headers middleware like the host does, so a client can pose as another
+        /// address with X-Forwarded-For (loopback is a trusted proxy by default).
+        /// </param>
         public static async Task<GatewayTestHost> StartAsync(IClusterClient client,
             Action<GameGatewayOptions> configure = null, TimeProvider timeProvider = null,
-            Action<IServiceCollection> configureServices = null)
+            Action<IServiceCollection> configureServices = null, bool forwardedHeaders = false)
         {
             var logs = new TestLogSink();
             var builder = WebApplication.CreateSlimBuilder();
@@ -61,6 +66,8 @@ namespace WildCat.Tests
             configureServices?.Invoke(builder.Services);
 
             var app = builder.Build();
+            if (forwardedHeaders)
+                app.UseForwardedHeaders(new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor });
             app.UseWebSockets();
             app.MapGameGateway("/ws");
             await app.StartAsync().WaitAsync(TestSetup.Timeout);
@@ -69,9 +76,11 @@ namespace WildCat.Tests
             return new GatewayTestHost(app, new Uri($"ws://{address.Host}:{address.Port}/ws"), logs);
         }
 
-        public Task<GatewayTestClient> ConnectAsync(string origin = null)
+        /// <param name="origin">An Origin header to send.</param>
+        /// <param name="forwardedFor">An X-Forwarded-For header to send (see the forwardedHeaders option of StartAsync).</param>
+        public Task<GatewayTestClient> ConnectAsync(string origin = null, string forwardedFor = null)
         {
-            return GatewayTestClient.ConnectAsync(WebSocketUri, origin);
+            return GatewayTestClient.ConnectAsync(WebSocketUri, origin, forwardedFor);
         }
 
         /// <summary>A bare socket that reads nothing unless the test does, for transport tests.</summary>
@@ -114,11 +123,13 @@ namespace WildCat.Tests
             receiveLoop = Task.Run(ReceiveLoop);
         }
 
-        public static async Task<GatewayTestClient> ConnectAsync(Uri uri, string origin = null)
+        public static async Task<GatewayTestClient> ConnectAsync(Uri uri, string origin = null, string forwardedFor = null)
         {
             var socket = new ClientWebSocket();
             if (origin != null)
                 socket.Options.SetRequestHeader("Origin", origin);
+            if (forwardedFor != null)
+                socket.Options.SetRequestHeader("X-Forwarded-For", forwardedFor);
             using var timeout = new CancellationTokenSource(TestSetup.Timeout);
             await socket.ConnectAsync(uri, timeout.Token);
             return new GatewayTestClient(socket);

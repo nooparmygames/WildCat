@@ -22,6 +22,7 @@ namespace WildCat
         /// <summary>The items in an inventory; "" names the main inventory.</summary>
         public async Task<IReadOnlyList<InventoryItem>> GetAsync(string inventory = "", CancellationToken cancellationToken = default(CancellationToken))
         {
+            RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.GetInventoryRequest,
                 new StringMessage { value = inventory ?? "" }, WildCatMsgType.GetInventoryResponse, cancellationToken).ConfigureAwait(false);
             return Items(answer.items);
@@ -29,21 +30,25 @@ namespace WildCat
 
         /// <summary>
         /// Removes (spends) items and returns what is left. Error code 1, changing nothing, when the
-        /// inventory does not hold that many.
+        /// inventory does not hold that many. At most WireLimits.MaxInventoryItemsPerRequest items
+        /// in one call.
         /// </summary>
         public async Task<IReadOnlyList<InventoryItem>> RemoveAsync(string inventory, IEnumerable<InventoryItem> items,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (items == null)
                 throw new ArgumentNullException(nameof(items));
+            RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             List<(string, int)> changes = new List<(string, int)>();
             foreach (InventoryItem item in items)
             {
-                RequireText(item.Name, "item name");
+                RequireName(item.Name, "item name");
                 if (item.Count < 1)
                     throw new ArgumentException("Counts to remove must be positive.", nameof(items));
                 changes.Add((item.Name, item.Count));
             }
+            if (changes.Count > WireLimits.MaxInventoryItemsPerRequest)
+                throw new ArgumentException("At most " + WireLimits.MaxInventoryItemsPerRequest + " items can be removed at once.", nameof(items));
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.RemoveInventoryItemRequest,
                 new RemoveItemInventoryRequestMessage { inventoryName = inventory ?? "", items = changes.ToArray() },
                 WildCatMsgType.RemoveInventoryItemResponse, cancellationToken).ConfigureAwait(false);
@@ -53,6 +58,7 @@ namespace WildCat
         /// <summary>Unlocks a time-locked inventory (packages) and returns its items.</summary>
         public async Task<IReadOnlyList<InventoryItem>> UnlockAsync(string inventory, CancellationToken cancellationToken = default(CancellationToken))
         {
+            RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.UnlockInventoryRequest,
                 new StringMessage { value = inventory ?? "" }, WildCatMsgType.UnlockInventoryResponse, cancellationToken).ConfigureAwait(false);
             return Items(answer.items);
@@ -61,6 +67,7 @@ namespace WildCat
         /// <summary>How long until a time-locked inventory can be unlocked.</summary>
         public async Task<TimeSpan> GetUnlockTimeAsync(string inventory, CancellationToken cancellationToken = default(CancellationToken))
         {
+            RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryUnlockTimeResponseMessage answer = await Request<GetInventoryUnlockTimeResponseMessage>(
                 WildCatMsgType.GetInventoryUnlockTimeRequest, new StringMessage { value = inventory ?? "" },
                 WildCatMsgType.GetInventoryUnlockTimeResponse, cancellationToken).ConfigureAwait(false);

@@ -19,6 +19,12 @@ namespace WildCat.Tests
         /// <summary>Every email the grains sent through <see cref="IEmailSender"/>.</summary>
         public CapturingEmailSender Emails { get; } = new CapturingEmailSender();
 
+        /// <summary>
+        /// The clock of the Player grain's password lockout (keyed <see cref="Player.SignInClockKey"/>),
+        /// which only moves when a test advances it. Nothing else in the silo uses it.
+        /// </summary>
+        internal ManualTimeProvider SignInClock { get; } = new ManualTimeProvider();
+
         public async Task InitializeAsync()
         {
             var builder = new InProcessTestClusterBuilder(initialSilosCount: 1);
@@ -29,6 +35,7 @@ namespace WildCat.Tests
                 silo.AddLegacyCallChainReentrancy();
                 silo.AddIncomingGrainCallFilter<FailingPushFilter>();
                 silo.Services.AddSingleton<IEmailSender>(Emails);
+                silo.Services.AddKeyedSingleton<TimeProvider>(Player.SignInClockKey, SignInClock);
             });
             builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));
             Cluster = builder.Build();

@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WildCat.Protocol;
@@ -19,7 +20,8 @@ namespace WildCat
 
         /// <summary>
         /// Runs <paramref name="eventName"/> with <paramref name="args"/>, each an int, short, long,
-        /// bool, byte, byte[], float, double or string (anything else throws ArgumentException).
+        /// bool, byte, byte[], float, double or string (anything else throws ArgumentException), at
+        /// most WireLimits.MaxScriptArguments of them.
         /// Fails with <see cref="WildCatException"/> when the event does not exist, does not compile,
         /// throws or runs past its time limit.
         /// </summary>
@@ -31,7 +33,9 @@ namespace WildCat
         /// <summary>As <see cref="ExecuteAsync(string, object[])"/>, with a cancellation token.</summary>
         public async Task<ScriptResult> ExecuteAsync(string eventName, object[] args, CancellationToken cancellationToken)
         {
-            RequireText(eventName, "eventName");
+            RequireName(eventName, "eventName");
+            if (args != null && args.Length > WireLimits.MaxScriptArguments)
+                throw new ArgumentException("A script event takes at most " + WireLimits.MaxScriptArguments + " arguments.", "args");
             ScriptEventExecutionRequestMessage request = new ScriptEventExecutionRequestMessage { eventName = eventName };
             request.SetParametersAndTypes(args ?? new object[0]);
             ScriptEventExecutionResponseMessage answer = await Request<ScriptEventExecutionResponseMessage>(

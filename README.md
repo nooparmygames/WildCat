@@ -123,7 +123,10 @@ environment variable name joins the sections with `__`, so `WildCat:Orleans:Prov
 | `Gateway:MaxMessageBytes` | `1048576` | Largest WebSocket message a client may send; bigger ones close the connection. |
 | `Gateway:AllowedOrigins` | empty | Allowed `Origin` headers for WebSocket upgrades; empty accepts any. |
 | `Gateway:AuthAttemptBurst`, `AuthAttemptsPerMinute` | `5`, `6` | Sign-in attempts (logins, account creation, codes, recovery) one connection may make back to back, and how fast they come back. |
+| `Gateway:AuthAttemptsPerAddressBurst`, `AuthAttemptsPerAddressPerMinute` | `30`, `30` | The same for one client address over all its connections, so opening new sockets does not buy more guesses. `0` turns it off. The address comes from `X-Forwarded-For` only for proxies in `ForwardedHeaders:KnownProxies`/`KnownNetworks`, otherwise all clients behind a proxy share one allowance; IPv6 counts per /64 and loopback is not limited. Raise it when many players share an address. |
 | `Gateway:OutboundQueueCapacity` | `1024` | Messages waiting to be written to one client; a client that stops reading and fills it is disconnected. |
+| `Gateway:OutboundQueueBytes` | `8388608` | The same limit in bytes (8 MiB), so a stalled client cannot hold 1024 large messages. |
+| `Gateway:RelayQueueBytes` | `4194304` | Bytes of one client's game messages waiting to be relayed (at most 256 messages); when full, the gateway stops reading that client until there is room. |
 | `Gateway:MaxConcurrentRequests` | `8` | Requests of one connection handled at the same time. Relayed game messages are not counted and keep their order. |
 | `ForwardedHeaders:KnownProxies` | empty | Proxy addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, besides loopback. |
 

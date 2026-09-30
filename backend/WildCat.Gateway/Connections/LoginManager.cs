@@ -47,16 +47,14 @@ namespace WildCat.Gateway
                 {
                     // Logging in as someone else on the same socket gives up the first player's
                     // streams, or that player's events would keep arriving on this socket.
-                    if (connection.IsLoggedIn && connection.Player != null && !connection.Player.Equals(player))
+                    var current = connection.Login;
+                    if (current != null && !current.Player.Equals(player))
                     {
-                        previousPlayer = connection.Player;
-                        previousLoginTicket = connection.LoginTicket;
+                        previousPlayer = current.Player;
+                        previousLoginTicket = current.LoginTicket;
                         await LogOutAsync(connection);
                     }
-                    connection.Player = player;
-                    connection.IsLoggedIn = true;
-                    connection.LoginTicket = loginTicket;
-                    connection.GameKey = gameKey;
+                    connection.SetLogin(player, gameKey, loginTicket);
                     registry.MapPlayer(player.GetPrimaryKeyString(), connection);
                     await push.SubscribeAsync(connection);
                 }
@@ -99,10 +97,11 @@ namespace WildCat.Gateway
             await connection.LoginLock.WaitAsync();
             try
             {
-                player = connection.IsLoggedIn ? connection.Player : null;
-                if (player == null)
+                var current = connection.Login;
+                if (current == null)
                     return;
-                loginTicket = connection.LoginTicket;
+                player = current.Player;
+                loginTicket = current.LoginTicket;
                 try
                 {
                     await LogOutAsync(connection);
@@ -135,9 +134,7 @@ namespace WildCat.Gateway
             connection.ChallengesHandle = null;
             connection.FriendsHandle = null;
             connection.ConnectionHandle = null;
-            connection.Player = null;
-            connection.IsLoggedIn = false;
-            connection.GameKey = Guid.Empty;
+            connection.ClearLogin();
         }
 
         /// <summary>

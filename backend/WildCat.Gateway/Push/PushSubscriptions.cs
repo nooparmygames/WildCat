@@ -49,8 +49,9 @@ namespace WildCat.Gateway
         /// </summary>
         internal async Task SubscribeAsync(GatewayConnection connection)
         {
-            string playerId = connection.PlayerId;
-            Guid gameKey = connection.GameKey;
+            var login = connection.Login;
+            string playerId = login.Player.GetPrimaryKeyString();
+            Guid gameKey = login.GameKey;
 
             var connectionStream = Streams.GetStream<PlayerConnectionMessage>(StreamNames.PlayerConnection(playerId));
             await UnsubscribeAllAsync(connectionStream, connection.Id);

@@ -12,12 +12,12 @@ namespace WildCat
         {
         }
 
-        /// <summary>Sets the logged in player's display name.</summary>
+        /// <summary>Sets the logged in player's display name, at most WireLimits.MaxNameLength (128) characters.</summary>
         public Task SetNameAsync(string name, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Guard(() =>
             {
-                RequireText(name, "name");
+                RequireName(name, "name");
                 return Request<EmptyMessage>(WildCatMsgType.SetNameRequest, new StringMessage { value = name },
                     WildCatMsgType.SetNameResponse, cancellationToken);
             });
@@ -34,7 +34,7 @@ namespace WildCat
         /// <summary>Another player's display name, by account id.</summary>
         public async Task<string> GetPlayerNameAsync(string playerId, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
+            RequirePlayerId(playerId, "playerId");
             StringMessage answer = await Request<StringMessage>(WildCatMsgType.GetPlayerNameRequest, new StringMessage { value = playerId },
                 WildCatMsgType.GetPlayerNameResponse, cancellationToken).ConfigureAwait(false);
             return answer.value;

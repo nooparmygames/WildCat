@@ -94,7 +94,7 @@ namespace WildCat
 
         internal async Task<LoginResult> LoginAsync(StoredLogin login, bool isInternal, CancellationToken cancellationToken)
         {
-            RequireText(login.Id, "id");
+            RequireLoginId(login.Type, login.Id);
             if (login.Type != LoginType.Device)
                 EnsurePasswordsMaySend();
             Guid ticket = RequireSession();
@@ -160,7 +160,7 @@ namespace WildCat
 
         private async Task<string> CreateAccountAsync(LoginType type, string id, string password, CancellationToken cancellationToken)
         {
-            RequireText(id, "id");
+            RequireLoginId(type, id);
             if (type != LoginType.Device)
                 EnsurePasswordsMaySend();
             Guid ticket = RequireSession();
@@ -196,7 +196,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(id, "id");
+                RequireLoginId(type, id);
                 EnsurePasswordsMaySend();
                 return Request<EmptyMessage>(WildCatMsgType.AddAuthMechanismToAccountRequest,
                     new AddAuthenticationToAccountRequest
@@ -260,6 +260,16 @@ namespace WildCat
                     new ResetPasswordWithCodeRequest { email = email, code = code, newPassword = newPassword },
                     WildCatMsgType.ResetPasswordWithCodeResponse, cancellationToken);
             });
+        }
+
+        /// <summary>
+        /// A device id or user name of at most WireLimits.MaxIdLength characters, or an email
+        /// address of at most WireLimits.MaxEmailLength; the server refuses longer ones.
+        /// </summary>
+        private static void RequireLoginId(LoginType type, string id)
+        {
+            RequireText(id, "id");
+            RequireLength(id, "id", type == LoginType.Email ? WireLimits.MaxEmailLength : WireLimits.MaxIdLength);
         }
 
         private Guid RequireSession()

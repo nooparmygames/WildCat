@@ -59,6 +59,15 @@ namespace WildCat.Interfaces
         Task SetPlayerBinary(string key, byte[] data);
         Task SetPlayerPublicBinary(string key, byte[] data);
 
+        /// <summary>
+        /// The player's online status and the public values it has for <paramref name="keys"/> in
+        /// the game <paramref name="gameKey"/>. Callers that act for a game (the friend list) use
+        /// this one: <see cref="GetPlayerPublicStrings(string[])"/> reads the game the player last
+        /// logged in to, which can be another developer's.
+        /// </summary>
+        [AlwaysInterleave]
+        Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPublicStringsInGame(Guid gameKey, string[] keys);
+
         Task<int> GetEloScore();
         Task SetEloScore(int score);
         Task GameStarted(IRelayServerGame game);

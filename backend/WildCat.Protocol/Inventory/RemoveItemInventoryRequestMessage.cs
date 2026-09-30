@@ -15,7 +15,7 @@ namespace WildCat.Protocol
         public override void Deserialize(WireReader reader)
         {
             inventoryName = reader.ReadString();
-            items = InventoryItems.Read(reader);
+            items = InventoryItems.Read(reader, WireLimits.MaxInventoryItemsPerRequest);
         }
     }
 }

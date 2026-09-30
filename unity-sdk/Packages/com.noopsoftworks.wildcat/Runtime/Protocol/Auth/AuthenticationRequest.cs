@@ -48,7 +48,7 @@ namespace WildCat.Protocol
             Id = reader.ReadString();
             PasswordHash = reader.ReadString();
             AutoCreate = reader.ReadBool();
-            data = reader.ReadStringMap();
+            data = reader.ReadStringMap(WireLimits.MaxLoginDataEntries);
         }
     }
 }

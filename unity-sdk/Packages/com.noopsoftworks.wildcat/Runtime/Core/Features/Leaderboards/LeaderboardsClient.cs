@@ -23,7 +23,7 @@ namespace WildCat
         public async Task<LeaderboardPage> GetTopAsync(string leaderboard, int offset, int count,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(leaderboard, "leaderboard");
+            RequireName(leaderboard, "leaderboard");
             if (offset < 0 || count < 1)
                 throw new ArgumentOutOfRangeException(nameof(count), "The offset must not be negative and the count must be positive.");
             GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Top, offset, count, cancellationToken).ConfigureAwait(false);
@@ -34,7 +34,7 @@ namespace WildCat
         public async Task<LeaderboardPage> GetAroundMeAsync(string leaderboard, int count,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(leaderboard, "leaderboard");
+            RequireName(leaderboard, "leaderboard");
             if (count < 1)
                 throw new ArgumentOutOfRangeException(nameof(count), "The count must be positive.");
             GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Around, 0, count, cancellationToken).ConfigureAwait(false);
@@ -44,7 +44,7 @@ namespace WildCat
         /// <summary>The logged in player's rank in the leaderboard.</summary>
         public async Task<int> GetRankAsync(string leaderboard, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(leaderboard, "leaderboard");
+            RequireName(leaderboard, "leaderboard");
             GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Me, 0, 0, cancellationToken).ConfigureAwait(false);
             return answer.playerRank;
         }

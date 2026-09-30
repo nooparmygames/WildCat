@@ -177,9 +177,6 @@ code -1; `MatchTests.PlayerPropertiesReachTheOtherPlayer` covers it now) and Get
 
 Still open (the SDK documents them):
 
-- `Push/ChallengeEventFrames` never sets `ChallengeMessage.TimeOut`, so StartChallengeRequestedEvent
-  (19) always says 15 seconds whatever the challenger asked for (`ChallengeEventData` has no
-  timeout field to copy).
 - InviteFriend (90) by player name never finds anyone: `NameToAccountIdMap.SetId` is never
   called (docs/legacy-backend-notes.md, bug 20), so the SDK marks
   `Friends.InviteByDisplayNameAsync` obsolete and does not advertise it.
@@ -187,5 +184,7 @@ Still open (the SDK documents them):
   client's wait; the server may still put the player in a match.
 
 Fixed after the step 6 review: player properties are stored (the server tests set properties for
-two players and check both bags survive a deactivation and a rejoin), and GamePlayerAddedEvent
-(9) carries the account id like the other match events.
+two players and check both bags survive a deactivation and a rejoin), GamePlayerAddedEvent (9)
+carries the account id like the other match events, GetPlayerChallenges (161) lists received
+challenges under received, and the challenge events (19, 22, 25) carry the challenger's timeout
+(`ChallengeEventData` has a timeout field now).

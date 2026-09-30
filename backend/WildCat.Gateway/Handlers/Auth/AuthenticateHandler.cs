@@ -30,6 +30,7 @@ namespace WildCat.Gateway
         protected override async Task<AuthenticationResponse> HandleAsync(MessageContext context, AuthenticationRequest request)
         {
             IGrainFactory grains = context.Grains;
+            SignIn.CheckLoginId(request.LoginType, request.Id);
             Guid sessionKey = await SignIn.TouchPayloadTicketAsync(grains, request.ticket);
 
             string account = await FindAccountAsync(grains, request.LoginType, request.Id);

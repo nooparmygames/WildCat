@@ -14,7 +14,8 @@ the split gateway; `docs/gateway.md` describes the gateway side).
 
 ```
 backend/WildCat.Protocol/
-  Codec/         WireCodec (the only entry point), WireWriter, WireReader, WireFormatException
+  Codec/         WireCodec (the only entry point), WireWriter, WireReader, WireFormatException,
+                 WireLimits (collection counts and string lengths clients may send)
   Envelope/      WildCatMessageBase (the frame), WildCatMsgType, WildCatMsgHeader, MessageBase,
                  OptionalResponse<T>
   Common/        EmptyMessage, StringMessage, IntegerMessage, GuidMessage, RawMessage,
@@ -49,8 +50,17 @@ step 6 the payloads wrote to `BinaryWriter` directly and the frame had `ToByteAr
 
 Decoding checks every length against the bytes that are left before it allocates, and throws
 only `WireFormatException` for bad input: a frame cut short, bytes after the payload, a negative
-length, a count larger than the rest of the frame, a Guid that is not 16 bytes, a DateTime out of
-range, an unknown script value type. A payload that reads fewer bytes than it was given is
+length, a count larger than the rest of the frame can hold, a count above its limit, a Guid that
+is not 16 bytes, a DateTime out of range, an unknown script value type. A count is checked against
+the smallest size its items can have (one byte a string, two a string map entry or a script
+argument, five a bytes map entry or an inventory pair), collections are pre-sized for at most 64
+items and grow as items actually arrive, and the collections clients send have fixed limits
+(`WireLimits`): 64 player targets in a frame, 64 public data keys in GetFriends (88), 64 script
+arguments (66), 64 entries in the extra data map of 76, 78 and 82, and 256 items in an inventory
+request (111, 113, 115, 117). So decoding a hostile frame allocates about as much as the frame
+(before the review of step 6 a 1 MiB AuthenticationRequest could make the reader pre-size a
+dictionary of about 32 MB, and a GetFriends request of empty strings decoded into an 8 MB array).
+Collections the server sends have no count limit. A payload that reads fewer bytes than it was given is
 accepted (a failed response of any type reads as `OptionalResponse<EmptyMessage>`); a frame is
 not.
 
@@ -67,7 +77,7 @@ byte   header flags       HasGameTarget=1, HasPlayerTarget=2, HasAuthData=4, (8 
 [uint32 requestID]        if HasRequestID   (client sets it; the server echoes it on the answer)
 [string ticket]           if HasAuthData    (session Guid as a string)
 [string game]             if HasGameTarget  (match Guid as a string)
-[int32 count + strings]   if HasPlayerTarget
+[int32 count + strings]   if HasPlayerTarget (at most 64; the server ignores them)
 int32 length + payload    one MessageBase subclass, no type tag; nothing may follow it
 ```
 
@@ -118,8 +128,24 @@ type with code 1 and "The message could not be read.".
 
 Sign-in limit: 76, 78, 80, 82, 84, 86 and 163 share a per-connection allowance, a token bucket of
 `Gateway:AuthAttemptBurst` attempts (default 5) that refills at `Gateway:AuthAttemptsPerMinute`
-(default 6, one every 10 seconds). An attempt over the limit gets its normal response type with
-error code 1 and "Too many attempts, try again later", and reaches no grain.
+(default 6, one every 10 seconds), and a per-address allowance shared by all the sockets of one
+client address on a gateway node, `Gateway:AuthAttemptsPerAddressBurst` (default 30, 0 turns it
+off) refilling at `Gateway:AuthAttemptsPerAddressPerMinute` (default 30). The address is the one
+the forwarded headers middleware reports (list a reverse proxy in ForwardedHeaders:KnownProxies);
+IPv6 addresses count per /64 and loopback addresses are not limited. An attempt over either limit
+gets its normal response type with error code 1 and "Too many attempts, try again later", and
+reaches no grain. On top of that the Player grain refuses password logins (76 by user name or
+email) for 30 seconds after 5 wrong passwords in a row, twice as long after each further wrong
+one, up to 15 minutes; a refused login answers like a wrong password ("The login failed."), so
+the lock does not tell anyone that the account exists. The count is kept in the grain activation.
+
+String limits: ids, names, keys and values clients send become grain keys or stored data, so the
+gateway answers a request with a longer one with code 1 and "The {what} is longer than {n}
+characters." before any grain call: player (account) ids, device ids and user names 128
+characters, email addresses 254, display names and the names of leaderboards, inventories,
+items, game modes and script events 128, cloud data and publisher data keys 128, cloud data values
+65,536 (`WireLimits`; the SDK refuses to send longer ones). Match property keys are limited by the
+match itself.
 
 ## Game messages and relay
 
@@ -184,36 +210,47 @@ Profile, cloud data, publisher data and script events (handlers since step 6b)
 
 | Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 36..39 | GetName, SetName | {string} | `GetNameHandler`, `SetNameHandler`: `IPlayer.Get/SetPlayerName`; any name, "" included |
+| 36..39 | GetName, SetName | {string} | `GetNameHandler`, `SetNameHandler`: `IPlayer.Get/SetPlayerName`; any name up to 128 characters, "" included |
 | 68/69 | GetPlayerName | {playerId} / {name} | `GetPlayerNameHandler`: `IPlayer(id).GetPlayerName`; "" for an unknown player; code 1 for an empty id |
-| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `GetCloudDataHandler`, `SetCloudDataHandler`: `IPlayer.Get/SetPlayerString`; a missing key reads as "" |
-| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, [value]} | `SetPublicCloudDataHandler`, `GetPublicCloudDataHandler`: `IPlayer.*PublicString` |
-| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, [value]} | `GetPlayerPublicCloudDataHandler`: `IPlayer(player).GetPlayerPublicString`; code 1 for an empty id |
+| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `GetCloudDataHandler`, `SetCloudDataHandler`: `IPlayerStorage("{session's game}_{player}").Get/SetPlayerString`; a missing key reads as "" |
+| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, [value]} | `SetPublicCloudDataHandler`, `GetPublicCloudDataHandler`: the same storage, `*PlayerPublicString` |
+| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, [value]} | `GetPlayerPublicCloudDataHandler`: `IPlayerStorage("{session's game}_{player}").GetPlayerPublicString`; code 1 for an empty id |
 | 34/35 | GetPublisherData | {key} / {value} | `GetPublisherDataHandler`: `IDeveloperStorage(session's devKey).GetString`; a missing key reads as "" |
 | 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `SetPublisherDataServerHandler`, `GetPublisherDataServerHandler`: `IDeveloperStorage.SetString`, `GetStringForDeveloper` (both check the secret); server to server, no session (a header ticket is ignored); code 1 "The developer key or secret is wrong." ("Secret is wrong" before step 6b); payloads in ServerOnly/ |
 | 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `ExecuteScriptEventHandler`: `IScriptEventRunner(gameKey, player).Run`; see below |
 
-All of these but 62..65 need a logged in player. The player's own private and public data live in
-the storage of the game the player last logged in to (`Player.lastGameKey`), and so does the
-public data another player reads with 70, which may be a different game than the reader's.
+All of these but 62..65 need a logged in player. Player data belongs to the game of the request's
+session: the player's own private and public data, the public data another player reads with 70,
+and the friends' public data in GetFriends (88), where the game's script events see it too. Until
+the review of step 6 these went through the Player grain, which used the game the account last
+logged in to (`Player.lastGameKey`): one account playing games of two developers could have one
+game's data written into the other's storage, and others read the public data of whichever game
+the player had played last.
 
 ExecuteScriptEvent answers with the script's return value, or `has` false for an event that returns
 nothing or null. It fails with code 1 and a text meant for the client when the event does not exist
 ("The script event 'name' does not exist."), the arguments do not fit (wrong count, or a value of
 the wrong type), the script ran past its time limit or call depth, the game has too many runs still
 going past their limit, the stored script is no longer valid or returned a type events may not
-return, the script API refused a call (another player's private data), or the script threw
+return, the script API refused a call (another player's private data), the event name is longer
+than 128 characters, or the script threw
 `Exception`, `InvalidOperationException` or `ArgumentException` (the only exceptions a script can
-create; the message is the script's own, so scripts can refuse a request with a reason). Any other
-failure, such as a `NullReferenceException` in the script, is code -1 "Internal error" and is logged.
-Before step 6b every failure sent the raw exception message with code -1.
+create; the message is the script's own, so scripts can refuse a request with a reason). The
+script runner wraps those failures in `ScriptFailedException` and the gateway forwards only that
+type and the time, depth and throttling exceptions. Any other failure, such as a
+`NullReferenceException` in the script or an exception of a grain the script called through the
+API (even an `InvalidOperationException` or `ArgumentException`, unless the script caught it and
+threw its own), is code -1 "Internal error" and is logged. Before step 6b every failure sent the
+raw exception message with code -1, and until the review of step 6 the message of any
+`InvalidOperationException` or `ArgumentException`, grains' and Orleans' included, reached the
+client.
 
 Friends (handlers since step 6b; all need a logged in player and use the session's game)
 
 | Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 88/89 | GetFriends | {string[] publicKeys} / {friends: {userId, name, status, map}[], sent, received} | `GetFriendsHandler`, `IPlayerFriendList.GetFriends`; the map holds the asked keys the friend has |
-| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | `InviteFriendHandler`: account id (must exist), email (lower case) or user name map, then `Invite`; player names never match (bug 20); code 1 "Player not found.", yourself, or already friends |
+| 88/89 | GetFriends | {string[] publicKeys (at most 64)} / {friends: {userId, name, status, map}[], sent, received} | `GetFriendsHandler`, `IPlayerFriendList.GetFriends` for the list and statuses; the map holds the asked keys the friend has in the session's game (read from the friends' `IPlayerStorage`) |
+| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | `InviteFriendHandler`: account id (must exist), email (lower case) or user name map, then `Invite`; player names never match (bug 20); code 1 "Player not found." for an account id or player name nobody has, yourself, or already friends. An email address or user name nobody has succeeds and does nothing (it answered "Player not found." before the review of step 6, which told anyone which addresses had accounts) |
 | 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptFriendHandler`, `DenyFriendHandler`: `AcceptInvitation`, `DenyInvitation`; code 1 when accepting without an invitation or for an empty id; denying without one succeeds silently |
 | 92, 95, 98, 99 | FriendshipInvitationEvent (to the invitee), FriendshipAcceptedEvent, FriendshipDeniedEvent (to the inviter), FriendStatusChangedEvent (to each friend on login and logout) (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream (`Push/FriendEventFrames.cs`) |
 
@@ -224,7 +261,7 @@ Challenges (handlers since step 6b; all need a logged in player and use the sess
 | 17/18 | StartChallenge | {uint TimeOut (seconds), Player, PlayerName, bytes, Guid GameKey} / empty | `StartChallengeHandler`, `IPlayerChallengeHandler.SendChallengeRequest` (offline players too); code 1 unknown player or yourself, 2 the other player has an open challenge to you; a new challenge replaces the pending one |
 | 20/21, 23/24 | AcceptChallenge, DenyChallenge | ChallengeMessage (Player = challenger) / empty | `AcceptChallengeHandler`, `DenyChallengeHandler`: `AcceptChallenge`, `DenyChallenge` on the challenger's handler; accept: code 1 timed out or no pending challenge; deny without one succeeds silently |
 | 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetPlayerChallengesHandler`, `GetChallengeRequests` (received ones were listed under sent before step 6b) |
-| 19, 22, 25 | StartChallengeRequestedEvent (to the challengee), ChallengeAcceptedEvent (to both), ChallengeDeniedEvent (to the challenger) (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
+| 19, 22, 25 | StartChallengeRequestedEvent (to the challengee), ChallengeAcceptedEvent (to both), ChallengeDeniedEvent (to the challenger) (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept; TimeOut the seconds the challenger gave, which was always 15 before the review of step 6) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
 
 Matchmaking, match state and relay (handlers since step 6b)
 

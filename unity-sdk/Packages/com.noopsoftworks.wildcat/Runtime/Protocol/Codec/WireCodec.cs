@@ -13,7 +13,7 @@ namespace WildCat.Protocol
     /// uint32 request id if <see cref="WildCatMsgHeader.HasRequestID"/>, string ticket if
     /// <see cref="WildCatMsgHeader.HasAuthData"/>, string game if
     /// <see cref="WildCatMsgHeader.HasGameTarget"/>, int32 count plus strings if
-    /// <see cref="WildCatMsgHeader.HasPlayerTarget"/>, and last the payload as an int32 length plus
+    /// <see cref="WildCatMsgHeader.HasPlayerTarget"/> (at most <see cref="WireLimits.MaxPlayerTargets"/>), and last the payload as an int32 length plus
     /// bytes. Nothing may follow the payload. See <see cref="WireWriter"/> for the value encodings
     /// and docs/wire-protocol.md for the whole protocol.
     /// </remarks>
@@ -67,7 +67,7 @@ namespace WildCat.Protocol
             if (message.HasGameTarget)
                 message.game = reader.ReadString();
             if (message.hasPlayerTarget)
-                message.players = reader.ReadStringArray();
+                message.players = reader.ReadStringArray(WireLimits.MaxPlayerTargets);
             message.RawData = reader.ReadBytes();
             reader.EnsureFullyRead("frame");
             return message;

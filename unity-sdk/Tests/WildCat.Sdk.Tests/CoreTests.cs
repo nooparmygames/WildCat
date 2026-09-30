@@ -518,9 +518,11 @@ namespace WildCat.Sdk.Tests
             using WildCatClient client = await LoggedInAsync(server, o => o.RequestTimeout = TimeSpan.FromSeconds(2));
             string big = new string('x', 1024 * 1024);
 
-            var error = await Assert.ThrowsAsync<ArgumentException>(() => Wait.For(client.CloudData.SetAsync("k", big)));
+            // The cloud data value limit (WireLimits.MaxValueLength) refuses this before the frame
+            // limit would; the raw relay send has no smaller limit, so it shows the frame check.
+            await Assert.ThrowsAsync<ArgumentException>(() => Wait.For(client.CloudData.SetAsync("k", big)));
+            var error = Assert.Throws<ArgumentException>(() => client.Relay.SendRaw(Guid.NewGuid(), RelayClient.MessageType(1), new byte[1024 * 1024]));
             Assert.Contains("MaxMessageBytes", error.Message);
-            Assert.Throws<ArgumentException>(() => client.Relay.SendRaw(Guid.NewGuid(), RelayClient.MessageType(1), new byte[1024 * 1024]));
 
             // Nothing went out, so the first socket is still open and works.
             Assert.Equal("name", await Wait.For(client.Profile.GetNameAsync()));

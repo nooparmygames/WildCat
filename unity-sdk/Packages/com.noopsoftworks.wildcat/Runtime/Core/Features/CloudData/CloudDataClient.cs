@@ -7,7 +7,8 @@ namespace WildCat
     /// <summary>
     /// Per-player string key/value data on the server: private data only the player reads, public
     /// data every player can read, and the developer's publisher data (read only for clients).
-    /// Keys are limited to 100 characters.
+    /// Keys are limited to 100 characters and values to WireLimits.MaxValueLength (65,536); longer
+    /// ones throw ArgumentException. Player data belongs to the game of the session.
     /// </summary>
     public sealed class CloudDataClient : FeatureClient
     {
@@ -22,6 +23,7 @@ namespace WildCat
             return Guard(() =>
             {
                 RequireKey(key);
+                RequireLength(value, "value", WireLimits.MaxValueLength);
                 return Request<EmptyMessage>(WildCatMsgType.SetCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
                     WildCatMsgType.SetCloudDataResponse, cancellationToken);
             });
@@ -42,6 +44,7 @@ namespace WildCat
             return Guard(() =>
             {
                 RequireKey(key);
+                RequireLength(value, "value", WireLimits.MaxValueLength);
                 return Request<EmptyMessage>(WildCatMsgType.SetPublicCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
                     WildCatMsgType.SetPublicCloudDataResponse, cancellationToken);
             });
@@ -59,7 +62,7 @@ namespace WildCat
         /// <summary>Reads another player's public value; null when the key is not set.</summary>
         public async Task<string> GetPlayerPublicAsync(string playerId, string key, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
+            RequirePlayerId(playerId, "playerId");
             RequireKey(key);
             GetPlayerPublicCloudDataResponse answer = await Request<GetPlayerPublicCloudDataResponse>(
                 WildCatMsgType.GetPlayerPublicCloudDataRequest, new GetPlayerPublicCloudDataRequest { player = playerId, key = key },

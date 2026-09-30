@@ -32,10 +32,18 @@ namespace WildCat
 
         /// <summary>
         /// The friend list and the invitations waiting for an answer. <paramref name="publicDataKeys"/>
-        /// names public cloud data keys to read for every friend (keep the list short for big lists).
+        /// names public cloud data keys to read for every friend, at most
+        /// WireLimits.MaxPublicDataKeys of them (keep the list short for big lists).
         /// </summary>
         public async Task<FriendList> GetAsync(string[] publicDataKeys = null, CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (publicDataKeys != null)
+            {
+                if (publicDataKeys.Length > WireLimits.MaxPublicDataKeys)
+                    throw new ArgumentException("At most " + WireLimits.MaxPublicDataKeys + " public data keys can be asked for.", "publicDataKeys");
+                foreach (string key in publicDataKeys)
+                    RequireKey(key);
+            }
             FriendlistCollection answer = await Request<FriendlistCollection>(WildCatMsgType.GetFriendsRequest,
                 new GetFriendsRequestMessage { publicKeys = publicDataKeys ?? new string[0] },
                 WildCatMsgType.GetFriendsResponse, cancellationToken).ConfigureAwait(false);
@@ -62,13 +70,19 @@ namespace WildCat
             return InviteAsync(InvitationType.AccountId, playerId, data, cancellationToken);
         }
 
-        /// <summary>Invites a player by the user name of their user name login.</summary>
+        /// <summary>
+        /// Invites a player by the user name of their user name login. Succeeds whether or not an
+        /// account has that name (the server does not tell); nothing happens when none has.
+        /// </summary>
         public Task InviteByUserNameAsync(string userName, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return InviteAsync(InvitationType.UserId, userName, data, cancellationToken);
         }
 
-        /// <summary>Invites a player by the email address of their email login.</summary>
+        /// <summary>
+        /// Invites a player by the email address of their email login. Succeeds whether or not an
+        /// account has that address (the server does not tell); nothing happens when none has.
+        /// </summary>
         public Task InviteByEmailAsync(string email, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return InviteAsync(InvitationType.Email, email, data, cancellationToken);
@@ -91,6 +105,8 @@ namespace WildCat
             return Guard(() =>
             {
                 RequireText(value, "value");
+                RequireLength(value, "value", type == InvitationType.Email ? WireLimits.MaxEmailLength
+                    : type == InvitationType.playerName ? WireLimits.MaxNameLength : WireLimits.MaxIdLength);
                 return Request<EmptyMessage>(WildCatMsgType.InviteFriendRequest,
                     new InviteFriendRequest { type = type, value = value, data = data ?? new byte[0] },
                     WildCatMsgType.InviteFriendResponse, cancellationToken);
@@ -102,7 +118,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(playerId, "playerId");
+                RequirePlayerId(playerId, "playerId");
                 return Request<EmptyMessage>(WildCatMsgType.AcceptFriendRequest,
                     new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
                     WildCatMsgType.AcceptFriendResponse, cancellationToken);
@@ -114,7 +130,7 @@ namespace WildCat
         {
             return Guard(() =>
             {
-                RequireText(playerId, "playerId");
+                RequirePlayerId(playerId, "playerId");
                 return Request<EmptyMessage>(WildCatMsgType.DenyFriendRequest,
                     new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
                     WildCatMsgType.DenyFriendResponse, cancellationToken);

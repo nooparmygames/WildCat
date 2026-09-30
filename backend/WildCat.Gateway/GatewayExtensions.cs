@@ -34,11 +34,16 @@ namespace WildCat.Gateway
                 .Validate(o => o.MaxMessageBytes > 0, "Gateway:MaxMessageBytes must be greater than zero.")
                 .Validate(o => o.AuthAttemptBurst > 0, "Gateway:AuthAttemptBurst must be greater than zero.")
                 .Validate(o => o.AuthAttemptsPerMinute > 0, "Gateway:AuthAttemptsPerMinute must be greater than zero.")
+                .Validate(o => o.AuthAttemptsPerAddressBurst >= 0, "Gateway:AuthAttemptsPerAddressBurst must not be negative (0 turns the limit off).")
+                .Validate(o => o.AuthAttemptsPerAddressPerMinute > 0, "Gateway:AuthAttemptsPerAddressPerMinute must be greater than zero.")
                 .Validate(o => o.OutboundQueueCapacity > 0, "Gateway:OutboundQueueCapacity must be greater than zero.")
+                .Validate(o => o.OutboundQueueBytes > 0, "Gateway:OutboundQueueBytes must be greater than zero.")
+                .Validate(o => o.RelayQueueBytes > 0, "Gateway:RelayQueueBytes must be greater than zero.")
                 .Validate(o => o.MaxConcurrentRequests > 0, "Gateway:MaxConcurrentRequests must be greater than zero.")
                 .ValidateOnStart();
             services.TryAddSingleton(TimeProvider.System);
             services.TryAddSingleton<ConnectionRegistry>();
+            services.TryAddSingleton<AddressAttemptLimiter>();
             services.TryAddSingleton<PushSubscriptions>();
             services.TryAddSingleton<LoginManager>();
             foreach (Type handler in HandlerTypes())
@@ -89,7 +94,7 @@ namespace WildCat.Gateway
                 // providers) is running before the gateway singletons are created.
                 var dispatcher = context.RequestServices.GetRequiredService<MessageDispatcher>();
                 WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                await dispatcher.RunAsync(webSocket, context.RequestAborted);
+                await dispatcher.RunAsync(webSocket, context.Connection.RemoteIpAddress, context.RequestAborted);
             }).WithDisplayName("Game gateway WebSocket");
         }
 

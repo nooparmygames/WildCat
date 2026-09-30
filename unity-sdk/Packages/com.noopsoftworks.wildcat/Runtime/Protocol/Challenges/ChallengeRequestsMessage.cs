@@ -53,7 +53,7 @@ namespace WildCat.Protocol
         private static List<Request> ReadRequests(WireReader reader)
         {
             int count = reader.ReadCount();
-            List<Request> requests = new List<Request>(count);
+            List<Request> requests = new List<Request>(Math.Min(count, WireReader.MaxPresize));
             for (int i = 0; i < count; ++i)
             {
                 Request r = new Request();

@@ -25,7 +25,7 @@ namespace WildCat.Tests
         /// <summary>The assembly definition the script writes next to the copy.</summary>
         private const string AsmdefName = "WildCat.Protocol.asmdef";
 
-        private static string FindRepoRoot()
+        internal static string FindRepoRoot()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)

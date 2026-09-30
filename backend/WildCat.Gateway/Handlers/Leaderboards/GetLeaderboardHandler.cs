@@ -12,7 +12,8 @@ namespace WildCat.Gateway
     /// count entries around it, Top the number of entries on the board and up to count entries
     /// from offset. Ranks count from 0; -1 means the player has no score on the board, and a board
     /// nobody has scored on answers like an empty one. The answer repeats the query type.
-    /// Error code 1 for a negative count or offset and an unknown query type.
+    /// Error code 1 for a negative count or offset, an unknown query type and a name longer than
+    /// <see cref="InputLimits.MaxNameLength"/>.
     /// </summary>
     /// <remarks>
     /// Scores are set by server script events (WildCatScriptApi.SetScoreInLeaderBoard); clients
@@ -33,6 +34,7 @@ namespace WildCat.Gateway
         {
             if (request.count < 0 || request.offset < 0)
                 throw new RequestFailedException(GatewayErrors.Refused, NegativeRange);
+            InputLimits.Name(request.leaderBoardName, "leaderboard name");
             int count = Math.Min(request.count, MaxEntries);
             var board = context.Grains.GetGrain<ILeaderBoard>(
                 ResourcesUtility.GetLeaderBoardKey(context.Session.GameKey.ToString(), request.leaderBoardName));

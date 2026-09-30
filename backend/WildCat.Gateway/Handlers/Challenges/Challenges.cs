@@ -16,12 +16,15 @@ namespace WildCat.Gateway
             return context.Grains.GetGrain<IPlayerChallengeHandler>(context.Session.GameKey, playerId, null);
         }
 
-        /// <summary>The challenger named by an accept or deny request; error code 1 for an empty id.</summary>
+        /// <summary>
+        /// The challenger named by an accept or deny request; error code 1 for an empty id and one
+        /// longer than <see cref="InputLimits.MaxIdLength"/>.
+        /// </summary>
         public static IPlayerChallengeHandler OfChallenger(MessageContext context, string challengerId)
         {
             if (string.IsNullOrWhiteSpace(challengerId))
                 throw new RequestFailedException(GatewayErrors.Refused, ChallengeNotFoundException.DefaultMessage);
-            return Of(context, challengerId);
+            return Of(context, InputLimits.PlayerId(challengerId));
         }
 
         /// <summary>Runs a challenge call and answers a missing challenge with error code 1.</summary>

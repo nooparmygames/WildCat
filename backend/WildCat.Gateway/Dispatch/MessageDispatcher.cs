@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Channels;
@@ -15,10 +16,10 @@ namespace WildCat.Gateway
     /// Serves accepted sockets. For every frame it decides, in arrival order: undecodable frames
     /// and unknown ids get an ErrorMsg, game messages (ids above HighestInternal) go to the
     /// connection's relay queue, which one worker drains in order, and requests are checked
-    /// against the sign-in limit and then run concurrently, at most
-    /// <see cref="GameGatewayOptions.MaxConcurrentRequests"/> at a time per connection. Before a
-    /// handler runs, the dispatcher checks the session its route asks for; after, it turns
-    /// exceptions into error answers that echo the request id.
+    /// against the sign-in limits (per connection and per client address) and then run
+    /// concurrently, at most <see cref="GameGatewayOptions.MaxConcurrentRequests"/> at a time per
+    /// connection. Before a handler runs, the dispatcher checks the session its route asks for;
+    /// after, it turns exceptions into error answers that echo the request id.
     /// </summary>
     public sealed class MessageDispatcher
     {
@@ -27,6 +28,7 @@ namespace WildCat.Gateway
         private readonly HandlerRegistry handlers;
         private readonly ConnectionRegistry connections;
         private readonly LoginManager logins;
+        private readonly AddressAttemptLimiter addressAttempts;
         private readonly IClusterClient grains;
         private readonly GameGatewayOptions options;
         private readonly TimeProvider timeProvider;
@@ -34,12 +36,13 @@ namespace WildCat.Gateway
         private readonly ILogger<WebSocketConnection> transportLogger;
 
         public MessageDispatcher(HandlerRegistry handlers, ConnectionRegistry connections, LoginManager logins,
-            IClusterClient grains, IOptions<GameGatewayOptions> options, TimeProvider timeProvider,
-            ILogger<MessageDispatcher> logger, ILogger<WebSocketConnection> transportLogger)
+            AddressAttemptLimiter addressAttempts, IClusterClient grains, IOptions<GameGatewayOptions> options,
+            TimeProvider timeProvider, ILogger<MessageDispatcher> logger, ILogger<WebSocketConnection> transportLogger)
         {
             this.handlers = handlers;
             this.connections = connections;
             this.logins = logins;
+            this.addressAttempts = addressAttempts;
             this.grains = grains;
             this.options = options.Value;
             this.timeProvider = timeProvider;
@@ -51,13 +54,23 @@ namespace WildCat.Gateway
         /// Serves one accepted WebSocket until it closes, then releases its login. Returns when the
         /// socket is closed.
         /// </summary>
-        public async Task RunAsync(WebSocket socket, CancellationToken aborted)
+        public Task RunAsync(WebSocket socket, CancellationToken aborted)
+        {
+            return RunAsync(socket, null, aborted);
+        }
+
+        /// <summary>
+        /// Serves one accepted WebSocket from <paramref name="remoteAddress"/> (the client address
+        /// the sign-in limit counts against; null when unknown) until it closes, then releases its
+        /// login. Returns when the socket is closed.
+        /// </summary>
+        public async Task RunAsync(WebSocket socket, IPAddress remoteAddress, CancellationToken aborted)
         {
             var transport = new WebSocketConnection(socket, WebSocketConnection.NextId(), options.MaxMessageBytes,
-                options.OutboundQueueCapacity, transportLogger);
+                options.OutboundQueueCapacity, options.OutboundQueueBytes, transportLogger);
             var connection = new GatewayConnection(transport,
                 new TokenBucket(options.AuthAttemptBurst, TimeSpan.FromMinutes(1) / options.AuthAttemptsPerMinute, timeProvider),
-                options.MaxConcurrentRequests);
+                options.MaxConcurrentRequests, options.RelayQueueBytes, remoteAddress);
             connections.Add(connection);
             logger.LogDebug("Connection {ConnectionId} opened", connection.Id);
             Task relayWorker = Task.Run(() => RelayLoopAsync(connection));
@@ -68,7 +81,7 @@ namespace WildCat.Gateway
             finally
             {
                 // Frames already queued for relay are still sent on; nothing new arrives.
-                connection.RelayQueue.Writer.TryComplete();
+                connection.RelayQueue.Complete();
                 await logins.ReleaseAsync(connection);
             }
         }
@@ -92,9 +105,10 @@ namespace WildCat.Gateway
             {
                 try
                 {
-                    // Waits when the relay worker is behind, which stops reading the socket: the
-                    // client is sending faster than its messages can be passed on.
-                    await connection.RelayQueue.Writer.WriteAsync(message, connection.Closing);
+                    // Waits when the relay worker is behind (in messages or bytes), which stops
+                    // reading the socket: the client is sending faster than its messages can be
+                    // passed on.
+                    await connection.RelayQueue.EnqueueAsync(message, frame.Length, connection.Closing);
                 }
                 catch (Exception ex) when (ex is OperationCanceledException || ex is ChannelClosedException)
                 {
@@ -113,12 +127,13 @@ namespace WildCat.Gateway
                 return;
             }
 
-            // Sign-in requests check a password or a code, so each connection gets a small
-            // allowance of them. Decided here, in arrival order, before any grain call.
-            if (route.IsSignInAttempt && !connection.AuthAttempts.TryTake())
+            // Sign-in requests check a password or a code, so each connection, and each client
+            // address over all its connections, gets a small allowance of them. Decided here, in
+            // arrival order, before any grain call.
+            if (route.IsSignInAttempt && !TryTakeSignInAttempt(connection))
             {
-                logger.LogInformation("Refused {MessageType} from connection {ConnectionId}: too many sign-in attempts",
-                    message.msgType, connection.Id);
+                logger.LogInformation("Refused {MessageType} from connection {ConnectionId} ({Address}): too many sign-in attempts",
+                    message.msgType, connection.Id, connection.RemoteAddress);
                 SendFailure(connection, message, route.ResponseType, GatewayErrors.Refused, GatewayErrors.TooManyAuthAttempts);
                 return;
             }
@@ -132,6 +147,12 @@ namespace WildCat.Gateway
                 return;
             }
             _ = ProcessRequestAsync(connection, message, route, handler);
+        }
+
+        /// <summary>Takes a sign-in attempt from the connection's allowance and then from its address's.</summary>
+        private bool TryTakeSignInAttempt(GatewayConnection connection)
+        {
+            return connection.AuthAttempts.TryTake() && addressAttempts.TryTake(connection.RemoteAddress);
         }
 
         /// <summary>Runs one request to the end. Never throws; releases the request slot.</summary>
@@ -246,10 +267,10 @@ namespace WildCat.Gateway
         {
             try
             {
-                var reader = connection.RelayQueue.Reader;
-                while (await reader.WaitToReadAsync())
+                var queue = connection.RelayQueue;
+                while (await queue.WaitToReadAsync())
                 {
-                    while (reader.TryRead(out WildCatMessageBase message))
+                    while (queue.TryDequeue(out WildCatMessageBase message))
                         await RelayAsync(connection, message);
                 }
             }

@@ -119,8 +119,8 @@ namespace WildCat.Tests
                 EventParameter.ParamType.StringParam);
             await CreateEvent(setup.GameKey, "mine", "async Task<string> mine() { await WildCat.SetPlayerData(\"secret\", \"own\"); return await WildCat.GetPlayerData(\"secret\"); }");
 
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Run(setup, "peek", otherId));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Run(setup, "poke", otherId));
+            AssertScriptFailure<UnauthorizedAccessException>(await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "peek", otherId)));
+            AssertScriptFailure<UnauthorizedAccessException>(await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "poke", otherId)));
             Assert.Equal("hidden", (await otherStorage.GetPlayerString("secret")).Item2);
             Assert.Equal("champion", (string)await Run(setup, "look", otherId));
             Assert.Equal("own", (string)await Run(setup, "mine"));
@@ -138,9 +138,11 @@ namespace WildCat.Tests
             await CreateEvent(otherGame.GameKey, "mine", "async Task<string> mine() { return await WildCat.GetPlayerData(\"secret\"); }");
 
             // This player's runner with another player's session.
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => RunAs(setup.GameKey, setup.PlayerId, otherSession, "mine"));
+            AssertScriptFailure<UnauthorizedAccessException>(
+                await Assert.ThrowsAsync<ScriptFailedException>(() => RunAs(setup.GameKey, setup.PlayerId, otherSession, "mine")));
             // Another game's event with this player's session.
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => RunAs(otherGame.GameKey, setup.PlayerId, setup.SessionKey, "mine"));
+            AssertScriptFailure<UnauthorizedAccessException>(
+                await Assert.ThrowsAsync<ScriptFailedException>(() => RunAs(otherGame.GameKey, setup.PlayerId, setup.SessionKey, "mine")));
         }
 
         [Fact]
@@ -181,9 +183,10 @@ namespace WildCat.Tests
             var coin = GrainFactory.GetGrain<IInventoryItem>(ResourcesUtility.GetItemKey(game, "coin"), ResourcesUtility.GetGameItemsClassName());
 
             Assert.Equal(1, (int)await Run(setup, "grant", WildCatScriptApi.MaxItemCount));
-            await Assert.ThrowsAsync<ArgumentException>(() => Run(setup, "grant", WildCatScriptApi.MaxItemCount + 1));
-            await Assert.ThrowsAsync<ArgumentException>(() => Run(setup, "grant", -5));
+            AssertScriptFailure<ArgumentException>(await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "grant", WildCatScriptApi.MaxItemCount + 1)));
+            AssertScriptFailure<ArgumentException>(await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "grant", -5)));
 
+            // The inventory grain's own failure is not the script's: it keeps its type.
             await inventory.SetItem(new[] { coin }, new[] { int.MaxValue - 10 });
             await Assert.ThrowsAsync<OverflowException>(() => Run(setup, "grant", 11));
             var items = (await inventory.GetInventory()).items;
@@ -197,7 +200,44 @@ namespace WildCat.Tests
             await CreateEvent(setup.GameKey, "add", "int add(int a, int b) { return a + b; }",
                 EventParameter.ParamType.IntParam, EventParameter.ParamType.IntParam);
 
-            await Assert.ThrowsAsync<ArgumentException>(() => Run(setup, "add", 1));
+            var wrongCount = await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "add", 1));
+            AssertScriptFailure<ArgumentException>(wrongCount);
+            Assert.Equal("The script event 'add' takes 2 arguments, but 1 were sent.", wrongCount.Message);
+            AssertScriptFailure<InvalidCastException>(await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "add", 1, "two")));
+        }
+
+        private static void AssertScriptFailure<T>(ScriptFailedException failure) where T : Exception
+        {
+            Assert.Equal(typeof(T).FullName, failure.ScriptExceptionType);
+            Assert.Null(failure.InnerException);
+        }
+
+        [Fact]
+        public async Task ExceptionsOfGrainsAScriptCallsAreNotTakenForTheScripts()
+        {
+            var setup = await CreateGameAndPlayer();
+            // A negative offset makes the leaderboard grain itself throw ArgumentOutOfRangeException:
+            // an ArgumentException like the script API's own refusals, with a text from the server.
+            await CreateEvent(setup.GameKey, "top",
+                "async Task<int> top() { var page = await WildCat.GetTopEntriesInLeaderBoard(\"board\", -5, 10); return page.count; }");
+            await CreateEvent(setup.GameKey, "caught",
+                "async Task<int> caught() { try { var page = await WildCat.GetTopEntriesInLeaderBoard(\"board\", -5, 10); return page.count; } " +
+                "catch (ArgumentException) { throw new InvalidOperationException(\"The board is not available.\"); } }");
+            await CreateEvent(setup.GameKey, "rethrown",
+                "async Task<int> rethrown() { try { var page = await WildCat.GetTopEntriesInLeaderBoard(\"board\", -5, 10); return page.count; } " +
+                "catch (ArgumentException) { throw; } }");
+            await CreateEvent(setup.GameKey, "own", "int own() { throw new ArgumentException(\"Pick a number\", \"n\"); }");
+
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Run(setup, "top"));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Run(setup, "rethrown"));
+
+            // The script's own exceptions are its failures, with their messages.
+            var caught = await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "caught"));
+            AssertScriptFailure<InvalidOperationException>(caught);
+            Assert.Equal("The board is not available.", caught.Message);
+            var own = await Assert.ThrowsAsync<ScriptFailedException>(() => Run(setup, "own"));
+            AssertScriptFailure<ArgumentException>(own);
+            Assert.Equal("Pick a number", own.Message);
         }
     }
 }

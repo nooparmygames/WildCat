@@ -71,6 +71,30 @@ namespace WildCat
                 throw new ArgumentException(name + " must not be empty.", name);
         }
 
+        /// <summary>
+        /// Throws ArgumentException when <paramref name="value"/> is longer than
+        /// <paramref name="max"/> characters: the server refuses such a request (see WireLimits).
+        /// </summary>
+        internal static void RequireLength(string value, string name, int max)
+        {
+            if (value != null && value.Length > max)
+                throw new ArgumentException(name + " is limited to " + max + " characters.", name);
+        }
+
+        /// <summary>A player (account) id: not empty, at most WireLimits.MaxIdLength characters.</summary>
+        internal static void RequirePlayerId(string playerId, string name)
+        {
+            RequireText(playerId, name);
+            RequireLength(playerId, name, WireLimits.MaxIdLength);
+        }
+
+        /// <summary>A name (leaderboard, game mode, script event, display name): not empty, at most WireLimits.MaxNameLength characters.</summary>
+        internal static void RequireName(string value, string name)
+        {
+            RequireText(value, name);
+            RequireLength(value, name, WireLimits.MaxNameLength);
+        }
+
         /// <summary>Cloud data and publisher data keys are limited to 100 characters.</summary>
         internal static void RequireKey(string key)
         {

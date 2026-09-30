@@ -11,7 +11,9 @@ namespace WildCat.Gateway
     /// <summary>
     /// The transport of one client socket. A receive loop reads whole binary messages (up to
     /// <see cref="GameGatewayOptions.MaxMessageBytes"/>) and hands each one on in arrival order;
-    /// a single writer task drains a bounded outbound queue, so code that sends a frame
+    /// a single writer task drains an outbound queue bounded both in frames
+    /// (<see cref="GameGatewayOptions.OutboundQueueCapacity"/>) and in bytes
+    /// (<see cref="GameGatewayOptions.OutboundQueueBytes"/>), so code that sends a frame
     /// (<see cref="TrySend"/>) never waits for the socket. A client that stops reading fills the
     /// queue and is disconnected with PolicyViolation instead of holding memory or senders.
     /// </summary>
@@ -32,6 +34,7 @@ namespace WildCat.Gateway
         private readonly int outboundCapacity;
         private readonly ILogger logger;
         private readonly Channel<byte[]> outbound;
+        private readonly ByteBudget outboundBytes;
         private readonly CancellationTokenSource closing = new CancellationTokenSource();
         private Task writer = Task.CompletedTask;
         private Task receiver = Task.CompletedTask;
@@ -41,7 +44,17 @@ namespace WildCat.Gateway
         private int closeFrameSent;
         private volatile bool dropQueuedFrames;
 
-        public WebSocketConnection(WebSocket socket, int id, int maxMessageBytes, int outboundCapacity, ILogger logger)
+        /// <param name="socket">The accepted socket.</param>
+        /// <param name="id">The connection id, from <see cref="NextId"/>.</param>
+        /// <param name="maxMessageBytes">The largest message the client may send.</param>
+        /// <param name="outboundCapacity">Frames the outbound queue holds.</param>
+        /// <param name="outboundQueueBytes">
+        /// Bytes the outbound queue holds, counting the frame the writer is sending. A frame is
+        /// always accepted into an empty queue, however large.
+        /// </param>
+        /// <param name="logger">Where transport events go.</param>
+        public WebSocketConnection(WebSocket socket, int id, int maxMessageBytes, int outboundCapacity, long outboundQueueBytes,
+            ILogger logger)
         {
             this.socket = socket ?? throw new ArgumentNullException(nameof(socket));
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -49,7 +62,10 @@ namespace WildCat.Gateway
                 throw new ArgumentOutOfRangeException(nameof(maxMessageBytes));
             if (outboundCapacity < 1)
                 throw new ArgumentOutOfRangeException(nameof(outboundCapacity));
+            if (outboundQueueBytes < 1)
+                throw new ArgumentOutOfRangeException(nameof(outboundQueueBytes));
             Id = id;
+            outboundBytes = new ByteBudget(outboundQueueBytes);
             this.maxMessageBytes = maxMessageBytes;
             this.outboundCapacity = outboundCapacity;
             outbound = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(outboundCapacity)
@@ -80,24 +96,36 @@ namespace WildCat.Gateway
             get { return outbound.Reader.Count; }
         }
 
+        /// <summary>Bytes of the frames waiting for the writer plus the one it is sending.</summary>
+        internal long QueuedBytes
+        {
+            get { return outboundBytes.Used; }
+        }
+
         /// <summary>
         /// Queues an encoded frame for the socket and returns at once. Returns false when the
-        /// connection is closing, and also when the queue is full, in which case the connection is
-        /// closed: its client is not reading.
+        /// connection is closing, and also when the queue is full (in frames or in bytes), in which
+        /// case the connection is closed: its client is not reading.
         /// </summary>
         public bool TrySend(byte[] frame)
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
-            if (outbound.Writer.TryWrite(frame))
-                return true;
+            if (closing.IsCancellationRequested)
+                return false;
+            if (outboundBytes.TryTake(frame.Length))
+            {
+                if (outbound.Writer.TryWrite(frame))
+                    return true;
+                outboundBytes.Release(frame.Length);
+            }
             // TryWrite fails for a full queue or a completed one, and every path that completes
-            // the queue cancels the closing token first, so this is a full queue.
+            // the queue cancels the closing token first, so the queue is full in frames or bytes.
             if (!closing.IsCancellationRequested && Interlocked.CompareExchange(ref slowConsumer, 1, 0) == 0)
             {
                 logger.LogWarning(
-                    "Connection {ConnectionId} is not reading its messages: {Capacity} are waiting. Closing it with PolicyViolation",
-                    Id, outboundCapacity);
+                    "Connection {ConnectionId} is not reading its messages: {Frames} of at most {Capacity} messages, {Bytes} of at most {MaxBytes} bytes are waiting. Closing it with PolicyViolation",
+                    Id, outbound.Reader.Count, outboundCapacity, outboundBytes.Used, outboundBytes.Limit);
                 dropQueuedFrames = true;
                 outbound.Writer.TryComplete();
                 _ = Task.Run(CloseSlowConsumerAsync);
@@ -220,7 +248,14 @@ namespace WildCat.Gateway
                     {
                         if (dropQueuedFrames)
                             return;
-                        await socket.SendAsync(new ArraySegment<byte>(frame), WebSocketMessageType.Binary, true, CancellationToken.None);
+                        try
+                        {
+                            await socket.SendAsync(new ArraySegment<byte>(frame), WebSocketMessageType.Binary, true, CancellationToken.None);
+                        }
+                        finally
+                        {
+                            outboundBytes.Release(frame.Length);
+                        }
                     }
                 }
             }

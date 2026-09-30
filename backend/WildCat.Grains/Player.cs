@@ -341,8 +341,72 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             bool valid = State.UserNamePasswordPairs.TryGetValue(userName, out var account)
-                         && await PasswordHasher.VerifyAsync(password, account[PASSWORD_KEY]);
+                         && await CheckPasswordAsync(password, account[PASSWORD_KEY]);
             return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
+        }
+
+        /// <summary>
+        /// Wrong passwords in a row after which the account refuses password logins for a while
+        /// (<see cref="FirstPasswordLockout"/>, doubling with each further wrong password).
+        /// </summary>
+        public const int MaxPasswordFailures = 5;
+
+        /// <summary>How long the account refuses password logins after <see cref="MaxPasswordFailures"/> wrong passwords.</summary>
+        public static readonly TimeSpan FirstPasswordLockout = TimeSpan.FromSeconds(30);
+
+        /// <summary>The longest a lockout gets, however many wrong passwords came before.</summary>
+        public static readonly TimeSpan MaxPasswordLockout = TimeSpan.FromMinutes(15);
+
+        /// <summary>
+        /// The key of a keyed TimeProvider service the password lockout uses instead of the system
+        /// clock; only tests register one.
+        /// </summary>
+        public const string SignInClockKey = "wildcat.signin-clock";
+
+        private int passwordFailures;
+        private long lockoutStart;
+        private TimeSpan lockout;
+        private TimeProvider signInClock;
+
+        private TimeProvider SignInClock
+        {
+            get
+            {
+                return signInClock ??= Microsoft.Extensions.DependencyInjection.ServiceProviderKeyedServiceExtensions
+                    .GetKeyedService<TimeProvider>(ServiceProvider, SignInClockKey) ?? TimeProvider.System;
+            }
+        }
+
+        /// <summary>
+        /// Checks a password against the stored hash, with a backoff per account: after
+        /// <see cref="MaxPasswordFailures"/> wrong passwords in a row the account refuses every
+        /// password for <see cref="FirstPasswordLockout"/>, and each wrong password after that
+        /// locks it again for twice as long, up to <see cref="MaxPasswordLockout"/>. A locked
+        /// account answers like a wrong password (so the lock tells nobody that the account exists)
+        /// without hashing anything; a right password when not locked resets the count. The gateway
+        /// limits attempts per connection and per address, but a guesser can spread those over many
+        /// of both; this caps the guesses at any one account. The count lives in the activation
+        /// only: a deactivation or restart starts it over.
+        /// </summary>
+        private async Task<bool> CheckPasswordAsync(string password, string storedHash)
+        {
+            if (lockout > TimeSpan.Zero && SignInClock.GetElapsedTime(lockoutStart) < lockout)
+                return false;
+            bool valid = await PasswordHasher.VerifyAsync(password, storedHash);
+            if (valid)
+            {
+                passwordFailures = 0;
+                lockout = TimeSpan.Zero;
+            }
+            else if (++passwordFailures >= MaxPasswordFailures)
+            {
+                int doublings = Math.Min(passwordFailures - MaxPasswordFailures, 20);
+                lockout = TimeSpan.FromTicks(Math.Min(MaxPasswordLockout.Ticks, FirstPasswordLockout.Ticks << doublings));
+                lockoutStart = SignInClock.GetTimestamp();
+                logger.LogInformation("Player {PlayerId} refuses password logins for {Lockout} after {Failures} wrong passwords in a row",
+                    this.GetPrimaryKeyString(), lockout, passwordFailures);
+            }
+            return valid;
         }
 
         public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPasswordPairs()
@@ -424,7 +488,7 @@ namespace WildCat.Grains
             AssertIsCreated();
             bool valid = State.Emails.TryGetValue(email, out var account)
                          && account[STATUS_KEY] == STATUS_ACTIVE
-                         && await PasswordHasher.VerifyAsync(password, account[PASSWORD_KEY]);
+                         && await CheckPasswordAsync(password, account[PASSWORD_KEY]);
             return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
         }
 
@@ -494,6 +558,15 @@ namespace WildCat.Grains
                 .GetGrain<IPlayerStorage>(ResourcesUtility.GetPlayPlayerStorageKey(State.lastGameKey.ToString(),
                     this.GetPrimaryKeyString())).GetPlayerPublicStrings(keys);
             return Tuple.Create(State.OnlineStatus, data);
+        }
+
+        public async Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPublicStringsInGame(Guid gameKey, string[] keys)
+        {
+            var status = State.OnlineStatus;
+            var data = await GrainFactory
+                .GetGrain<IPlayerStorage>(ResourcesUtility.GetPlayPlayerStorageKey(gameKey.ToString(), this.GetPrimaryKeyString()))
+                .GetPlayerPublicStrings(keys);
+            return Tuple.Create(status, data);
         }
 
         public async Task<Tuple<bool, byte[]>> GetPlayerPublicBinary(string key)

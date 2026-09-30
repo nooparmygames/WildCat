@@ -171,8 +171,11 @@ namespace WildCat.Tests
 
             AssertRefused(await Invite(alice, InvitationType.AccountId, TestSetup.UniqueId("nobody")), "Player not found.");
             AssertRefused(await Invite(alice, InvitationType.AccountId, ""), "Player not found.");
-            AssertRefused(await Invite(alice, InvitationType.Email, $"{TestSetup.UniqueId("nobody")}@example.com"), "Player not found.");
-            AssertRefused(await Invite(alice, InvitationType.UserId, TestSetup.UniqueId("nobody")), "Player not found.");
+            // An email address or user name nobody has is answered like one that exists, so the
+            // answer does not tell which ones have accounts; nothing is recorded or sent.
+            AssertSucceeded(await Invite(alice, InvitationType.Email, $"{TestSetup.UniqueId("nobody")}@example.com"));
+            AssertSucceeded(await Invite(alice, InvitationType.UserId, TestSetup.UniqueId("nobody")));
+            Assert.Empty((await GetFriends(alice)).sentInvitation.invitations);
             // Nothing fills the player name map yet (docs/legacy-backend-notes.md bug 20).
             AssertRefused(await Invite(alice, InvitationType.playerName, "Bob"), "Player not found.");
             AssertRefused(await Invite(alice, InvitationType.AccountId, alice.Id), FriendListException.CannotInviteYourself);

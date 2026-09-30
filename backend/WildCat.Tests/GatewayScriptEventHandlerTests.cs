@@ -238,6 +238,34 @@ namespace WildCat.Tests
         }
 
         [Fact]
+        public async Task AFailureOfAGrainTheScriptCallsIsAnInternalError()
+        {
+            var (host, player, gameKey, _) = await Start();
+            await using var _ = host;
+            await using var __ = player.Client;
+            // A negative offset makes the leaderboard grain throw ArgumentOutOfRangeException, an
+            // ArgumentException like the ones scripts throw, but with the server's own text. The
+            // handler used to forward the text of any such exception.
+            await CreateEvent(gameKey, "top",
+                "async Task<int> top() { var page = await WildCat.GetTopEntriesInLeaderBoard(\"board\", -5, 10); return page.count; }");
+            await CreateEvent(gameKey, "caught",
+                "async Task<int> caught() { try { var page = await WildCat.GetTopEntriesInLeaderBoard(\"board\", -5, 10); return page.count; } " +
+                "catch (ArgumentException) { throw new InvalidOperationException(\"The board is not available.\"); } }");
+
+            AssertFailed(await Run(player, "top"), GatewayErrors.Internal, GatewayErrors.InternalError);
+            var logged = Assert.Single(host.Logs.Entries, e => e.Level == LogLevel.Error);
+            Assert.IsType<ArgumentOutOfRangeException>(logged.Exception);
+
+            // A script that catches it and throws its own refuses the request with its own text.
+            AssertFailed(await Run(player, "caught"), GatewayErrors.Refused, "The board is not available.");
+            Assert.Single(host.Logs.Entries, e => e.Level == LogLevel.Error);
+
+            // Script event names are grain keys, so they have a length limit.
+            AssertFailed(await Run(player, new string('e', InputLimits.MaxNameLength + 1)), GatewayErrors.Refused,
+                InputLimits.TooLong("script event name", InputLimits.MaxNameLength));
+        }
+
+        [Fact]
         public async Task AScriptThatRunsTooLongIsStoppedWhileOtherRequestsGoOn()
         {
             var (host, player, gameKey, _) = await Start();

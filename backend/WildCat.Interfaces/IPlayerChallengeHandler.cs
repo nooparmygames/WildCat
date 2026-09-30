@@ -7,7 +7,11 @@ namespace WildCat.Interfaces
 {
     public interface IPlayerChallengeHandler : IGrainWithGuidCompoundKey
     {
-        Task<ChallengeAcceptionStatus> ChallengeRequested(IPlayer challenger, byte[] data, bool isAcceptedOffline);
+        /// <summary>
+        /// Called on the challengee's handler by the challenger's <see cref="SendChallengeRequest"/>:
+        /// records the challenge, open for <paramref name="timeout"/> seconds, and pushes it.
+        /// </summary>
+        Task<ChallengeAcceptionStatus> ChallengeRequested(IPlayer challenger, byte[] data, uint timeout, bool isAcceptedOffline);
         Task<ChallengeAcceptionStatus> SendChallengeRequest(IPlayer challengee, byte[] data, uint timeout, bool isAcceptedOffline);
         Task AcceptChallenge(IPlayer accepter, byte[] data);
         Task DenyChallenge(IPlayer accepter, byte[] data);
@@ -37,6 +41,9 @@ namespace WildCat.Interfaces
         [Id(2)] public byte[] data { get; set; }
         [Id(3)] public Guid gameID { get; set; }
         [Id(4)] public Guid TitleKey { get; set; }
+
+        /// <summary>How long the challenge stays open, in seconds, as the challenger asked.</summary>
+        [Id(5)] public uint Timeout { get; set; }
 
         public override string ToString()
         {

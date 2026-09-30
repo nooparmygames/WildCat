@@ -10,8 +10,10 @@ namespace WildCat.Protocol
     /// </summary>
     /// <remarks>
     /// Every read checks the bytes that are left, so a frame cut short, a negative length or a
-    /// count larger than the rest of the frame throws <see cref="WireFormatException"/> before
-    /// anything is allocated for it.
+    /// count larger than the rest of the frame can hold throws <see cref="WireFormatException"/>
+    /// before anything is allocated for it. Collections are pre-sized for at most
+    /// <see cref="MaxPresize"/> items, and the collections clients send have counts limited by
+    /// <see cref="WireLimits"/>, so decoding a hostile frame allocates about as much as the frame.
     /// </remarks>
     public sealed class WireReader
     {
@@ -144,15 +146,35 @@ namespace WildCat.Protocol
         }
 
         /// <summary>
+        /// Collections are pre-sized for at most this many items; bigger ones grow as their items
+        /// are actually read, so a count alone never makes the reader allocate much.
+        /// </summary>
+        internal const int MaxPresize = 64;
+
+        /// <summary>
         /// Reads the int32 count of a collection. Every item takes at least one byte on the wire,
         /// so a count larger than the bytes left is refused before anything is allocated.
         /// </summary>
         public int ReadCount()
         {
+            return ReadCount(1, int.MaxValue);
+        }
+
+        /// <summary>
+        /// Reads the int32 count of a collection whose items take at least
+        /// <paramref name="minItemBytes"/> bytes each on the wire, and refuses a count the bytes
+        /// left cannot hold or one above <paramref name="maxCount"/> before anything is allocated.
+        /// </summary>
+        public int ReadCount(int minItemBytes, int maxCount)
+        {
+            if (minItemBytes < 1)
+                throw new ArgumentOutOfRangeException(nameof(minItemBytes), "An item takes at least one byte.");
             int count = ReadInt32();
             if (count < 0)
                 throw new WireFormatException($"A collection has a negative count ({count}).");
-            if (count > Remaining)
+            if (count > maxCount)
+                throw new WireFormatException($"A collection has {count} items; at most {maxCount} are allowed here.");
+            if (count > Remaining / minItemBytes)
                 throw new WireFormatException($"A collection claims {count} items but only {Remaining} bytes are left.");
             return count;
         }
@@ -165,29 +187,34 @@ namespace WildCat.Protocol
             return message;
         }
 
-        public string[] ReadStringArray()
+        /// <summary>Reads a string array; <paramref name="maxCount"/> limits its length.</summary>
+        public string[] ReadStringArray(int maxCount = int.MaxValue)
         {
-            int count = ReadCount();
+            int count = ReadCount(1, maxCount);
             string[] values = new string[count];
             for (int i = 0; i < count; ++i)
                 values[i] = ReadString();
             return values;
         }
 
-        public List<T> ReadList<T>() where T : MessageBase, new()
+        /// <summary>Reads a list of payloads; <paramref name="maxCount"/> limits its length.</summary>
+        public List<T> ReadList<T>(int maxCount = int.MaxValue) where T : MessageBase, new()
         {
-            int count = ReadCount();
-            List<T> items = new List<T>(count);
+            int count = ReadCount(1, maxCount);
+            List<T> items = new List<T>(Math.Min(count, MaxPresize));
             for (int i = 0; i < count; ++i)
                 items.Add(ReadMessage<T>());
             return items;
         }
 
-        /// <summary>Reads a map written by <see cref="WireWriter.WriteStringMap"/>; a repeated key keeps the last value.</summary>
-        public Dictionary<string, string> ReadStringMap()
+        /// <summary>
+        /// Reads a map written by <see cref="WireWriter.WriteStringMap"/>; a repeated key keeps the
+        /// last value. An entry takes at least two bytes (two empty strings).
+        /// </summary>
+        public Dictionary<string, string> ReadStringMap(int maxCount = int.MaxValue)
         {
-            int count = ReadCount();
-            Dictionary<string, string> map = new Dictionary<string, string>(count);
+            int count = ReadCount(2, maxCount);
+            Dictionary<string, string> map = new Dictionary<string, string>(Math.Min(count, MaxPresize));
             for (int i = 0; i < count; ++i)
             {
                 string key = ReadString();
@@ -196,11 +223,14 @@ namespace WildCat.Protocol
             return map;
         }
 
-        /// <summary>Reads a map written by <see cref="WireWriter.WriteBytesMap"/>; a repeated key keeps the last value.</summary>
-        public Dictionary<string, byte[]> ReadBytesMap()
+        /// <summary>
+        /// Reads a map written by <see cref="WireWriter.WriteBytesMap"/>; a repeated key keeps the
+        /// last value. An entry takes at least five bytes (an empty string and an empty array).
+        /// </summary>
+        public Dictionary<string, byte[]> ReadBytesMap(int maxCount = int.MaxValue)
         {
-            int count = ReadCount();
-            Dictionary<string, byte[]> map = new Dictionary<string, byte[]>(count);
+            int count = ReadCount(5, maxCount);
+            Dictionary<string, byte[]> map = new Dictionary<string, byte[]>(Math.Min(count, MaxPresize));
             for (int i = 0; i < count; ++i)
             {
                 string key = ReadString();

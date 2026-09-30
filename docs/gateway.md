@@ -12,12 +12,17 @@ and one handler per message. This page explains the parts and how to add a handl
 WildCat.Gateway/
   GatewayExtensions.cs     AddGameGateway (services, options, handler discovery), MapGameGateway (/ws)
   GameGatewayOptions.cs    the "Gateway" configuration section
-  TokenBucket.cs           the per-connection sign-in allowance
+  TokenBucket.cs           a sign-in allowance (one per connection, one per address)
+  AddressAttemptLimiter.cs the per-address sign-in allowances, shared by all connections
+  ByteBudget.cs            the byte count behind the outbound and relay queue limits
   RelayFrame.cs            the copy of a game message that is relayed (no ticket)
   Transport/
-    WebSocketConnection.cs receive loop, bounded outbound queue, single writer, closing
+    WebSocketConnection.cs receive loop, outbound queue bounded in frames and bytes, single
+                           writer, closing
   Connections/
-    GatewayConnection.cs   per-socket state: transport, login, allowance, queues
+    GatewayConnection.cs   per-socket state: transport, address, login (one immutable
+                           LoginState), allowance, queues
+    RelayQueue.cs          the game messages waiting for the relay worker, bounded in frames and bytes
     ConnectionRegistry.cs  connection id -> connection, player id -> connection (this node)
     LoginManager.cs        binds a login to a connection, releases it on disconnect
   Push/
@@ -29,8 +34,16 @@ WildCat.Gateway/
     IMessageHandler.cs, RequestHandler.cs, MessageRoute.cs, SessionRequirement.cs
     MessageContext.cs      what a handler gets
     RequestFailedException.cs, GatewayErrors.cs
+    InputLimits.cs         length limits for ids, names, keys and values clients send
   Handlers/
     Session/               InitializeSession (6), HeartBeat (100), GetServerTime (42)
+    Profile/               GetName (36), SetName (38), GetPlayerName (68), RequestedPlayer.cs (shared)
+    CloudData/             GetCloudData (30), SetCloudData (32), GetPlayerPublicCloudData (70),
+                           SetPublicCloudData (72), GetPublicCloudData (74), PlayerData.cs (shared:
+                           a player's storage in the session's game)
+    PublisherData/         GetPublisherData (34), SetPublisherData_S (62), GetPublisherData_S (64),
+                           DeveloperSecret.cs (shared)
+    Scripts/               ExecuteScriptEvent (66)
     Auth/                  Authenticate (76), CreateNewAccount (78), EmailActivation (80),
                            AddAuthMechanismToAccount (82), RecoverPassword (84),
                            ResendActivation (86), ResetPasswordWithCode (163), SignIn.cs (shared)
@@ -54,23 +67,29 @@ WildCat.Gateway/
    dispatcher's `OnFrameAsync` for it. Frames are handed on one at a time, in arrival order.
 2. The dispatcher decodes it with `WireCodec.Decode`. A frame that does not decode gets an
    ErrorMsg (8) with code 1, "The message could not be read."
-3. Game messages (ids above `HighestInternal`, 1023) go to the connection's relay queue. One relay
-   worker per connection checks the session, and passes each one on to the other players of the
-   match in its game target, in order, without the ticket.
+3. Game messages (ids above `HighestInternal`, 1023) go to the connection's relay queue, which
+   holds at most 256 of them and `Gateway:RelayQueueBytes` (4 MiB) of them; when it is full the
+   receive loop waits, so the gateway stops reading that socket. One relay worker per connection
+   checks the session, and passes each one on to the other players of the match in its game
+   target, in order, without the ticket.
 4. For any other id the dispatcher looks up the route. No route: ErrorMsg code 1, "Unsupported
    message type". A route that is a sign-in attempt takes a token from the connection's allowance
-   first, still in arrival order; without one the request is answered on its own response type
-   with code 1, "Too many attempts, try again later".
+   and then one from the allowance of the client's address (`AddressAttemptLimiter`, shared by
+   all sockets from that address on this node), still in arrival order; without both the request
+   is answered on its own response type with code 1, "Too many attempts, try again later".
 5. The request then takes one of the connection's request slots (`Gateway:MaxConcurrentRequests`,
    8 by default; the receive loop waits for a free one) and runs on its own: the dispatcher checks
    the session the route requires, builds a `MessageContext` and awaits the handler inside a
    try/catch. So a slow request (FindMatch) does not hold up a heartbeat, but two requests of one
    connection can finish in either order.
 6. Everything sent to the client, answers, pushes and relayed frames alike, is encoded and put in
-   the connection's bounded outbound queue (`Gateway:OutboundQueueCapacity`, 1024 frames), which
-   one writer task drains. Nothing waits for the socket. When a client stops reading and the queue
-   fills up, the connection is closed with PolicyViolation (after 5 seconds without a close
-   handshake it is aborted) and a warning is logged.
+   the connection's outbound queue, which one writer task drains. The queue is bounded twice:
+   `Gateway:OutboundQueueCapacity` (1024 frames) and `Gateway:OutboundQueueBytes` (8 MiB,
+   counting the frame being written; a single larger frame still goes into an empty queue).
+   Nothing waits for the socket. When a client stops reading and the queue fills up either way,
+   the connection is closed with PolicyViolation (after 5 seconds without a close handshake it is
+   aborted) and a warning is logged. (With the frame limit alone a stalled reader could hold 1024
+   relayed frames of 1 MiB.)
 7. When the socket closes, however it closes, `LoginManager.ReleaseAsync` removes the connection,
    drops its stream subscriptions (if it still owns them) and calls `IPlayer.Disconnected` with the
    ticket of the login it held.
@@ -107,7 +126,13 @@ grain's heartbeat at most every 5 seconds per connection when a request passes t
   "Internal error". Do not put exception messages from grains in answers unless you know they
   are written for clients; translate the ones you expect into `RequestFailedException` (see
   `SignIn.WithInputErrorsAsync`, which does that for the ArgumentExceptions the Player grain
-  throws for bad input).
+  throws for bad input). ExecuteScriptEvent forwards only `ScriptFailedException`, which the
+  script runner wraps around failures of the script itself, and the script limit exceptions: a
+  grain's InvalidOperationException inside a script API call stays an internal error.
+- Strings that become grain keys or stored values are checked with `InputLimits` before any
+  grain call (ids 128 characters, emails 254, names and keys 128, cloud values 65,536; the
+  values are in `WireLimits`, so the SDK checks the same ones): a longer one is code 1, "The key
+  is longer than 128 characters." and so on.
 
 ## Adding a handler
 
@@ -141,8 +166,11 @@ namespace WildCat.Gateway
   `PushSubscriptions`, `TimeProvider`, `ILogger<T>`, `IOptions<GameGatewayOptions>` or anything
   else the host registers. Grain calls go through `context.Grains`.
 - `context.Player`, `context.Session` (developer key, game key, user id) and `context.Ticket`
-  are what the dispatcher checked; scope every grain key by `context.Session.GameKey` (or
-  `context.Connection.GameKey`, the game of the login) the way the old code did.
+  are what the dispatcher checked; scope every grain key by `context.Session.GameKey`. Do not go
+  through Player grain methods that pick a game themselves: the Player's storage methods use the
+  game the account last logged in to, which may belong to another developer (the cloud data
+  handlers use `PlayerData`, the IPlayerStorage of the session's game). Code on other threads
+  that needs more than one field of the login reads `context.Connection.Login` once.
 - A handler for several types, or one that answers with something other than a single
   OptionalResponse, implements `IMessageHandler` directly: list its `MessageRoute`s and use
   `context.ReadPayload<T>()`, `context.Reply(payload)`, `context.ReplyFailure(code, text)` and
@@ -203,9 +231,13 @@ public class GatewayProfileHandlerTests
   checks its type and that the header holds only the request id, and decodes the
   OptionalResponse. `RequestAsync` returns the raw frame instead.
 - `WaitForTypeAsync(type)` waits for a pushed frame; `Received` lists every frame so far.
-- `GatewayTestHost.StartAsync(client, configure, timeProvider, configureServices)` changes
-  options (for example a small `AuthAttemptBurst`), swaps the clock (`ManualTimeProvider`) or
-  adds test handlers; `host.Connections` is the registry and `host.Logs` every log entry.
+- `GatewayTestHost.StartAsync(client, configure, timeProvider, configureServices, forwardedHeaders)`
+  changes options (for example a small `AuthAttemptBurst`), swaps the clock
+  (`ManualTimeProvider`), adds test handlers or runs the forwarded headers middleware (then
+  `host.ConnectAsync(forwardedFor: "203.0.113.7")` poses as another client address; test clients
+  otherwise come from loopback, which the per-address sign-in limit skips); `host.Connections`
+  is the registry and `host.Logs` every log entry. The Player grain's password lockout uses the
+  cluster fixture's `SignInClock`.
 - Use unique keys (`TestSetup.UniqueId`, a new developer and game per test) and bounded waits
   (`TestSetup.WaitUntilAsync`); never sleep without a limit.
 - Test the success path, each error code the handler can answer with, the session requirement

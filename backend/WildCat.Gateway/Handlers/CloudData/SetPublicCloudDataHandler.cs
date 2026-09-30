@@ -4,8 +4,11 @@ using WildCat.Protocol;
 namespace WildCat.Gateway
 {
     /// <summary>
-    /// SetPublicCloudData (72 -> 73): stores a public value of the logged in player, which other
-    /// players read with GetPlayerPublicCloudData and see in their friend lists.
+    /// SetPublicCloudData (72 -> 73): stores a public value of the logged in player in the
+    /// session's game (<see cref="PlayerData"/>), which other players of that game read with
+    /// GetPlayerPublicCloudData and see in their friend lists. Error code 1 for a key longer than
+    /// <see cref="InputLimits.MaxKeyLength"/> or a value longer than
+    /// <see cref="InputLimits.MaxValueLength"/> characters.
     /// </summary>
     internal sealed class SetPublicCloudDataHandler : RequestHandler<SetCloudDataRequest, EmptyMessage>
     {
@@ -14,7 +17,7 @@ namespace WildCat.Gateway
 
         protected override async Task<EmptyMessage> HandleAsync(MessageContext context, SetCloudDataRequest request)
         {
-            await context.Player.SetPlayerPublicString(request.key, request.value);
+            await PlayerData.Own(context).SetPlayerPublicString(InputLimits.Key(request.key), InputLimits.Value(request.value));
             return new EmptyMessage();
         }
     }

@@ -33,8 +33,9 @@ namespace WildCat.Protocol
         {
             Game = reader.ReadGuid();
             gameProperties = reader.ReadBytesMap();
-            int playerCount = reader.ReadCount();
-            playerProperties = new Dictionary<string, Dictionary<string, byte[]>>(playerCount);
+            // A player's entry is at least five bytes: an empty id and an empty map.
+            int playerCount = reader.ReadCount(5, int.MaxValue);
+            playerProperties = new Dictionary<string, Dictionary<string, byte[]>>(Math.Min(playerCount, WireReader.MaxPresize));
             for (int i = 0; i < playerCount; ++i)
             {
                 string player = reader.ReadString();

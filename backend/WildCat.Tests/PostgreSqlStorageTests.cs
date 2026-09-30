@@ -137,7 +137,7 @@ namespace WildCat.Tests
 
             await friendList.AddFriend(friend, "a friend").WaitAsync(TestSetup.Timeout);
             Assert.Equal(ChallengeAcceptionStatus.Received,
-                await challenges.ChallengeRequested(challenger, new byte[] { 1 }, true).WaitAsync(TestSetup.Timeout));
+                await challenges.ChallengeRequested(challenger, new byte[] { 1 }, 30, true).WaitAsync(TestSetup.Timeout));
             // Stores the received request (ChallengeRequested alone only keeps it in memory).
             await challenges.UpdateInReceiveList(challenger, matchKey).WaitAsync(TestSetup.Timeout);
             await friendList.AddFriend(challenger, "another friend").WaitAsync(TestSetup.Timeout);

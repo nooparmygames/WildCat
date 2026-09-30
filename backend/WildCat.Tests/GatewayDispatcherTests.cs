@@ -281,6 +281,28 @@ namespace WildCat.Tests
         }
 
         [Fact]
+        public async Task ASmallRelayByteBudgetSlowsTheSenderButLosesNothing()
+        {
+            // Room for about ten of these frames: the receive loop keeps waiting for the relay
+            // worker, and every message still arrives, in order.
+            await using var host = await GatewayTestHost.StartAsync(cluster.Client, o => o.RelayQueueBytes = 2000);
+            var (alice, bob, aliceSession, matchId, _) = await StartMatch(host);
+            await using var aliceClient = alice;
+            await using var bobClient = bob;
+
+            for (int i = 0; i < 100; ++i)
+            {
+                await alice.SendAsync(WildCatMessageBase.CreateWithGameTarget(new RawMessage { value = BitConverter.GetBytes(i).Concat(new byte[100]).ToArray() },
+                    UserMessageType, WildCatMsgHeader.normal, matchId.ToString(), aliceSession.ToString()));
+            }
+            for (int i = 0; i < 100; ++i)
+            {
+                var relayed = await bob.WaitForTypeAsync(UserMessageType);
+                Assert.Equal(i, BitConverter.ToInt32(relayed.GetPayload<RawMessage>().value, 0));
+            }
+        }
+
+        [Fact]
         public async Task AClientThatStopsReadingIsDisconnectedAndOthersCarryOn()
         {
             var (developerKey, gameKey) = await TestSetup.CreateDeveloperAndGame(GrainFactory);
@@ -385,8 +407,54 @@ namespace WildCat.Tests
             public Task HandleAsync(MessageContext context) => Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Request ids that are defined but have no handler on purpose; docs/wire-protocol.md lists
+        /// them under "Defined but unhandled". Anything else named ...Request needs a route.
+        /// </summary>
+        private static readonly WildCatMsgType[] DocumentedUnhandled =
+        {
+            WildCatMsgType.CreateEnvironmentRequest, WildCatMsgType.GetDefinedItemsRequest,
+            WildCatMsgType.BuyItemRequest, WildCatMsgType.ConsumeItemRequest,
+        };
+
         [Fact]
-        public async Task PortedTypesHaveTheirOwnHandlersAndTheAdapterServesTheRest()
+        public async Task EveryClientRequestIdHasARoute()
+        {
+            await using var host = await GatewayTestHost.StartAsync(cluster.Client);
+            var requests = Enum.GetValues<WildCatMsgType>()
+                .Where(t => t.ToString().EndsWith("Request", StringComparison.Ordinal) || t.ToString().EndsWith("Request_S", StringComparison.Ordinal))
+                .ToList();
+            Assert.Contains(WildCatMsgType.HeartBeatRequest, requests);
+
+            foreach (var type in requests.Except(DocumentedUnhandled))
+                Assert.True(host.Handlers.TryGet(type, out _, out _), $"{type} ({(int)type}) has no handler and is not documented as unhandled");
+            foreach (var type in DocumentedUnhandled)
+                Assert.False(host.Handlers.TryGet(type, out _, out _), $"{type} has a handler now; take it off the unhandled list");
+
+            // The unhandled ones are documented as such.
+            string protocolDoc = File.ReadAllText(Path.Combine(ProtocolSyncTests.FindRepoRoot(), "docs", "wire-protocol.md"));
+            string unhandled = protocolDoc.Substring(protocolDoc.IndexOf("Defined but unhandled", StringComparison.Ordinal));
+            unhandled = unhandled.Substring(0, unhandled.IndexOf("\n\n", StringComparison.Ordinal));
+            foreach (var type in DocumentedUnhandled)
+                Assert.Contains(((int)type).ToString(), unhandled);
+
+            // And every request id the SDK core sends is served.
+            string sdk = Path.Combine(ProtocolSyncTests.FindRepoRoot(), "unity-sdk", "Packages", "com.noopsoftworks.wildcat", "Runtime");
+            var sent = Directory.EnumerateFiles(sdk, "*.cs", SearchOption.AllDirectories)
+                .Where(f => !f.Replace('\\', '/').Contains("/Runtime/Protocol/", StringComparison.Ordinal))
+                .SelectMany(f => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), @"WildCatMsgType\.(\w+Request)\b").Select(m => m.Groups[1].Value))
+                .Distinct()
+                .ToList();
+            Assert.Contains("AuthenticateRequest", sent);
+            foreach (var name in sent)
+            {
+                var type = Enum.Parse<WildCatMsgType>(name);
+                Assert.True(host.Handlers.TryGet(type, out _, out _), $"The SDK sends {name}, which has no handler");
+            }
+        }
+
+        [Fact]
+        public async Task SessionAndSignInTypesHaveHandlersAndOnlySignInsCountAgainstTheLimit()
         {
             await using var host = await GatewayTestHost.StartAsync(cluster.Client);
             var registry = host.Handlers;

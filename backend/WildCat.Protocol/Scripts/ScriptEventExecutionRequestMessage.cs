@@ -3,8 +3,9 @@ using System;
 namespace WildCat.Protocol
 {
     /// <summary>
-    /// ExecuteScriptEvent (66): the event name and its typed arguments. Each argument is its
-    /// <see cref="ParamType"/> as a byte followed by the value.
+    /// ExecuteScriptEvent (66): the event name and its typed arguments, at most
+    /// <see cref="WireLimits.MaxScriptArguments"/>. Each argument is its <see cref="ParamType"/> as
+    /// a byte followed by the value.
     /// </summary>
     public class ScriptEventExecutionRequestMessage : MessageBase
     {
@@ -78,7 +79,8 @@ namespace WildCat.Protocol
             if (!isTypeSafe)
                 return;
             eventName = reader.ReadString();
-            int count = reader.ReadCount();
+            // An argument is at least two bytes: its type and a one-byte value.
+            int count = reader.ReadCount(2, WireLimits.MaxScriptArguments);
             parameterTypess = new ParamType[count];
             parameters = new object[count];
             for (int i = 0; i < count; ++i)

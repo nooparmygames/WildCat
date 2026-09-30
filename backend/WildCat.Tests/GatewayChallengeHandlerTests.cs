@@ -107,6 +107,36 @@ namespace WildCat.Tests
         }
 
         [Fact]
+        public async Task ChallengeEventsCarryTheTimeoutTheChallengerGave()
+        {
+            // The events always said 15 seconds, whatever the challenger asked for.
+            await using var game = await GatewaySocialGame.StartAsync(cluster.Client);
+            var alice = await game.JoinAsync("Alice");
+            var bob = await game.JoinAsync("Bob");
+            var carol = await game.JoinAsync("Carol");
+
+            AssertSucceeded(await Challenge(alice, bob.Id, timeout: 42));
+            Assert.Equal(42u, (await bob.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.StartChallengeRequestedEvent)).TimeOut);
+            AssertSucceeded(await Accept(bob, alice.Id));
+            Assert.Equal(42u, (await alice.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.ChallengeAcceptedEvent)).TimeOut);
+            Assert.Equal(42u, (await bob.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.ChallengeAcceptedEvent)).TimeOut);
+
+            AssertSucceeded(await Challenge(alice, carol.Id, timeout: 7));
+            Assert.Equal(7u, (await carol.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.StartChallengeRequestedEvent)).TimeOut);
+            AssertSucceeded(await Deny(carol, alice.Id));
+            Assert.Equal(7u, (await alice.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.ChallengeDeniedEvent)).TimeOut);
+
+            // The challengee's own record keeps the timeout and when the challenge came in.
+            AssertSucceeded(await Challenge(bob, carol.Id, timeout: 9));
+            await carol.WaitForEventAsync<ChallengeMessage>(WildCatMsgType.StartChallengeRequestedEvent);
+            var pending = Assert.Single((await game.Grains.GetGrain<IPlayerChallengeHandler>(game.GameKey, carol.Id, null).GetChallengeRequests())
+                .received, r => r.State == ChallengeRequestState.Status.Pending && r.Player.GetPrimaryKeyString() == bob.Id);
+            Assert.Equal(9u, pending.Timeout);
+            Assert.True(DateTime.UtcNow - pending.RequestTime < TimeSpan.FromMinutes(1));
+            game.AssertNothingWentWrong();
+        }
+
+        [Fact]
         public async Task AcceptingStartsAMatchAndPushesItsIdToBothPlayers()
         {
             await using var game = await GatewaySocialGame.StartAsync(cluster.Client);

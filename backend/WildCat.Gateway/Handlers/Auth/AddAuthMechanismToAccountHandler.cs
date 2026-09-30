@@ -22,6 +22,7 @@ namespace WildCat.Gateway
         protected override async Task<EmptyMessage> HandleAsync(MessageContext context, AddAuthenticationToAccountRequest request)
         {
             IPlayer player = context.Player;
+            SignIn.CheckLoginId(request.LoginType, request.Id);
             AdditionResult addition;
             switch (request.LoginType)
             {

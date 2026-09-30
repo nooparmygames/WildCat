@@ -132,6 +132,13 @@ Script event arguments and results are int, short, long, bool, byte, byte[], flo
 string. Relay payloads are `MessageBase` subclasses that write their fields in
 `Serialize(WireWriter)` and read them in `Deserialize(WireReader)`.
 
+The calls throw `ArgumentException`, without sending anything, for input the server would refuse
+(`WireLimits` in `Runtime/Protocol`): player ids and user names over 128 characters, email
+addresses over 254, display names and leaderboard, inventory, item, game mode and script event
+names over 128, cloud data keys over 100 and values over 65,536 characters, more than 64 public
+data keys in `Friends.GetAsync`, 64 script arguments or 256 items to remove. Inviting by user name
+or email address succeeds whether or not an account has it; only an unknown player id fails.
+
 ### Options
 
 | `WildCatClientOptions` | Default | |
@@ -212,8 +219,5 @@ Not verified in a real Unity editor or player (no Unity was available when 0.1.0
 
 ## Known server issues seen from the SDK
 
-- `ChallengeEvent.TimeoutSeconds` is always 15: the server does not pass the challenger's
-  timeout on in StartChallengeRequestedEvent.
-- `MatchesClient.PlayerJoined` carries the player's display name, not the account id.
 - `Friends.InviteByDisplayNameAsync` always fails: the server's map from display names to
   players is never filled.

@@ -74,6 +74,10 @@ namespace WildCat.Tests
             Assert.Equal(6, options.AuthAttemptsPerMinute);
             Assert.Equal(1024, options.OutboundQueueCapacity);
             Assert.Equal(8, options.MaxConcurrentRequests);
+            Assert.Equal(8 * 1024 * 1024, options.OutboundQueueBytes);
+            Assert.Equal(4 * 1024 * 1024, options.RelayQueueBytes);
+            Assert.Equal(30, options.AuthAttemptsPerAddressBurst);
+            Assert.Equal(30, options.AuthAttemptsPerAddressPerMinute);
         }
 
         [Fact]
@@ -87,6 +91,10 @@ namespace WildCat.Tests
                 ["Gateway:AuthAttemptsPerMinute"] = "2",
                 ["Gateway:OutboundQueueCapacity"] = "16",
                 ["Gateway:MaxConcurrentRequests"] = "3",
+                ["Gateway:OutboundQueueBytes"] = "65536",
+                ["Gateway:RelayQueueBytes"] = "32768",
+                ["Gateway:AuthAttemptsPerAddressBurst"] = "0",
+                ["Gateway:AuthAttemptsPerAddressPerMinute"] = "12",
             }).Build();
             var services = new ServiceCollection();
             services.AddGameGateway(configuration.GetSection(GameGatewayOptions.SectionName));
@@ -99,6 +107,10 @@ namespace WildCat.Tests
             Assert.Equal(2, options.AuthAttemptsPerMinute);
             Assert.Equal(16, options.OutboundQueueCapacity);
             Assert.Equal(3, options.MaxConcurrentRequests);
+            Assert.Equal(65536, options.OutboundQueueBytes);
+            Assert.Equal(32768, options.RelayQueueBytes);
+            Assert.Equal(0, options.AuthAttemptsPerAddressBurst);
+            Assert.Equal(12, options.AuthAttemptsPerAddressPerMinute);
             Assert.Same(TimeProvider.System, provider.GetRequiredService<TimeProvider>());
         }
 
@@ -108,6 +120,10 @@ namespace WildCat.Tests
         [InlineData("Gateway:MaxMessageBytes", "0")]
         [InlineData("Gateway:OutboundQueueCapacity", "0")]
         [InlineData("Gateway:MaxConcurrentRequests", "-1")]
+        [InlineData("Gateway:OutboundQueueBytes", "0")]
+        [InlineData("Gateway:RelayQueueBytes", "0")]
+        [InlineData("Gateway:AuthAttemptsPerAddressBurst", "-1")]
+        [InlineData("Gateway:AuthAttemptsPerAddressPerMinute", "0")]
         public void NonPositiveLimitsFailValidation(string key, string value)
         {
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>

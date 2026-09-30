@@ -14,9 +14,13 @@ namespace WildCat.Protocol
             }
         }
 
-        public static (string, int)[] Read(WireReader reader)
+        /// <summary>
+        /// Reads the pairs; each takes at least five bytes (an empty name and the count).
+        /// <paramref name="maxCount"/> limits how many a request may carry.
+        /// </summary>
+        public static (string, int)[] Read(WireReader reader, int maxCount = int.MaxValue)
         {
-            int count = reader.ReadCount();
+            int count = reader.ReadCount(5, maxCount);
             (string, int)[] items = new (string, int)[count];
             for (int i = 0; i < count; ++i)
             {

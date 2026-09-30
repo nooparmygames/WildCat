@@ -42,7 +42,7 @@ namespace WildCat.Protocol
             LoginType = (LoginType)reader.ReadByte();
             Id = reader.ReadString();
             PasswordHash = reader.ReadString();
-            data = reader.ReadStringMap();
+            data = reader.ReadStringMap(WireLimits.MaxLoginDataEntries);
         }
     }
 }

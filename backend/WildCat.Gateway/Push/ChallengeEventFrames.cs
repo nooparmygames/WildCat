@@ -7,7 +7,8 @@ namespace WildCat.Gateway
     /// <summary>
     /// Turns an event from a player's ChallengeEvents stream into the frame pushed to the client:
     /// StartChallengeRequestedEvent (19), ChallengeAcceptedEvent (22, with the new match id in
-    /// GameKey) or ChallengeDeniedEvent (25), each an OptionalResponse&lt;ChallengeMessage&gt;.
+    /// GameKey) or ChallengeDeniedEvent (25), each an OptionalResponse&lt;ChallengeMessage&gt;
+    /// whose TimeOut is the seconds the challenger gave the challenge (it always said 15 before).
     /// </summary>
     internal static class ChallengeEventFrames
     {
@@ -19,6 +20,7 @@ namespace WildCat.Gateway
                 PlayerName = otherPlayerName ?? "",
                 GameKey = Guid.Empty,
                 data = data.data,
+                TimeOut = data.Timeout,
             };
             WildCatMsgType type;
             switch (data.Type)
