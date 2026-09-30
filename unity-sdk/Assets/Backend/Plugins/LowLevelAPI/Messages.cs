@@ -1757,7 +1757,7 @@ namespace WildCat.Protocol
         public string Id;
 
         /// <summary>
-        /// MD5 hash of the password
+        /// The password in plain text (the field keeps its old name for now); send it only over wss://
         /// </summary>
         public string PasswordHash;
 
@@ -1828,7 +1828,7 @@ namespace WildCat.Protocol
         public string Id;
 
         /// <summary>
-        /// MD5 hash of the password
+        /// The password in plain text (the field keeps its old name for now); send it only over wss://
         /// </summary>
         public string PasswordHash;
 
@@ -1894,7 +1894,7 @@ namespace WildCat.Protocol
         public string Id;
 
         /// <summary>
-        /// The MD5 hash of the password if applicable to the login type
+        /// The password in plain text if applicable to the login type (the field keeps its old name for now); send it only over wss://
         /// </summary>
         public string PasswordHash;
 

@@ -1139,8 +1139,8 @@ namespace WildCat
         /// <param name="OnFailure">Will be called if the operation fails</param>
         /// <returns>Result of the operation which can be yielded on and contains the user's Id</returns>
         /// <remarks>
-        /// The password should be plain text and the library converts it to MD5 before sending
-        /// Then at the server it will be transformed into another form (salting&encryption) before storage
+        /// The password is plain text and is sent to the server over the connection; use wss:// in production.
+        /// The server stores only a salted hash of it.
         /// </remarks>
         public Result<AuthenticationResponse> AuthenticateWithUserAndPassword(string userName, string password, bool autoCreate)
         {
@@ -1156,8 +1156,8 @@ namespace WildCat
         /// <param name="OnFailure">Will be called if the operation is failed</param>
         /// <returns>The result of the operation which can be yielded on and contains the user's Id</returns>
         /// <remarks>
-        /// The password should be plain text and the library converts it to MD5 before sending
-        /// Then at the server it will be transformed into another form (salting&encryption) before storage
+        /// The password is plain text and is sent to the server over the connection; use wss:// in production.
+        /// The server stores only a salted hash of it.
         /// </remarks>
         public Result<AuthenticationResponse> AuthenticateWithEmail(string email, string password)
         {
@@ -1166,7 +1166,6 @@ namespace WildCat
 
         private Result<AuthenticationResponse> Authenticate(LoginType loginType, string userIdentifier, string password, bool autoCreate, Dictionary<string, string> data)
         {
-            password = password.ToMd5();
             if (!isSessionInitialized)
                 throw new InvalidOperationException("Session is not initialized and you can not login");
             uint id = client.SendAuthenticateRequest(loginType, userIdentifier, password, data, autoCreate, sessionKey);
@@ -1179,7 +1178,7 @@ namespace WildCat
         /// Adds a user name and password pair for authentication to the loggedin account
         /// </summary>
         /// <param name="userName">The user name you want to choose</param>
-        /// <param name="password">Password of the user</param>
+        /// <param name="password">Password of the user in plain text; it is sent to the server over the connection, so use wss:// in production</param>
         /// <param name="OnSuccess">Will be called if the operation succeeds</param>
         /// <param name="OnFailure">Will be called if the operation fails</param>
         /// <returns>A yieldable result which shows the success/failure of the operation</returns>
@@ -1194,7 +1193,7 @@ namespace WildCat
         /// sent to the user's email before you can use it to login
         /// </summary>
         /// <param name="email">The email address you want to add to the account</param>
-        /// <param name="password">The password which you want to use for the account</param>
+        /// <param name="password">The password which you want to use for the account, in plain text; it is sent to the server over the connection, so use wss:// in production</param>
         /// <param name="OnSuccess">Will be called if the operation succeeds</param>
         /// <param name="OnFailure">Will be called if the operation fails</param>
         /// <returns>A yieldable result of the operation which shows success/failure</returns>
@@ -1205,7 +1204,6 @@ namespace WildCat
 
         private Result AddAuthenticationMechanismToAccount(LoginType loginType, string userId, string password, Dictionary<string, string> data)
         {
-            password = password.ToMd5();
             AssertIsLoggedIn();
             uint id = client.SendAddAuthToAccountRequest(loginType, userId, password, data, ticket);
             var result = new Result(this);
@@ -1229,7 +1227,7 @@ namespace WildCat
         /// Creates a new account using a user name and password pair
         /// </summary>
         /// <param name="userId">The user name which you want to choose</param>
-        /// <param name="password">The password you want to choose</param>
+        /// <param name="password">The password you want to choose, in plain text; it is sent to the server over the connection, so use wss:// in production</param>
         /// <param name="OnSuccess">Will be called if the operation succeeds</param>
         /// <param name="OnFailure">Will be called if the operation fails</param>
         /// <returns>A yieldable result which shows the success of the operation and contains the account's userId (not the name you use but the ID of the account)</returns>
@@ -1244,7 +1242,7 @@ namespace WildCat
         /// email address before the account can login
         /// </summary>
         /// <param name="email"></param>
-        /// <param name="password"></param>
+        /// <param name="password">The password in plain text; it is sent to the server over the connection, so use wss:// in production</param>
         /// <param name="OnSuccess"></param>
         /// <param name="OnFailure"></param>
         /// <returns></returns>
@@ -1255,7 +1253,6 @@ namespace WildCat
 
         private Result<string> CreateAccount(LoginType loginType, string userId, string password, Dictionary<string, string> data, Action<string> OnSuccess = null, Action<int, string> OnFailure = null)
         {
-            password = password.ToMd5();
             if (!isSessionInitialized)
                 throw new InvalidOperationException("Session is not initialized and you can not login");
             uint id = client.SendCreateAccountRequest(loginType, userId, password, data, sessionKey);
@@ -1519,9 +1516,10 @@ namespace WildCat
         /// <param name="OnSuccess">Will be called when the operation is successful and score is saved</param>
         /// <param name="OnFailure">Will be called if the operation failed</param>
         /// <remarks>
-        /// The score will be set on the board only if the score is supirior the the previously stored score (if any).
-        /// If the leaderboard doesn't exist, the request will fail with an error code of 1
+        /// The server rejects this call from clients (error code 1) because players could post any score.
+        /// Set scores from a server script event (WildCat.SetScoreInLeaderBoard) and run it with ExecuteScriptEvent.
         /// </remarks>
+        [Obsolete("Not allowed from clients. Grant items and set scores from a server script event.")]
         public Result SetScoreInLeaderBoard(string leaderBoardName, int score)
         {
             AssertIsLoggedIn();
@@ -1933,6 +1931,11 @@ namespace WildCat
             return result;
         }
 
+        /// <summary>
+        /// The server rejects this call from clients (error code 1) because players could grant themselves anything.
+        /// Grant items from a server script event (WildCat.AddInventoryItems) and run it with ExecuteScriptEvent.
+        /// </summary>
+        [Obsolete("Not allowed from clients. Grant items and set scores from a server script event.")]
         public Result<BuyItemInventoryRequestMessage> AddInventoryItems((string, int)[] items)
         {
             AssertIsLoggedIn();

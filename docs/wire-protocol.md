@@ -3,8 +3,8 @@
 Defined in `backend/WildCat.Protocol/Messages.cs` (server copy) and
 `unity-sdk/Assets/Backend/Plugins/LowLevelAPI/Messages.cs` (client copy, diverged: the
 server copy defaults strings to ""). Documented from the code on 2026-09-30 and updated after
-roadmap step 2, which removed the same message types from both copies. The two copies must
-become one shared source.
+roadmap step 2, which removed the same message types from both copies, and step 4 (security
+fixes). The two copies must become one shared source.
 
 Paths and names follow the WildCat rename from roadmap step 3: both copies use the namespace
 `WildCat.Protocol` (was `RealtimeServer`), and `WildCatMessageBase` and `WildCatMsgType` were
@@ -13,7 +13,8 @@ called `ApadanaMessageBase` and `ApadanaMsgType`.
 ## Framing
 
 One WebSocket binary message carries exactly one `WildCatMessageBase`. Fragmented messages are
-reassembled by the gateway up to 2 MB. Everything is written with .NET `BinaryWriter`
+reassembled by the gateway up to `Gateway:MaxMessageBytes` (default 1 MiB); a larger message
+closes the socket with MessageTooBig. Everything is written with .NET `BinaryWriter`
 (little-endian; strings are 7-bit-varint length plus UTF-8; Guid is int32 16 plus
 `Guid.ToByteArray()`; DateTime is `ToString()`/`Parse` and therefore culture dependent;
 TimeSpan is a double of milliseconds).
@@ -30,8 +31,10 @@ int32 len + payload       one MessageBase subclass, no type tag
 ```
 
 Message types above 1023 are "user messages": they must carry auth, and with `HasGameTarget`
-the gateway relays the raw frame to the other players in the match (including the sender's
-ticket, which is the session hijack bug).
+the gateway relays the frame to the other players in the match. Since step 4 it rebuilds the
+relayed frame without the ticket (`HasAuthData` cleared); message type, request id, game
+target and payload bytes stay exactly as sent. Before that the raw frame, sender's ticket
+included, went out, which let any player hijack an opponent's session.
 
 Responses and forwarded events are wrapped in `OptionalResponse<T>`: `bool isSuccessful`, then
 either `int32 errorCode, string errorMessage` or `T` inline. Error codes: -1 any exception (the
@@ -53,12 +56,17 @@ Session and auth
 | Id | Message | Payload | Grain path |
 |---|---|---|---|
 | 6/7 | InitializeSessionRequest / Response | {Guid DeveloperKey, Guid GameKey} / {Guid session} | `IDeveloper.InitializeSession` |
-| 76/77 | AuthenticateRequest / Response | {ticket, byte LoginType (Device, UserWithPassword, Email), Id, PasswordHash (client MD5), bool AutoCreate, dict} / {userId, name, ticket, bool isNewlyCreated} | id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*` |
-| 78/79 | CreateNewAccountRequest / Response | {ticket, LoginType, Id, PasswordHash, dict} / {accountId} | `IPlayerCreator(0)` (no session check) |
+| 76/77 | AuthenticateRequest / Response | {ticket, byte LoginType (Device, UserWithPassword, Email), Id, PasswordHash (plain password), bool AutoCreate, dict} / {userId, name, ticket, bool isNewlyCreated} | id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*` |
+| 78/79 | CreateNewAccountRequest / Response | {ticket, LoginType, Id, PasswordHash, dict} / {accountId} | `IPlayerCreator(0)` (session checked since step 4) |
 | 80/81 | EmailActivationRequest / Response | {ticket, email, code} / empty | `IPlayer.Activate` |
 | 82/83 | AddAuthMechanismToAccountRequest / Response | {LoginType, Id, PasswordHash, dict} / empty | `IPlayer.AddPlayer*` |
 | 100/101 | HeartBeatRequest / Response | empty | `IPlayer.HeartBeat` |
 | 8 | ErrorMsg (S) | {string} | never actually delivered (published to an unsubscribed stream) |
+
+Passwords: since step 4 the `PasswordHash` fields of 76, 78 and 82 carry the plain password
+(the misleading name stays until step 6). The server stores only a salted PBKDF2 hash and
+checks logins against it, so the connection must use TLS (wss://; TLS terminates at the proxy
+in front of the host). Before step 4 the SDK sent an unsalted MD5 of the password.
 
 Profile and cloud data
 
@@ -70,7 +78,7 @@ Profile and cloud data
 | 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, value} | `IPlayer.*PublicString` |
 | 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, value} | `IPlayer(player).GetPlayerPublicString` |
 | 34/35 | GetPublisherData | {key} / {value} | `IDeveloperStorage(devKey).GetString` |
-| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage` (Get ignores the secret); server-to-server, the SDK no longer sends them |
+| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage.SetString`, `GetStringForDeveloper` (both check the secret since step 4); server-to-server, the SDK no longer sends them |
 
 Friends
 
@@ -99,26 +107,33 @@ Matchmaking, match state and relay
 | 133/134 | RejoinMatch | {Guid} / empty | `IPlayer.RejoinMatch` |
 | 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `IPlayer.GetPendingMatches` |
 | 13/14 | LeaveGame | header game / empty | `IRelayServerGame.PlayerFinished` (response currently throws) |
-| >1023 | user messages | raw frame with HasGameTarget | `SendToAllBut(player, 0, frame)` retried 5x |
+| >1023 | user messages | frame with HasGameTarget, relayed without the ticket | `SendToAllBut(player, 0, frame)` retried 5x |
 | 9, 10 | GamePlayerAddedEvent {Player, Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
 | 125..128 | GamePlayerRemovedEvent, GamePlayerRejoinedEvent, MatchRejoinSyncEvent {Game, gameProps, playerProps}, MatchPropertyChangedEvent {Game, Player?, key, bytes} (S) | | from RelayServerGame |
 
-Leaderboards, inventory, scripting, time, dev
+Leaderboards, inventory, scripting, time
 
 | Id | Message | Payload | Grain path |
 |---|---|---|---|
 | 26/27 | GetLeaderboard | {byte type Top/Around/Me, name, [count], [offset]} / {playerRank, count, entries: {playerId, userName, score, entryTime}[]} | `ILeaderBoard` |
-| 28/29 | SetLeaderboard | {name, int score} / empty | `ILeaderBoard.AddPlayerScore` (client-chosen score) |
+| 28/29 | SetLeaderboard | {name, int score} / empty | rejected from clients since step 4 (see below); scripts call `SetScoreInLeaderBoard` |
 | 109/110 | GetInventory | {invName} / {(name, count)[]} | `IPlayerInventory.GetInventory` |
-| 111..116 | AddItemToInventory, SetItemToInventory, RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `AddItem`, `SetItem`, `RemoveItem` (client-chosen grants) |
+| 111..114 | AddItemToInventory, SetItemToInventory | {invName, (item, count)[]} / inventory list | rejected from clients since step 4 (see below); scripts call `AddInventoryItems`, `SetInventoryItems` |
+| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveItem` (players may spend their own items) |
 | 119..122 | UnlockInventory, GetInventoryUnlockTime | {invName} | `Unlock`, `GetUnlocktime` |
 | 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `IScriptEventRunner.Run` |
 | 42/43 | GetServerTime | none / {string} | `ITimeService` |
-| 44/45 | CreateEnvironment (not in MASTER builds) | developer profile / {DeveloperKey, GameKey} | seeds developer, game "game1", leaderboard "global", mode "multi", script "Test" |
+
+Client grants and scores: since step 4 the gateway answers 28, 111 and 113 with an error
+response (`isSuccessful` false, error code 1, "Not allowed from clients. Grant items and set
+scores from a server script event."). Before that any client could post its own score and
+grant itself items.
 
 Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dropped without a
 response): 84-87 RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem,
 123/124 ConsumeItem. The grain logic behind them exists; only the gateway handlers are missing.
+44/45 CreateEnvironment falls to `default` too: step 4 deleted its unauthenticated handler (the
+SDK never sent it) and the host seeds dev data from `devsconfig.json`.
 The ConsumeItem payload class (`ConsumeItemInventoryRequestMessage`) was removed in step 2 because
 nothing used it; a future handler defines its own payload.
 
@@ -146,7 +161,7 @@ the other values did not move.
 ## Direction for the rewrite
 
 Keep the transport shape (one binary WebSocket message per request, request id echo, typed
-error envelope) because the Unity SDK is built around it, keep the pinned message ids, strip
-the ticket from relayed frames, serialize DateTime as ticks or ISO 8601, split the file per
+error envelope) because the Unity SDK is built around it, keep the pinned message ids and the
+ticket-free relayed frames, serialize DateTime as ticks or ISO 8601, split the file per
 feature area, and consider generating both copies from one schema (MessagePack or protobuf are
 the obvious candidates).

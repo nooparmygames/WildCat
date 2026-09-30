@@ -24,6 +24,14 @@ client; and the `ENABLE_PLAYFABSERVER_API` scripting define. The SDK's `Messages
 the same message types and enum members as the server copy and pins the same explicit ids
 (see docs/wire-protocol.md).
 
+Changed in step 4: passwords go to the server in plain text (the server stores a salted PBKDF2
+hash), so production builds must connect over wss://; `AuthenticateExtensions.cs` with `ToMd5`
+and `ToSha1` is gone. `AddInventoryItems` and `SetScoreInLeaderBoard` are `[Obsolete]` because
+the server now rejects messages 111 and 28 from clients with error code 1; grant items and set
+scores from a server script event run through `ExecuteScriptEvent`. The SDK never had a call
+for 113 (SetItemToInventory). The sample's "Send score" button still calls
+`SetScoreInLeaderBoard`, so it gets that error and an obsolete warning.
+
 ## Layout
 
 ```
@@ -55,15 +63,17 @@ as C# events or public delegate fields.
 - Auth: `AuthenticateWithTestDevice`, `AuthenticateWithDevice` (uses
   `SystemInfo.deviceUniqueIdentifier`), `AuthenticateWithUserAndPassword`,
   `AuthenticateWithEmail`, `CreateAccountWith*`, `AddUserNameAndPasswordToAccount`,
-  `AddEmailAndPasswordToAccount`, `ActivateEmail`. Passwords are MD5-hashed client side.
+  `AddEmailAndPasswordToAccount`, `ActivateEmail`. Passwords are sent in plain text (MD5-hashed
+  client side before step 4), so use wss:// in production.
 - Profile: `SetName`, `GetName`, `GetPlayerName(playerId)`.
 - Friends: `GetFriends(publicDataKeys)`, `InviteFriendByUserName/Email/PlayerId`,
   `AcceptFriendInvitation`, `DenyFriendInvitation`, events `OnFriendListReceived`,
   `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`,
   `OnFriendStatusChanged`.
-- Inventory: `GetInventory`, `AddInventoryItems`, `RemoveInventoryItems`.
-- Leaderboards: `SetScoreInLeaderBoard`, `GetRankInLeaderBoard`,
-  `GetAroundPlayersInLeaderBoard`, `GetTopPlayersInLeaderBoard`.
+- Inventory: `GetInventory`, `RemoveInventoryItems`, and the obsolete `AddInventoryItems`
+  (rejected by the server since step 4).
+- Leaderboards: the obsolete `SetScoreInLeaderBoard` (rejected since step 4),
+  `GetRankInLeaderBoard`, `GetAroundPlayersInLeaderBoard`, `GetTopPlayersInLeaderBoard`.
 - Matchmaking and matches: `FindMatch(gameMode, skill)` (15 s timeout, error 1),
   `FinishGame(game)`, `SetPlayerMatchProperty`, `SetGlobalMatchProperty` (10 KB values),
   `RejoinMatch`, `GetPendingMatches`, events `OnGameFinished`, `OnGameFinishedDueToDisconnect`,
@@ -128,5 +138,6 @@ static counter with a small race outside its lock.
 5. Rebuild the sample scene and prefab and package as a UPM package (`com.<org>.wildcat`).
    (Step 3 renamed the brand from Apadana to WildCat and pointed the editor menu links at the
    GitHub repository.)
-6. Server side must stop trusting client-supplied inventory grants and scores before the SDK
-   exposes them again.
+6. Delete the obsolete `AddInventoryItems` and `SetScoreInLeaderBoard` (the server stopped
+   trusting client grants and scores in step 4) and show script-granted items and scores in
+   the sample instead.

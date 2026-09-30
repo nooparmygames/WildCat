@@ -42,9 +42,9 @@ POST `/developers/resetpassword/` with `{resetKey, oldPassword?, newPassword: md
 
 Activation at `/page/activation/:code` (also emailed): POST `/developers/activate/:code` on load.
 
-The client-side MD5 is a legacy quirk. The backend hashes again with SHA1 (see
-`WildCat.Interfaces/AuthenticationExtensions.cs`). A rewrite should replace this with a proper
-password hash on the server and TLS in transit.
+The client-side MD5 is a legacy quirk. The backend hashed again with unsalted SHA1. Since
+step 4 the Developer grain stores a salted PBKDF2 hash (`PasswordHasher`) of whatever it
+receives, so the new panel sends the plain password and relies on TLS in transit.
 
 ### Developers (admin only, `/developers`)
 

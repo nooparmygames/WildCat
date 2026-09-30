@@ -2,9 +2,10 @@
 
 Survey of `backend/` as copied from the Apadana 2 repository on 2026-09-30 (Orleans 3.4.3,
 net5.0, about 18,000 lines), updated after roadmap step 2 removed PlayFab, CafeBazaar, billing
-and the dead subsystems. Removed code keeps a short note here (see "Removed in step 2" at the
-end) so bug numbers and history stay readable. CLAUDE.md describes the Orleans 10 host from
-step 1. Read this before touching a grain. File names are relative to `backend/`. Line numbers
+and the dead subsystems, and after step 4 fixed the bugs marked "Fixed in step 4" in the bug
+list. Removed code keeps a short note here (see "Removed in step 2" at the end) so bug numbers
+and history stay readable. CLAUDE.md describes the Orleans 10 host from step 1. Read this
+before touching a grain. File names are relative to `backend/`. Line numbers
 refer to the copied files.
 
 Paths and names follow the WildCat rename from roadmap step 3; the table below gives each
@@ -35,14 +36,14 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 |---|---|---|---|
 | Player (Player.cs) | IPlayer, S (Guid string) | PlayerState; 10 s heartbeat timer marks Offline after 20 s silence; produces on its PlayerConnection stream | Account aggregate: create account by device/user+password/email, login variants, email activation and password reset codes, stored ELO score (get/set only), running relay games, pending matches and rejoin, `SendDataToConnection` push to the gateway; forwards key/value calls to PlayerStorage |
 | PlayerCreator | IPlayerCreator, I | stateless worker | allocates a new Guid account id and calls `IPlayer.CreateAccountWith*` |
-| PlayerStorage | IPlayerStorage, S "gameKey_playerId[_file]" | PlayerStorageState | private and public key/value store per player per game; sets global `JsonConvert.DefaultSettings`, which the PlayerInventory JSON round trip depends on |
-| PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | Grain<PlayerInventoryState> but persists a JSON blob through PlayerStorage instead | add/set/buy/consume/remove items, packages, timed unlock chests |
+| PlayerStorage | IPlayerStorage, S "gameKey_playerId[_file]" | PlayerStorageState | private and public key/value store per player per game (it set the global `JsonConvert.DefaultSettings` until step 4) |
+| PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | Grain<PlayerInventoryState> in its own grain storage (a JSON blob in PlayerStorage before step 4) | add/set/buy/consume/remove items, packages, timed unlock chests |
 | PlayerFriendList | IPlayerFriendList, G+S | FriendListState; produces on the FriendEvents stream for (gameKey, playerId); the `[AlwaysInterleave]` on its status setters was ignored by 3.x and removed in the port | invite handshake, friend list with public data and presence fan-out |
 | PlayerChallengeHandler | IPlayerChallengeHandler, G+S | PlayerChallengesState; produces on the ChallengeEvents stream for (gameKey, playerId) | direct 1v1 challenges; on accept creates a RelayServerGame with the default mode |
-| Session | ISession, G | not persisted (WriteState calls commented out) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
-| Developer | IDeveloper, G | DeveloperState | publisher account: SHA1 password hash, developer secret, game registry, `InitializeSession(gameKey)` creates the ticket |
+| Session | ISession, G | SessionState, written on initialize, user binding and end; touches write at most once a minute (not persisted before step 4) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
+| Developer | IDeveloper, G | DeveloperState | publisher account: PBKDF2 password hash (SHA1 before step 4), developer secret, game registry, `InitializeSession(gameKey)` creates the ticket |
 | DeveloperManager | IDeveloperManager, S ("main") | DeveloperManagerState | email to developer key index |
-| DeveloperStorage | IDeveloperStorage, G | DeveloperStorageState | publisher key/value data; writes require the developer secret |
+| DeveloperStorage | IDeveloperStorage, G | DeveloperStorageState | publisher key/value data; writes, removes and the server-to-server read (`GetStringForDeveloper`) require the developer secret |
 | RelayServerMatchMaker | ICustomMatchMaker, G+S (gameKey + mode name) | in-memory, `[Reentrant]`, 3 s timer | the only matchmaker, with time-based criteria relaxation (see flows) |
 | RelayServerGame | IRelayServerGame, G+S (matchId + gameKey) | RelayServerGameState | match membership, status, game and player properties (10 KB cap), relays opaque byte[] to other players through `IPlayer.SendDataToConnection` |
 | GameModeManager | IGameModeManager, G | GameModeManagerState | CRUD for GameMode (min/max players, finish on one disconnect, criteria list) |
@@ -56,24 +57,25 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | CustomIDToAccountIDMap, EmailToAccountIdMap, UserIdToAccountIdMap, NameToAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
 
 Non-grain classes: `EmailSenderUtility` (SMTP, sends only in `MASTER` builds, otherwise prints
-the code), `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All` and grain
-reference converters), `ScriptCompilationUtility` and `WildCat.Scripting.WildCatScriptApi` (the
-script sandbox, `ScriptingAPI.Apadana` before step 3). Step 2 removed `PlayfabManager` (the DI
-singleton wrapping the PlayFab APIs), `HttpClientUtility` and `ApadanaAPI` (an older, unused
-script API).
+the code), `PasswordHasher` (PBKDF2 for player and developer passwords, step 4),
+`ScriptCompilationUtility` and `WildCat.Scripting.WildCatScriptApi` (the script sandbox,
+`ScriptingAPI.Apadana` before step 3). Step 2 removed `PlayfabManager` (the DI singleton wrapping
+the PlayFab APIs), `HttpClientUtility` and `ApadanaAPI` (an older, unused script API). Step 4
+removed `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All` and grain reference
+converters, used only by PlayerStorage).
 
 ## Flows
 
 Session: client sends developer key and game key; `Developer.InitializeSession` checks the game
-belongs to the developer, creates a Guid ticket and initializes `ISession(ticket)`; the gateway
-then calls `Touch()`, which starts the idle clock. Login binds the user id to the session, sets
+belongs to the developer, creates a Guid ticket and initializes `ISession(ticket)`, which starts
+the idle clock; the gateway then calls `Touch()`. Login binds the user id to the session, sets
 presence, starts the heartbeat timer. Every gateway request carries the ticket; for API calls
 and relay traffic alike the gateway calls `TouchAndGetInfo()`, which throws if the session is
-not initialized, refreshes `LastCallTime`, checks the 60 minute idle expiry, and returns the
-developer key, game key and user id that scope everything. Because the touch runs before the
-check, the expiry never fires on this path; an idle session really ends when its unpersisted
-grain is deactivated (bug 9). Logout or disconnect ends the session. Before step 2 these calls
-also counted API calls and relay messages and flushed the counts to `AccountingSystem` for
+not initialized or has been idle for more than 60 minutes (`SessionExpiredException`; the
+expired session clears its state), then refreshes `LastCallTime` and returns the developer key,
+game key and user id that scope everything. Before step 4 the touch ran before the check, so
+the expiry never fired on this path. Logout or disconnect ends the session. Before step 2 these
+calls also counted API calls and relay messages and flushed the counts to `AccountingSystem` for
 billing.
 
 Matchmaking: the gateway calls `ICustomMatchMaker(gameKey, modeName).FindMatch(player, skill,
@@ -100,9 +102,10 @@ generated call line, compiles with Roslyn against the WildCat.Grains and WildCat
 assemblies, and validates that every referenced type is a whitelisted primitive, declared in the
 script, `WildCatScriptApi`, or `GetLeaderBoardResponse`. Scripts get `args` and a `WildCat`
 object (a `WildCatScriptApi`, so scripts write `WildCat.GetPlayerData(...)`) with player data
-get/set, time, leaderboard read/write (count clamped to 20), publisher data, and JSON
-helpers; each call touches the session and is marshalled back onto the grain scheduler. Runs
-are limited to 3 s (but see bugs).
+get/set, time, leaderboard read/write (count clamped to 20), inventory grants
+(`AddInventoryItems`, `SetInventoryItems`, step 4), publisher data, and JSON helpers; each call
+touches the session and is marshalled back onto the grain scheduler. Runs are limited to 3 s
+(but see bugs).
 
 ## External dependencies
 
@@ -117,29 +120,39 @@ and CafeBazaar (receipt verification in IAPVerification). Nothing replaces eithe
 ## Known bugs, ordered by severity
 
 Security:
-1. `FrontEndServer.ProcessUserMessage` relays the raw incoming frame, including the sender's
-   session ticket, to every other player in the match. Any player can hijack an opponent's
-   session. Rebuild the frame without the ticket.
-2. Clients grant themselves inventory items (Add/Set inventory) and set their own leaderboard
-   scores. Item grants and scores must come from server logic (scripts, match results).
+1. Fixed in step 4: `FrontEndServer.ProcessUserMessage` relayed the raw frame, including the
+   sender's session ticket; relayed frames are now rebuilt without the ticket, payload unchanged.
+2. Fixed in step 4: clients granted themselves items (Add/Set inventory) and set their own
+   scores; the gateway now rejects 28, 111 and 113 with error 1, and scripts grant through
+   `WildCatScriptApi.AddInventoryItems`, `SetInventoryItems` and `SetScoreInLeaderBoard`.
 3. Removed in step 2: `Player.LoginWithProvider` never checked the returned PlayFab id and
    trusted other provider names; the whole provider login family is gone.
-4. `GetPublisherDataRequest_S` ignores the developer secret; `DeveloperStorage.Remove*` skip the
-   secret check.
-5. `CreateNewAccountRequest` never checks the session; `CreateEnvironmentRequest`
-   is unauthenticated and compiled in unless `MASTER` is defined (it never is).
-6. Passwords are client-side MD5 then server-side unsalted SHA1. Scripts can read and write any
-   player's private data by id. `TypeNameHandling.All` is set process-wide by PlayerStorage.
+4. Fixed in step 4: `GetPublisherDataRequest_S` ignored the developer secret and
+   `DeveloperStorage.Remove*` skipped it; the gateway now calls `GetStringForDeveloper`, the
+   removes take the secret, and secrets are compared in constant time.
+5. Fixed in step 4: `CreateNewAccountRequest` never checked the session and
+   `CreateEnvironmentRequest` was unauthenticated; account creation now validates the session
+   and the CreateEnvironment handler is gone (the host seeds dev data from `devsconfig.json`).
+6. Scripts can read and write any player's private data by id (open, step 9).
+   Fixed in step 4: passwords (client MD5, then unsalted SHA1) now travel plain over TLS and
+   are stored as salted PBKDF2-SHA512; activation and reset codes use `RandomNumberGenerator`;
+   PlayerStorage no longer sets `TypeNameHandling.All` process wide, and PlayerInventory has
+   its own grain storage (items survive reactivation).
 7. Gateway: no origin check, `AllowedHosts *`, HTTPS redirection commented out, a fixed 2 MB
    reassembly buffer per connection that throws above 2 MB.
+   Fixed in step 4 (limits and origins): `Gateway:MaxMessageBytes` (default 1 MiB) closes the
+   socket with MessageTooBig, and `Gateway:AllowedOrigins` answers an unlisted Origin with 403
+   (empty accepts any). `AllowedHosts *` and no HTTPS redirection stay on purpose: deployments
+   override hosts, TLS terminates at the proxy, and the host honors forwarded headers.
 
 Correctness:
-8. Gateway disconnect cleanup never runs: `PlayerDisconnected` removes the connection entry
-   before `ChangeConnectionStateToLoggedOut` looks it up, so stream subscriptions leak,
-   `playerConnectionMapper` goes stale, and the player grain is never told. An abrupt socket
-   close throws out of `ReceiveMessages` and skips the disconnect callback entirely.
-9. `Session` is never persisted: any deactivation or restart drops every session. (It also
-   lost unflushed accounting counters until step 2 removed them.)
+8. Fixed in step 4: disconnect cleanup never ran (the connection entry was removed before the
+   lookup, and an abrupt close skipped the callback); `ReceiveMessages` now always runs it, and
+   `PlayerDisconnected` unsubscribes the player's streams, clears the player mapping only if it
+   still points at this connection, and tells the player grain with that login's ticket.
+9. Fixed in step 4: `Session` was never persisted, so any deactivation or restart dropped every
+   session; it now writes state on initialize, user binding and end, and touches at most once a
+   minute.
 10. `RelayServerGame`: `gameMode` is not persisted (NullReferenceException after reactivation in
     disconnect and finish paths); a `Select` with side effects is never enumerated; property
     setters and the disconnect-finish path never write state.
@@ -163,10 +176,11 @@ Correctness:
     That worked on 3.4.3 only because call chain reentrancy was on by default there
     (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the
     port restores it with `CallChainReentrancyFilter` until the cycles get targeted
-    `RequestContext.AllowCallChainReentrancy()` calls. `Disconnected` ignores the login ticket, so a
-    stale connection logs out a newer session. `SetEloScore` does not persist. (Step 2 removed
-    `CalculateELO`, which treated a draw as a loss, and `AddPlayerProvider`, which allowed one
-    account per provider name.)
+    `RequestContext.AllowCallChainReentrancy()` calls. `SetEloScore` does not persist. (Step 2
+    removed `CalculateELO`, which treated a draw as a loss, and `AddPlayerProvider`, which
+    allowed one account per provider name.) Fixed in step 4: `Disconnected` ignored the login
+    ticket, so a stale connection logged out a newer session; it now ignores a ticket that is
+    not the current login's.
 17. `PlayerInventory`: rollback copies a reference (no-op); `Unlock()` on the main inventory
     calls itself; `throw ex` loses stacks.
 18. `PlayerFriendList`: `GetSentInvitations` returns received; `InvitationAccepted` calls
@@ -182,7 +196,9 @@ Correctness:
     lists were card-game messages removed in step 2); `LogError(eventId, "text", exception)`
     everywhere loses stack traces; copy-pasted log messages; recursive retries with a 50 ms
     delay on non-idempotent operations; unawaited `OnDataReceived` so messages from one socket
-    run concurrently and out of order.
+    run concurrently and out of order. Fixed in step 4: the email activation and authenticate
+    handlers call `Touch()` inside their try, so a bad ticket gets an error response instead of
+    an escaping exception.
 
 Fixed in step 3 (old -> new; enum values did not change):
 - Files: `iPlayer.cs` -> `IPlayer.cs`, `iLeaderBoard.cs` -> `ILeaderBoard.cs`,
