@@ -62,6 +62,13 @@ namespace WildCat.Interfaces
         Task<int> GetEloScore();
         Task SetEloScore(int score);
         Task GameStarted(IRelayServerGame game);
+
+        /// <summary>
+        /// The match is over for this player: drops it from the running matches. One way, because
+        /// the match sends it while the player may be waiting on that match (Disconnected calls
+        /// PlayerDisconnected), which deadlocked when the match waited for the answer.
+        /// </summary>
+        [OneWay]
         Task GameFinished(IRelayServerGame game);
 
         // Task<IUNetMessageProcessor> GetConnectionInfo();
@@ -72,6 +79,13 @@ namespace WildCat.Interfaces
 
         Task HeartBeat();
         Task SetPresenceStatus(OnlineStatus status);
+
+        /// <summary>
+        /// Publishes an encoded frame to the player's socket. Interleaves with every other call:
+        /// it only publishes to a stream, and matches call it while the player may be waiting on
+        /// the same match (Disconnected, GetPendingMatches), which deadlocked both.
+        /// </summary>
+        [AlwaysInterleave]
         public Task SendDataToConnection(IPlayer player, int channel, byte[] data);
     }
 

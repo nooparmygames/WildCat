@@ -176,8 +176,9 @@ namespace WildCat.Grains
             return Task.FromResult(State.ReceivedInvitations);
         }
 
-        // [AlwaysInterleave] used to sit on this class method. Orleans only honors it on the grain
-        // interface method (3.x ignored it here, 10 rejects it with ORLEANS0001), so it was removed.
+        // Interleaves with every other call ([AlwaysInterleave] on IPlayerFriendList.SetFriendStatus;
+        // the legacy code had it on this class method, which 3.x ignored and 10 rejects), so it
+        // must not write state or change the lists.
         public async Task SetFriendStatus(IPlayer friend, OnlineStatus status)
         {
             var foundFriend = State.Friends.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == friend.GetPrimaryKeyString());
@@ -194,7 +195,8 @@ namespace WildCat.Grains
             });
         }
 
-        // See SetFriendStatus about the removed [AlwaysInterleave].
+        // The legacy code had [AlwaysInterleave] here too; SetFriendStatus interleaving is enough
+        // to break the cycle of two friends changing status at once.
         public async Task SetStatus(string name,OnlineStatus status)
         {
             this.name = name;

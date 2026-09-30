@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Runtime;
 using WildCat.Interfaces;
@@ -12,10 +13,14 @@ namespace WildCat.Grains
     class RelayServerGame : Grain, IRelayServerGame
     {
         private readonly IPersistentState<RelayServerGameState> state;
+        private readonly ILogger<RelayServerGame> logger;
 
-        public RelayServerGame([PersistentState(GrainStateNames.RelayServerGame, GrainStorageNames.Default)] IPersistentState<RelayServerGameState> state)
+        public RelayServerGame(
+            [PersistentState(GrainStateNames.RelayServerGame, GrainStorageNames.Default)] IPersistentState<RelayServerGameState> state,
+            ILogger<RelayServerGame> logger)
         {
             this.state = state;
+            this.logger = logger;
         }
 
         private RelayServerGameState State => state.State;
@@ -54,15 +59,23 @@ namespace WildCat.Grains
         //called by player
         public async Task<bool> PlayerDisconnected(IPlayer player)
         {
-            State.GetPlayerData(player).state = RelayServerPlayerGameStatus.Disconnected;
+            var playerState = State.GetPlayerData(player);
+            // A finished match, or one the player has left, has nothing left to do with the
+            // player. (Both players of a match that ends on a disconnect used to end it in turn,
+            // pushing GameFinishedEvent twice.)
+            if (!IsRunning() || playerState.state == RelayServerPlayerGameStatus.Finished)
+                return true;
+            playerState.state = RelayServerPlayerGameStatus.Disconnected;
             if (Mode.FinishGameWithOneDisconnect)
             {
                 State.State = RelayServerGameStatus.FinishedWithDisconnect;
-                State.Players.Where(x => x.player.GetPrimaryKeyString() != player.GetPrimaryKeyString()).Select(x =>
+                // The match is over for everyone else too. (This was a Select with side effects
+                // that nothing enumerated, so the others stayed InGame.)
+                foreach (var other in State.Players)
                 {
-                    x.state = RelayServerPlayerGameStatus.Finished;
-                    return x;
-                });
+                    if (other != playerState && other.state != RelayServerPlayerGameStatus.Disconnected)
+                        other.state = RelayServerPlayerGameStatus.Finished;
+                }
                 await state.WriteStateAsync();
                 string extended;
                 var primary = this.GetPrimaryKey(out extended);
@@ -94,6 +107,14 @@ namespace WildCat.Grains
         {
             // Look the player up first: someone who is not in the match must not change its state.
             var playerState = State.GetPlayerData(player);
+            var match = this.AsReference<IRelayServerGame>();
+            // Leaving a finished match changes nothing in it (it used to turn FinishedWithDisconnect
+            // into AllFinished and push GameFinishedEvent again).
+            if (!IsRunning())
+            {
+                await player.GameFinished(match);
+                return;
+            }
             State.State = RelayServerGameStatus.SomeFinished;
             playerState.state = RelayServerPlayerGameStatus.Finished;
             bool allFinished = State.Players.All(x => x.state == RelayServerPlayerGameStatus.Finished
@@ -109,7 +130,10 @@ namespace WildCat.Grains
                     new GameFinishedEvent { Game = primary, FinishedWithDisconnect = false }, WildCatMsgType.GameFinishedEvent, WildCatMsgHeader.normal);
                 await SendFinishDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
             }
-            await player.GameFinished(this.AsReference<IRelayServerGame>());
+            // GameFinished is one way, so this only sends it: the player may be waiting on this
+            // match right now (its socket closed and Disconnected called PlayerDisconnected), and
+            // waiting for the player's answer here deadlocked both.
+            await player.GameFinished(match);
         }
 
         public async Task<Dictionary<IPlayer, Tuple<Guid, string>>> StartGame(IPlayer[] players, GameMode gameMode)
@@ -155,6 +179,12 @@ namespace WildCat.Grains
         public async Task PlayerStarted(IPlayer player)
         {
             var playerState = State.GetPlayerData(player);
+            // Joining used to bring a finished match back to SomeJoined, and a player who had
+            // left back InGame although the player's own state no longer listed the match.
+            if (!IsRunning())
+                throw new GameNotRunningException(RelayServerGameState.MatchFinished);
+            if (playerState.state == RelayServerPlayerGameStatus.Finished)
+                throw new GameNotRunningException(RelayServerGameState.LeftMatch);
             playerState.state = RelayServerPlayerGameStatus.InGame;
             playerState.lastMessageTime = DateTime.Now;
             State.State = RelayServerGameStatus.SomeJoined;
@@ -163,9 +193,10 @@ namespace WildCat.Grains
             await state.WriteStateAsync();
             string extended;
             var primary = this.GetPrimaryKey(out extended);
-            var playerName = await player.GetPlayerName();
+            // The account id, like every other match event. (It was the display name, which also
+            // took a call into the player that could close a cycle with the player's Disconnected.)
             var msg = WildCatMessageBase.Create(
-                new PlayerAddedToGameEvent { Game = primary, Player = playerName },
+                new PlayerAddedToGameEvent { Game = primary, Player = player.GetPrimaryKeyString() },
                 WildCatMsgType.GamePlayerAddedEvent, WildCatMsgHeader.normal);
             await SendPlayerAddedDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
         }
@@ -177,6 +208,10 @@ namespace WildCat.Grains
             // A finished match stays finished (rejoining one used to set it back to SomeJoined).
             if (!IsRunning())
                 throw new GameNotRunningException(RelayServerGameState.MatchFinished);
+            // Only a player who dropped out comes back. A player who left used to be set back
+            // InGame although the player's own state no longer listed the match.
+            if (playerState.state != RelayServerPlayerGameStatus.Disconnected)
+                throw new GameNotRunningException(RelayServerGameState.NotDroppedOut);
             playerState.state = RelayServerPlayerGameStatus.InGame;
             playerState.lastMessageTime = DateTime.Now;
             if (State.State != RelayServerGameStatus.SomeFinished)
@@ -215,6 +250,10 @@ namespace WildCat.Grains
         {
             if (!IsItValidToSendData())
                 return Task.CompletedTask;
+            // Only a player in the match relays into it: not an outsider who knows the match id,
+            // nor a player who left, dropped out or never joined.
+            if (State.FindPlayerData(player)?.state != RelayServerPlayerGameStatus.InGame)
+                return Task.CompletedTask;
             return SendDataToAllPlayersExceptOne(player, channelId, data);
         }
 
@@ -229,15 +268,33 @@ namespace WildCat.Grains
 
         }
 
-        private static async Task SendDataToPlayers(int channelId, byte[] data, IEnumerable<RelayServerGamePlayerState> players, bool sendToFinished)
+        /// <summary>
+        /// Pushes <paramref name="data"/> to the players who are in the match (and to those who
+        /// finished it when <paramref name="sendToFinished"/>). Waits for every push, so pushes of
+        /// one match to one player keep their order. A push that fails is logged and reaches only
+        /// that player: the change that caused it still completes. (A failed publish, such as a
+        /// full stream queue, used to fail the whole call halfway.)
+        /// </summary>
+        private async Task SendDataToPlayers(int channelId, byte[] data, IEnumerable<RelayServerGamePlayerState> players, bool sendToFinished)
         {
-            List<Task> tasks = new List<Task>();
+            var sends = new List<(IPlayer Player, Task Send)>();
             foreach (var player in players)
             {
                 if ((player.state == RelayServerPlayerGameStatus.InGame || (player.state == RelayServerPlayerGameStatus.Finished && sendToFinished)))
-                    tasks.Add(player.player.SendDataToConnection(player.player, channelId, data));
+                    sends.Add((player.player, player.player.SendDataToConnection(player.player, channelId, data)));
             }
-            await Task.WhenAll(tasks);
+            foreach (var (player, send) in sends)
+            {
+                try
+                {
+                    await send;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not push to player {PlayerId} in match {MatchId}",
+                        player.GetPrimaryKeyString(), this.GetPrimaryKey(out string _));
+                }
+            }
         }
 
         private Task SendFinishDataToAllPlayers(int channelId, byte[] data)

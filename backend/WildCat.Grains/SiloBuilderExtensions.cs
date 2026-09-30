@@ -81,11 +81,15 @@ namespace WildCat.Grains
         /// Registers the grain storage providers ("Default", "blob", "PubSubStore") and the
         /// reminder service for the selected provider: memory for Memory, ADO.NET on PostgreSQL
         /// for PostgreSQL. The ADO.NET providers load the Npgsql factory by its invariant name
-        /// themselves, so nothing has to be registered with DbProviderFactories.
+        /// themselves, so nothing has to be registered with DbProviderFactories. Both store state
+        /// as JSON written with <see cref="WriteDefaultValues"/>.
         /// </summary>
         public static ISiloBuilder AddWildCatStorage(this ISiloBuilder builder, OrleansHostingOptions options, string connectionString)
         {
             Validate(options);
+            // The memory storage serializes state with the same JSON settings as the ADO.NET
+            // storage (it used to be configured for PostgreSQL only), so Memory mode needs it too.
+            builder.Services.Configure<OrleansJsonSerializerOptions>(WriteDefaultValues);
             switch (options.Provider)
             {
                 case OrleansProvider.Memory:
@@ -105,7 +109,6 @@ namespace WildCat.Grains
                     builder.AddAdoNetGrainStorageAsDefault(Storage);
                     builder.AddAdoNetGrainStorage(BlobStorageName, Storage);
                     builder.AddAdoNetGrainStorage(PubSubStorageName, Storage);
-                    builder.Services.Configure<OrleansJsonSerializerOptions>(WriteDefaultValues);
                     builder.UseAdoNetReminderService(o =>
                     {
                         o.Invariant = OrleansHostingOptions.PostgreSqlInvariant;
@@ -156,9 +159,10 @@ namespace WildCat.Grains
         }
 
         /// <summary>
-        /// The ADO.NET grain storage writes state as JSON with the Orleans Newtonsoft settings, which
-        /// leave out properties that hold their type's default value (false, 0, null). A state class
-        /// whose constructor sets another value then gets that value back on the next activation:
+        /// The ADO.NET and memory grain storages write state as JSON with the Orleans Newtonsoft
+        /// settings, which leave out properties that hold their type's default value (false, 0,
+        /// null). A state class whose constructor sets another value then gets that value back on
+        /// the next activation:
         /// a leaderboard created with AcceptBetterScoresOnly = false, or a game mode with
         /// FinishGameWithOneDisconnect = false, came back as true. Writing every value makes the
         /// stored JSON round-trip exactly.

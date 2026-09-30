@@ -174,13 +174,15 @@ namespace WildCat.Tests
             foreach (var answer in answers)
                 Assert.Equal(new[] { alice.Id, bob.Id }.OrderBy(x => x), answer.players.OrderBy(x => x));
 
-            // FindMatch joined both players, and each saw at least its own GamePlayerAddedEvent.
+            // FindMatch joined both players, and each saw at least its own GamePlayerAddedEvent,
+            // which names the player by account id like the other match events (it used to carry
+            // the display name).
             var match = Match(gameKey, matchId);
             Assert.Equal(RelayServerGameStatus.AllJoined, await match.GetGameState());
-            foreach (var (player, name) in new[] { (alice, "Alice"), (bob, "Bob") })
+            foreach (var player in new[] { alice, bob })
             {
                 var added = await player.Client.WaitForAsync(m => m.msgType == WildCatMsgType.GamePlayerAddedEvent
-                    && m.GetPayload<PlayerAddedToGameEvent>().Player == name, $"{name}'s GamePlayerAddedEvent");
+                    && m.GetPayload<PlayerAddedToGameEvent>().Player == player.Id, $"{player.Id}'s GamePlayerAddedEvent");
                 Assert.Equal(matchId, added.GetPayload<PlayerAddedToGameEvent>().Game);
                 Assert.Equal(RelayServerPlayerGameStatus.InGame, await match.GetPlayerStatus(GrainFactory.GetGrain<IPlayer>(player.Id)));
             }
@@ -314,10 +316,11 @@ namespace WildCat.Tests
             Assert.Equal("hp", playerChanged.key);
             Assert.Equal(new byte[] { 9 }, playerChanged.value);
 
-            // Values share 10 KB; two bytes are used, so 10237 more fit and 10238 do not.
-            var tooBig = await SetProperty(bob, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 2]);
+            // Keys and values share 10 KB. "round", "hp" and their values use 9 bytes and the key
+            // "map" 3 more, so a 10227 byte value fits and 10228 bytes do not.
+            var tooBig = await SetProperty(bob, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 12]);
             AssertRefused(tooBig, SetMatchPropertyHandler.TooLarge);
-            Assert.True((await SetProperty(bob, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 3])).isSuccesful);
+            Assert.True((await SetProperty(bob, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 13])).isSuccesful);
             AssertRefused(await SetProperty(bob, matchId, true, "extra", new byte[1]), SetMatchPropertyHandler.TooLarge);
             // Replacing a value counts the new size instead of the old one.
             Assert.True((await SetProperty(bob, matchId, false, "map", new byte[] { 7 })).isSuccesful);
@@ -421,8 +424,9 @@ namespace WildCat.Tests
             Assert.Equal(new byte[] { 3 }, state.GameProperties["round"]);
             Assert.Equal(new byte[] { 4 }, state.PlayerProperties[alice.Id]["hp"]);
 
-            // The property limit still counts what was stored before the deactivations.
-            AssertRefused(await SetProperty(alice, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 2]),
+            // The property limit still counts what was stored before the deactivations: "map" and
+            // this value would fit on their own, but not with "round", "hp" and their values.
+            AssertRefused(await SetProperty(alice, matchId, false, "map", new byte[RelayServerGameState.MaxPropertyBytes - 4]),
                 SetMatchPropertyHandler.TooLarge);
             Assert.True((await LeaveGame(alice, matchId)).isSuccesful);
         }

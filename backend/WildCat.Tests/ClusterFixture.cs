@@ -9,7 +9,8 @@ namespace WildCat.Tests
     /// <summary>
     /// One in-process silo plus client shared by every test class in <see cref="ClusterCollection"/>.
     /// Mirrors the silo configuration in WildCat.Host/Program.cs with the Memory provider, except
-    /// that the test cluster brings its own membership and emails go to <see cref="Emails"/>.
+    /// that the test cluster brings its own membership, emails go to <see cref="Emails"/>, and
+    /// <see cref="FailingPushFilter"/> can make pushes to chosen players fail.
     /// </summary>
     public class ClusterFixture : IAsyncLifetime
     {
@@ -26,6 +27,7 @@ namespace WildCat.Tests
                 silo.AddWildCatStorage(new OrleansHostingOptions { Provider = OrleansProvider.Memory }, connectionString: null);
                 silo.AddGameStreams();
                 silo.AddLegacyCallChainReentrancy();
+                silo.AddIncomingGrainCallFilter<FailingPushFilter>();
                 silo.Services.AddSingleton<IEmailSender>(Emails);
             });
             builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));

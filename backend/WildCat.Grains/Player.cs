@@ -121,11 +121,25 @@ namespace WildCat.Grains
             // socket's close), that ticket is stale and must not log out the newer login.
             if (sentLoginTimeTicket != State.LoginTicket)
                 return;
-            for (int i = State.RunningGames.Count - 1; i >= 0; i--)
+            // A match that fails must not stop the logout (the first failure used to skip it and
+            // every match after it).
+            foreach (var match in State.RunningGames.AsEnumerable().Reverse().ToList())
             {
-                bool result = await State.RunningGames[i].PlayerDisconnected(this.AsReference<IPlayer>());
-                if (result)
-                    State.RunningGames.RemoveAt(i);
+                try
+                {
+                    if (await match.PlayerDisconnected(this.AsReference<IPlayer>()))
+                        State.RunningGames.Remove(match);
+                }
+                catch (GameNotRunningException)
+                {
+                    // The match does not know this player: a stale entry.
+                    State.RunningGames.Remove(match);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not tell match {MatchId} that player {PlayerId} disconnected",
+                        match.GetPrimaryKey(out string _), this.GetPrimaryKeyString());
+                }
             }
             await Logout();
             await state.WriteStateAsync();

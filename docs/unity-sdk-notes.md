@@ -163,3 +163,8 @@ Left for the server work (the SDK tests avoid them and say why):
 - GetPlayerChallenges (161) puts received challenges in the sent list (known, in wire-protocol.md).
 - GamePlayerAddedEvent (9) carries the player's display name in `Player`, not the account id,
   unlike the other match events.
+
+Fixed after the step 6 review: player properties are stored (fixed in step 6b; the server tests
+now set properties for two players and check both bags survive a deactivation and a rejoin),
+and GamePlayerAddedEvent carries the account id. The SDK's `MatchesClient.PlayerJoined` comment
+and the note in the SDK's `MatchTests` still describe the old behavior.

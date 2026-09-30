@@ -231,12 +231,12 @@ Matchmaking, match state and relay (handlers since step 6b)
 | Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
 | 15/16 | FindMatch | {matchType, uint skill, uint waitTime} / {Guid gameId, string, string[] players} | `FindMatchHandler`: `ICustomMatchMaker(gameKey, matchType).FindMatch` (a mode the game does not define plays by the default two player rules), then `PlayerStarted` joins the player; the wait is capped at 20 s; code 1 "Match not found" when it runs out and for an empty mode name. Other requests and the relay of the connection go on while it waits |
-| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `SetMatchPropertyHandler`, `IRelayServerGame.SetPlayer/GameProperty`; code 1 when the match's values would reach 10240 bytes in total, and for a match the player is not in |
-| 133/134 | RejoinMatch | {Guid} / empty | `RejoinMatchHandler`, `IRelayServerGame.PlayerRejoined`; code 1 for a match the player is not in or one that has finished |
+| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `SetMatchPropertyHandler`, `IRelayServerGame.SetPlayer/GameProperty`; code 1 when the match's keys and values would reach 10240 bytes in total or the key is longer than 128 characters, and for a match the player is not in |
+| 133/134 | RejoinMatch | {Guid} / empty | `RejoinMatchHandler`, `IRelayServerGame.PlayerRejoined`; code 1 for a match the player is not in or one that has finished, and for a player who did not drop out of it |
 | 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `GetPlayerPendingMatchesHandler`, `IPlayer.GetPendingMatches` |
 | 13/14 | LeaveGame | header game / empty | `LeaveGameHandler`, `IRelayServerGame.PlayerFinished`; code 1 without a game target, with one that is not a Guid, and for a match the player is not in |
 | >1023 | game messages | frame with HasGameTarget, relayed without the ticket, in order | dispatcher relay worker, `SendToAllBut(player, 0, frame)` (retried up to 5 times before step 6) |
-| 9, 10 | GamePlayerAddedEvent {Player (the name), Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
+| 9, 10 | GamePlayerAddedEvent {Player (the account id; the display name before the step 6 review), Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
 | 125..128 | GamePlayerRemovedEvent, GamePlayerRejoinedEvent, MatchRejoinSyncEvent {Game, gameProps, playerProps}, MatchPropertyChangedEvent {Game, Player?, key, bytes} (S) | | from RelayServerGame |
 
 Match events are built by RelayServerGame and reach the client through the player's

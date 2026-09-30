@@ -30,11 +30,12 @@ grain "Default". Until the step 5 review the grains derived from `Grain<T>`, whi
 class under the state name "state"; the ADO.NET provider keys rows by service id, grain key and
 state name only, so grain classes sharing a key (Developer and DeveloperStorage, PlayerFriendList
 and PlayerChallengeHandler, a leaderboard and a chunk of another) overwrote each other in
-PostgreSQL. `GrainStateNameTests` keeps the names unique. The ADO.NET storage writes JSON with
-every value, defaults included (`SiloBuilderExtensions.WriteDefaultValues`); the Orleans default
-left out false and 0, so values a constructor sets otherwise (a game mode's
-`FinishGameWithOneDisconnect`, a leaderboard's `AcceptBetterScoresOnly`) came back wrong after a
-reactivation. `WildCat:Orleans:Provider` decides what backs
+PostgreSQL. `GrainStateNameTests` keeps the names unique. The ADO.NET and memory storages write
+JSON with every value, defaults included (`SiloBuilderExtensions.WriteDefaultValues`, applied to
+the memory storage too since the step 6 review); the Orleans default left out false and 0, so
+values a constructor sets otherwise (a game mode's `FinishGameWithOneDisconnect`, a
+leaderboard's `AcceptBetterScoresOnly`) came back wrong after a reactivation.
+`WildCat:Orleans:Provider` decides what backs
 the storage names "Default", "blob" and "PubSubStore": memory storage for `Memory` (the default,
 also used by the tests), or ADO.NET storage in PostgreSQL for `PostgreSQL`, which also puts
 clustering and reminders in that database (schema scripts in `deploy/postgres`). In PostgreSQL
@@ -53,7 +54,7 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | PlayerCreator | IPlayerCreator, I | stateless worker | allocates a new Guid account id and calls `IPlayer.CreateAccountWith*` |
 | PlayerStorage | IPlayerStorage, S "gameKey_playerId[_file]" | PlayerStorageState | private and public key/value store per player per game (it set the global `JsonConvert.DefaultSettings` until step 4) |
 | PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | PlayerInventoryState in its own grain storage (a JSON blob in PlayerStorage before step 4) | add/set/buy/consume/remove items, packages, timed unlock chests |
-| PlayerFriendList | IPlayerFriendList, G+S | FriendListState; produces on the FriendEvents stream for (gameKey, playerId); the `[AlwaysInterleave]` on its status setters was ignored by 3.x and removed in the port | invite handshake, friend list with public data and presence fan-out |
+| PlayerFriendList | IPlayerFriendList, G+S | FriendListState; produces on the FriendEvents stream for (gameKey, playerId); the `[AlwaysInterleave]` on its status setters was ignored by 3.x and removed in the port, and since the step 6 review sits on `IPlayerFriendList.SetFriendStatus` | invite handshake, friend list with public data and presence fan-out |
 | PlayerChallengeHandler | IPlayerChallengeHandler, G+S | PlayerChallengesState; produces on the ChallengeEvents stream for (gameKey, playerId) | direct 1v1 challenges; on accept creates a RelayServerGame with the default mode |
 | Session | ISession, G | SessionState, written on initialize, user binding and end; touches write at most once a minute (not persisted before step 4; kept across restarts in PostgreSQL mode) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
 | Developer | IDeveloper, G | DeveloperState | publisher account: PBKDF2 password hash (SHA1 before step 4), developer secret, game registry, `InitializeSession(gameKey)` creates the ticket |
@@ -108,7 +109,8 @@ with the match id and players. It caps the wait at 20 s so the matchmaker answer
 30 s grain call timeout. Challenges bypass the matchmaker and create the game directly.
 
 Relay: the backend never parses game payloads. `SendToAllBut(player, channel, bytes)` forwards
-to every other InGame player via `IPlayer.SendDataToConnection`, which publishes a
+a frame from an InGame player (anything else is dropped since the step 6 review) to every other
+InGame player via `IPlayer.SendDataToConnection`, which publishes a
 `PlayerConnectionMessage` on the player's PlayerConnection stream; the gateway node
 holding the socket is subscribed and writes the bytes out. Channel 0 carries system events
 (player added, removed, rejoined, rejoin sync, property changed, game finished). Statuses:
@@ -218,6 +220,19 @@ Correctness:
     player in this match.") for a player who is not in the match, and `PlayerFinished` looks the
     player up before changing the match state; setting a match property needs a player of the
     match; `PlayerRejoined` refuses a finished match instead of setting it back to SomeJoined.
+    Fixed after step 6 review: the side effect of that `Select` is a loop now, so a disconnect
+    that ends the match marks every other player Finished; a finished match stays finished
+    (`PlayerStarted` refuses it, `PlayerFinished` only tells the player to drop it, and
+    `PlayerDisconnected` changes nothing and returns true); only a Disconnected player can
+    rejoin and a player who left cannot start again (both used to put a player back InGame
+    whose own state no longer listed the match); only an InGame player can relay (an outsider
+    who knew the match id, or a player who had left, could); property keys count against the
+    10 KB limit and are at most 128 characters (keys did not count, so a few calls with 1 MB
+    keys stored, broadcast and resent megabytes); a push that fails is logged and reaches that
+    player only instead of failing `PlayerFinished`, `PlayerStarted` or `PlayerDisconnected`
+    halfway; GamePlayerAddedEvent (9) carries the account id instead of the display name; and
+    the memory storage writes default values too (a mode with `FinishGameWithOneDisconnect`
+    false came back true after a deactivation in Memory mode).
 11. `LeaderBoard.CreateList` indexes an empty list (any board with chunks fails to activate);
     partial chunks are never persisted; chunks are never cleared.
 12. Removed in step 2: `DeveloperInvoiceCollection.GenerateInvoicesIfNeeded` looped forever;
@@ -260,6 +275,13 @@ Correctness:
     ticket, so a stale connection logged out a newer session; it now ignores a ticket that is
     not the current login's. A login on a new session also ends the player's previous session,
     whose ticket used to keep acting as the player until it idled out.
+    Fixed after step 6 review, the cycles that two independent calls close, which the filter
+    cannot help: `IPlayer.SendDataToConnection` is `[AlwaysInterleave]` (it only publishes), so
+    both players of a match disconnecting at once, or `GetPendingMatches` while the match
+    relays to the player, no longer deadlock until the 30 s timeout; `IPlayer.GameFinished` is
+    `[OneWay]`, so `PlayerFinished` no longer waits on a player whose `Disconnected` waits on
+    the match; `PlayerStarted` no longer asks the player for its name. `Disconnected` goes on to
+    the logout when a match fails (it drops a match that does not know the player).
 17. `PlayerInventory`: rollback copies a reference (no-op); `Unlock()` on the main inventory
     calls itself; `throw ex` loses stacks.
 18. `PlayerFriendList`: `GetSentInvitations` returns received; `InvitationAccepted` calls
@@ -280,6 +302,9 @@ Correctness:
     challenge back); a new challenge to the same player replaces the pending one; sent entries
     keep their data; request times are UTC. Two simultaneous challenges still deadlock until
     the call timeout.
+    Fixed after step 6 review: `IPlayerFriendList.SetFriendStatus` is `[AlwaysInterleave]`, so
+    `GetFriends` while a friend's status changes (list A to player B to list B to list A) and
+    two friends changing status at once no longer deadlock.
 19. Removed in step 2: `PlayfabManager` had an endless retry loop ending in
     `Environment.Exit(1)`, a wrong ticket check and an unsafe HashSet; PlayFab is gone.
 20. `NameToAccountIdMap.SetId` is never called, so name lookups always return null.

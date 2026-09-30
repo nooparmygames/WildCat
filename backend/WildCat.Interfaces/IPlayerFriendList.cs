@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using Orleans;
+using Orleans.Concurrency;
 
 namespace WildCat.Interfaces
 {
@@ -20,6 +21,14 @@ namespace WildCat.Interfaces
         Task<List<FriendListInvitation>> GetReceivedInvitations();
         Task SetStatus(string name, OnlineStatus status);
         Task<OnlineStatus> GetStatus();
+
+        /// <summary>
+        /// A friend's status changed. Interleaves with every other call: it only updates the
+        /// friend's entry in memory and pushes the change, and it arrives while this list may be
+        /// waiting on that friend (GetFriends asks the friend's player for public data, SetStatus
+        /// tells the friend's list), which deadlocked both.
+        /// </summary>
+        [AlwaysInterleave]
         Task SetFriendStatus(IPlayer friend, OnlineStatus status);
     }
 
