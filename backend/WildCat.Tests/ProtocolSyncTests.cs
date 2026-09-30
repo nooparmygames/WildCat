@@ -57,7 +57,7 @@ namespace WildCat.Tests
         /// <summary>Text without a BOM and with LF line ends, so a Windows checkout compares equal.</summary>
         private static string Normalized(string path)
         {
-            return File.ReadAllText(path, Encoding.UTF8).TrimStart('﻿').Replace("\r\n", "\n");
+            return File.ReadAllText(path, Encoding.UTF8).TrimStart('\uFEFF').Replace("\r\n", "\n");
         }
 
         /// <summary>The GUID the script writes into the .meta of a copied file or folder.</summary>

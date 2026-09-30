@@ -30,7 +30,7 @@ namespace WildCat.Tests
             if (type == typeof(ScriptEventExecutionRequestMessage))
             {
                 var request = new ScriptEventExecutionRequestMessage { eventName = "on-sample" };
-                request.SetParametersAndTypes(true, (byte)7, (short)-8, 9, -10L, 1.5f, -2.25, "text é中", new byte[] { 1, 2 });
+                request.SetParametersAndTypes(true, (byte)7, (short)-8, 9, -10L, 1.5f, -2.25, "text \u00E9\u4E2D", new byte[] { 1, 2 });
                 return request;
             }
             if (type == typeof(ScriptEventExecutionResponseMessage))
@@ -41,7 +41,7 @@ namespace WildCat.Tests
         public static object Create(Type type, string path)
         {
             if (type == typeof(string))
-                return $"{path} é中\U0001F600";
+                return $"{path} \u00E9\u4E2D\U0001F600";
             if (type == typeof(bool))
                 return true;
             if (type == typeof(byte))

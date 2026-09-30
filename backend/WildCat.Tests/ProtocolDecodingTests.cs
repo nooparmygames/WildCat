@@ -104,7 +104,7 @@ namespace WildCat.Tests
         public void InvalidUtf8BecomesReplacementCharacters()
         {
             byte[] payload = { 0x02, 0xC3, 0x28 };
-            Assert.Equal("�(", WireCodec.DecodePayload<StringMessage>(payload).value);
+            Assert.Equal("\uFFFD(", WireCodec.DecodePayload<StringMessage>(payload).value);
         }
 
         [Fact]

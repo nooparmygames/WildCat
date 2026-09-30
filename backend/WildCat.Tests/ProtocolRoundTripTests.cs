@@ -111,7 +111,7 @@ namespace WildCat.Tests
                 ParamType.LongParam => long.MaxValue,
                 ParamType.FloatParam => float.Epsilon,
                 ParamType.DoubleParam => Math.PI,
-                ParamType.StringParam => "résultat",
+                ParamType.StringParam => "r\u00E9sultat",
                 _ => new byte[] { 9, 8, 7 },
             };
             var response = new ScriptEventExecutionResponseMessage { hasReturnValue = true, returnType = type, returnValue = value };
