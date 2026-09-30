@@ -51,7 +51,6 @@ namespace WildCat.Interfaces
 
         Task<Tuple<bool, string>> GetPlayerString(string key);
         Task<Tuple<bool, string>> GetPlayerPublicString(string key);
-        Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPlayerPublicStrings(string[] keys);
         Task<Tuple<bool, byte[]>> GetPlayerBinary(string key);
         Task<Tuple<bool, byte[]>> GetPlayerPublicBinary(string key);
         Task SetPlayerString(string key, string data);
@@ -61,9 +60,8 @@ namespace WildCat.Interfaces
 
         /// <summary>
         /// The player's online status and the public values it has for <paramref name="keys"/> in
-        /// the game <paramref name="gameKey"/>. Callers that act for a game (the friend list) use
-        /// this one: <see cref="GetPlayerPublicStrings(string[])"/> reads the game the player last
-        /// logged in to, which can be another developer's.
+        /// the game <paramref name="gameKey"/>. There is deliberately no variant without a game: the
+        /// game the player last logged in to can belong to another developer.
         /// </summary>
         [AlwaysInterleave]
         Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPublicStringsInGame(Guid gameKey, string[] keys);

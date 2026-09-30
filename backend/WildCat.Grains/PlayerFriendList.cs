@@ -111,7 +111,7 @@ namespace WildCat.Grains
             Dictionary<string, Task<Tuple<OnlineStatus, Dictionary<string, string>>>> tasks = new Dictionary<string, Task<Tuple<OnlineStatus, Dictionary<string, string>>>>();
             foreach (var friend in State.Friends)
             {
-                tasks.Add(friend.Player.GetPrimaryKeyString(), friend.Player.GetPlayerPublicStrings(dataKeys));
+                tasks.Add(friend.Player.GetPrimaryKeyString(), friend.Player.GetPublicStringsInGame(gameKey, dataKeys));
             }
             await Task.WhenAll(tasks.Values);
             foreach (var t in tasks)

@@ -552,14 +552,6 @@ namespace WildCat.Grains
                     this.GetPrimaryKeyString())).GetPlayerPublicString(key);
         }
 
-        public async Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPlayerPublicStrings(string[] keys)
-        {
-            var data = await GrainFactory
-                .GetGrain<IPlayerStorage>(ResourcesUtility.GetPlayPlayerStorageKey(State.lastGameKey.ToString(),
-                    this.GetPrimaryKeyString())).GetPlayerPublicStrings(keys);
-            return Tuple.Create(State.OnlineStatus, data);
-        }
-
         public async Task<Tuple<OnlineStatus, Dictionary<string, string>>> GetPublicStringsInGame(Guid gameKey, string[] keys)
         {
             var status = State.OnlineStatus;

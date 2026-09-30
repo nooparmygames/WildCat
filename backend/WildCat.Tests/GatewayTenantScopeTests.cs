@@ -162,8 +162,6 @@ namespace WildCat.Tests
             Assert.Equal(WildCat.Interfaces.OnlineStatus.Online, inGame1.Item1);
             Assert.Equal("1", inGame1.Item2["level"]);
             Assert.Equal("2", (await player.GetPublicStringsInGame(game2, new[] { "level" })).Item2["level"]);
-            // The old overload follows the last login, game 2 here.
-            Assert.Equal("2", (await player.GetPlayerPublicStrings(new[] { "level" })).Item2["level"]);
         }
     }
 }
