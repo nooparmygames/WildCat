@@ -50,190 +50,135 @@ namespace RealtimeServer
     /// </summary>
     public enum ApadanaMsgType : short
     {
-        CreateAccountRequest,
-        CreateAccountResponse,
-        LoginRequest,
-        LoginResponse,
-        LogoutRequest,
-        LogoutResponse,
-        InitializeSessionRequest,
-        InitializeSessionResponse,
+        InitializeSessionRequest = 6,
+        InitializeSessionResponse = 7,
 
-        ErrorMsg,
+        ErrorMsg = 8,
 
-        GamePlayerAddedEvent,
-        GameFinishedEvent,
-        JoinGameRequest,
-        JoinGameResponse,
-        LeaveGameRequest,
-        LeaveGameResponse,
+        GamePlayerAddedEvent = 9,
+        GameFinishedEvent = 10,
+        LeaveGameRequest = 13,
+        LeaveGameResponse = 14,
 
-        FindMatchRequest,
-        FindMatchResponse,
+        FindMatchRequest = 15,
+        FindMatchResponse = 16,
 
-        StartChallengeRequest,
-        StartChallengeResponse,
-        StartChallengeRequestedEvent,
-        AcceptChallengeRequest,
-        AcceptChallengeResponse,
-        ChallengeAcceptedEvent,
-        DenyChallengeRequest,
-        DenyChallengeResponse,
-        ChallengeDeniedEvent,
+        StartChallengeRequest = 17,
+        StartChallengeResponse = 18,
+        StartChallengeRequestedEvent = 19,
+        AcceptChallengeRequest = 20,
+        AcceptChallengeResponse = 21,
+        ChallengeAcceptedEvent = 22,
+        DenyChallengeRequest = 23,
+        DenyChallengeResponse = 24,
+        ChallengeDeniedEvent = 25,
 
-        GetLeaderboardRequest,
-        GetLeaderboardResponse,
-        SetLeaderboardRequest,
-        SetLeaderboardResponse,
+        GetLeaderboardRequest = 26,
+        GetLeaderboardResponse = 27,
+        SetLeaderboardRequest = 28,
+        SetLeaderboardResponse = 29,
 
-        GetCloudDataRequest,
-        GetCloudDataResponse,
-        SetCloudDataRequest,
-        SetCloudDataResponse,
+        GetCloudDataRequest = 30,
+        GetCloudDataResponse = 31,
+        SetCloudDataRequest = 32,
+        SetCloudDataResponse = 33,
         //GetCloudBinaryDataRequest,
         //GetCloudBinaryDataResponse,
         //SetCloudBinaryDataRequest,
         //SetCloudBinaryDataResponse,
 
-        GetPublisherDataRequest,
-        GetPublisherDataResponse,
+        GetPublisherDataRequest = 34,
+        GetPublisherDataResponse = 35,
 
-        GetNameRequest,
-        GetNameResponse,
-        SetNameRequest,
-        SetNameResponse,
+        GetNameRequest = 36,
+        GetNameResponse = 37,
+        SetNameRequest = 38,
+        SetNameResponse = 39,
 
-        VerifyStoreReceiptRequest,
-        VerifyStoreReceiptResponse,
+        VerifyStoreReceiptRequest = 40,
+        VerifyStoreReceiptResponse = 41,
 
-        GetServerTimeRequest,
-        GetServerTimeResponse,
+        GetServerTimeRequest = 42,
+        GetServerTimeResponse = 43,
 
         #region DeveloperMessages
-        CreateEnvironmentRequest,
-        CreateEnvironmentResponse,
-        GetDeveloperRequest, //begin Not used 
-        GetDeveloperResponse,
-        AddGameRequest,
-        AddGameRespnse,
-        RemoveGameRequest,
-        RemoveGameResponse,
-        GetGamesRequest,
-        GetGamesRespnse,
-        AddLeaderBoardRequest,
-        AddLeaderBoardResponse,
-        RemoveLeaderBoardRequest,
-        RemoveLeaderBoardResponse,
-        GetLeaderBoardsRequest,
-        GetLeaderBoardsResponse,
-        AddCafePackageDataRequest,
-        AddCafePackageDataResponse, //end of not used
+        CreateEnvironmentRequest = 44,
+        CreateEnvironmentResponse = 45,
 
-        SetPublisherDataRequest_S,
-        SetPublisherDataResponse_S,
-        GetPublisherDataRequest_S,
-        GetPublisherDataResponse_S,
+        SetPublisherDataRequest_S = 62,
+        SetPublisherDataResponse_S = 63,
+        GetPublisherDataRequest_S = 64,
+        GetPublisherDataResponse_S = 65,
         #endregion
 
-        ExecuteScriptEventRequest,
-        ExecuteScriptEventResponse,
-        GetPlayerNameRequest,
-        GetPlayerNameResponse,
-        GetPlayerPublicCloudDataRequest,
-        GetPlayerPublicCloudDataResponse,
-        SetPublicCloudDataRequest,
-        SetPublicCloudDataResponse,
-        GetPublicCloudDataRequest,
-        GetPublicCloudDataResponse,
-        AuthenticateRequest,
-        AuthenticateResponse,
-        CreateNewAccountRequest,
-        CreateNewAccountResponse,
-        EmailActivationRequest,
-        EmailActivationResponse,
-        AddAuthMechanismToAccountRequest,
-        AddAuthMechanismToAccountResponse,
-        RecoverPasswordRequest,
-        RecoverPasswordResponse,
-        ResendActivationRequest,
-        ResendActivaitonResponse,
+        ExecuteScriptEventRequest = 66,
+        ExecuteScriptEventResponse = 67,
+        GetPlayerNameRequest = 68,
+        GetPlayerNameResponse = 69,
+        GetPlayerPublicCloudDataRequest = 70,
+        GetPlayerPublicCloudDataResponse = 71,
+        SetPublicCloudDataRequest = 72,
+        SetPublicCloudDataResponse = 73,
+        GetPublicCloudDataRequest = 74,
+        GetPublicCloudDataResponse = 75,
+        AuthenticateRequest = 76,
+        AuthenticateResponse = 77,
+        CreateNewAccountRequest = 78,
+        CreateNewAccountResponse = 79,
+        EmailActivationRequest = 80,
+        EmailActivationResponse = 81,
+        AddAuthMechanismToAccountRequest = 82,
+        AddAuthMechanismToAccountResponse = 83,
+        RecoverPasswordRequest = 84,
+        RecoverPasswordResponse = 85,
+        ResendActivationRequest = 86,
+        ResendActivaitonResponse = 87,
 
-        GetFriendsRequest,
-        GetFriendsResponse,
-        InviteFriendRequest,
-        InviteFriendResponse,
-        FriendshipInvitationEvent,
-        AcceptFriendRequest,
-        AcceptFriendResponse,
-        FriendshipAcceptedEvent,
-        DenyFriendRequest,
-        DenyFriendResponse,
-        FriendshipDeniedEvent,
-        FriendStatusChangedEvent,
-        HeartBeatRequest,
-        HeartBeatResponse,
+        GetFriendsRequest = 88,
+        GetFriendsResponse = 89,
+        InviteFriendRequest = 90,
+        InviteFriendResponse = 91,
+        FriendshipInvitationEvent = 92,
+        AcceptFriendRequest = 93,
+        AcceptFriendResponse = 94,
+        FriendshipAcceptedEvent = 95,
+        DenyFriendRequest = 96,
+        DenyFriendResponse = 97,
+        FriendshipDeniedEvent = 98,
+        FriendStatusChangedEvent = 99,
+        HeartBeatRequest = 100,
+        HeartBeatResponse = 101,
 
-        CreateGuildRequest,
-        CreateGuildResponse,
-        GuildOperationRequest,
-        GuildOperationResponse,
-        GuidEvent,
-        GetDefinedItemsRequest,
-        GetDefinedItemsResponse,
-        GetInventoryRequest,
-        GetInventoryResponse,
-        AddItemToInventoryRequest,
-        AddItemToInventoryResponse,
-        SetItemToInventoryRequest,
-        SetItemToInventoryResponse,
-        RemoveInventoryItemRequest,
-        RemoveInventoryItemResponse,
-        BuyItemRequest,
-        BuyItemResponse,
-        UnlockInventoryRequest,
-        UnlockInventoryResponse,
-        GetInventoryUnlockTimeResquest,
-        GetInventoryUnlockTimeResponse,
-        ConsumeItemRequest,
-        ConsumeItemResponse,
-        GamePlayerRemovedEvent,
-        GamePlayerRejoinedEvent,
-        MatchRejoinSyncEvent,
-        MatchPropertyChangedEvent,
-        SetMatchPropertyRequest,
-        SetMatchPropertyResponse,
-        GetPlayerPendingMatchesRequest,
-        GetPlayerMatchesResponse,
-        RejoinMatchRequest,
-        RejoinMatchResponse,
-        SetAchievementProgressRequest,
-        SetAchievementProgressResponse,
-        GetAchievementsRequest,
-        GetPlayerStoreDataRequest,
-        GetPlayerStoreDataResponse,
-        GetLeagueRequest,
-        GetLeagueResponse,
-        GetAchievementsResponse,
-        SetQuestProgressRequest,
-        SetQuestProgressResponse,
-        ClaimQuestRewardRequest,
-        ClaimQuestRewardResponse,
-        GetCurrentQuestsRequest,
-        GetCurrentQuestsResponse,
-        MulliganQuestRequest,
-        MulliganQuestResponse,
-        BuyUBCItemRequest,
-        BuyUBCItemResponse,
-        SetDeckRequest,
-        SetDeckResponse,
-        SetUBCMatchResultRequest,
-        SetUBCMatchResultResponse,
-        GetMainDataRequest,
-        GetMainDataResponse,
-        RegisterInTournamentRequst,
-        RegisterInTournamentResponse,
-        GetPlayerChallengesRequest,
-        GetPlayerChallengesResponse,
+        GetDefinedItemsRequest = 107,
+        GetDefinedItemsResponse = 108,
+        GetInventoryRequest = 109,
+        GetInventoryResponse = 110,
+        AddItemToInventoryRequest = 111,
+        AddItemToInventoryResponse = 112,
+        SetItemToInventoryRequest = 113,
+        SetItemToInventoryResponse = 114,
+        RemoveInventoryItemRequest = 115,
+        RemoveInventoryItemResponse = 116,
+        BuyItemRequest = 117,
+        BuyItemResponse = 118,
+        UnlockInventoryRequest = 119,
+        UnlockInventoryResponse = 120,
+        GetInventoryUnlockTimeResquest = 121,
+        GetInventoryUnlockTimeResponse = 122,
+        ConsumeItemRequest = 123,
+        ConsumeItemResponse = 124,
+        GamePlayerRemovedEvent = 125,
+        GamePlayerRejoinedEvent = 126,
+        MatchRejoinSyncEvent = 127,
+        MatchPropertyChangedEvent = 128,
+        SetMatchPropertyRequest = 129,
+        SetMatchPropertyResponse = 130,
+        GetPlayerPendingMatchesRequest = 131,
+        GetPlayerMatchesResponse = 132,
+        RejoinMatchRequest = 133,
+        RejoinMatchResponse = 134,
+        GetPlayerChallengesRequest = 161,
+        GetPlayerChallengesResponse = 162,
 
         //User messages should start from HighestInternal+1
         HighestInternal = 1023
@@ -1274,189 +1219,6 @@ namespace RealtimeServer
         }
     }
 
-    public class SetAchievementProgressByGameServerRequest : MessageBase
-    {
-        public string achievement;
-        public int progress;
-        public string game;
-        public string player;
-        public Guid developerKey;
-        public Guid developerSecret;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.WriteBytesFull(developerKey.ToByteArray());
-            writer.WriteBytesFull(developerSecret.ToByteArray());
-            writer.Write(achievement);
-            writer.Write(progress);
-            writer.Write(game);
-            writer.Write(player);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            developerKey = new Guid(reader.ReadBytesAndSize());
-            developerSecret = new Guid(reader.ReadBytesAndSize());
-            achievement = reader.ReadString();
-            progress = reader.ReadInt32();
-            game = reader.ReadString();
-            player = reader.ReadString();
-        }
-    }
-
-    public class SetQuestProgressByGameServerRequest : MessageBase
-    {
-        public string quest;
-        public int progress;
-        public string game;
-        public string player;
-        public Guid developerKey;
-        public Guid developerSecret;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.WriteBytesFull(developerKey.ToByteArray());
-            writer.WriteBytesFull(developerSecret.ToByteArray());
-            writer.Write(quest);
-            writer.Write(progress);
-            writer.Write(game);
-            writer.Write(player);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            developerKey = new Guid(reader.ReadBytesAndSize());
-            developerSecret = new Guid(reader.ReadBytesAndSize());
-            quest = reader.ReadString();
-            progress = reader.ReadInt32();
-            game = reader.ReadString();
-            player = reader.ReadString();
-        }
-    }
-
-    public class SetMatchResultByGameServerRequestMessage : MessageBase
-    {
-        public int skill;
-        public bool isWon;
-        public bool isDraw;
-        public int court;
-        public string game;
-        public string player;
-        public string tournament;
-        public int value;
-        public Guid developerKey;
-        public Guid developerSecret;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.WriteBytesFull(developerKey.ToByteArray());
-            writer.WriteBytesFull(developerSecret.ToByteArray());
-            writer.Write(skill);
-            writer.Write(isWon);
-            writer.Write(isDraw);
-            writer.Write(court);
-            writer.Write(tournament);
-            writer.Write(value);
-            writer.Write(game);
-            writer.Write(player);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            developerKey = new Guid(reader.ReadBytesAndSize());
-            developerSecret = new Guid(reader.ReadBytesAndSize());
-            skill = reader.ReadInt32();
-            isWon = reader.ReadBoolean();
-            isDraw = reader.ReadBoolean();
-            court = reader.ReadInt32();
-            tournament = reader.ReadString();
-            value = reader.ReadInt32();
-            game = reader.ReadString();
-            player = reader.ReadString();
-        }
-    }
-
-    public class GetMainDataRequestMessage : MessageBase
-    {
-        public string game;
-        public string player;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(game);
-            writer.Write(player);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            game = reader.ReadString();
-            player = reader.ReadString();
-        }
-    }
-
-    public class GetPlayerStoreDataMessage : MessageBase
-    {
-        public List<string> items;
-        public List<string> freeItems;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            base.Serialize(writer);
-            writer.Write(items.Count);
-            for (int i = 0; i < items.Count; ++i)
-            {
-                writer.Write(items[i]);
-            }
-            writer.Write(freeItems.Count);
-            for (int i = 0; i < freeItems.Count; ++i)
-            {
-                writer.Write(freeItems[i]);
-            }
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            base.Deserialize(reader);
-            int itemsCount = reader.ReadInt32();
-            items = new List<string>();
-            for (int i = 0; i < itemsCount; ++i)
-            {
-                items.Add(reader.ReadString());
-            }
-            int freeItemsCount = reader.ReadInt32();
-            for (int i = 0; i < freeItemsCount; ++i)
-            {
-                freeItems.Add(reader.ReadString());
-            }
-        }
-    }
-
-    public class GetLeagueMessage : MessageBase
-    {
-        public List<string> items;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            base.Serialize(writer);
-            writer.Write(items.Count);
-            for (int i = 0; i < items.Count; ++i)
-            {
-                writer.Write(items[i]);
-            }
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            base.Deserialize(reader);
-            int itemsCount = reader.ReadInt32();
-            items = new List<string>();
-            for (int i = 0; i < itemsCount; ++i)
-            {
-                items.Add(reader.ReadString());
-            }
-        }
-    }
-
     public class GetInventoryResponseMessage : MessageBase
     {
         public (string, int)[] items;
@@ -1562,115 +1324,6 @@ namespace RealtimeServer
                 items[i].Item1 = reader.ReadString();
                 items[i].Item2 = reader.ReadInt32();
             }
-        }
-    }
-
-    public class ConsumeItemInventoryRequestMessage : MessageBase
-    {
-        public (string, int)[] items;
-        public string inventoryName;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            base.Serialize(writer);
-            writer.Write(inventoryName);
-            writer.Write(items.Length);
-            for (int i = 0; i < items.Length; ++i)
-            {
-                writer.Write(items[i].Item1);
-                writer.Write(items[i].Item2);
-            }
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            base.Deserialize(reader);
-            inventoryName = reader.ReadString();
-            int length = reader.ReadInt32();
-            items = new (string, int)[length];
-            for (int i = 0; i < length; ++i)
-            {
-                items[i].Item1 = reader.ReadString();
-                items[i].Item2 = reader.ReadInt32();
-            }
-        }
-    }
-
-    public class MulliganQuestRequestMessage : MessageBase
-    {
-        public int index;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            base.Serialize(writer);
-            writer.Write(index);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            base.Deserialize(reader);
-            index = reader.ReadInt32();
-        }
-    }
-
-    public class ClaimQuestRewardRequestMessage : MessageBase
-    {
-        public string questId;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            base.Serialize(writer);
-            writer.Write(questId);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            base.Deserialize(reader);
-            questId = reader.ReadString();
-        }
-    }
-
-    public class UBCPurchaseRequestMessage : MessageBase
-    {
-        public enum PurchaseType { Card, Deck, Chest, GemPack, }
-        public PurchaseType type;
-        public string item;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write((byte)type);
-            writer.Write(item);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            type = (PurchaseType)reader.ReadByte();
-            item = reader.ReadString();
-        }
-    }
-
-    public class SetDeckRequestMessage : MessageBase
-    {
-
-        public int index;
-        public List<string> items;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(index);
-            writer.Write(items.Count);
-            for (int i = 0; i < items.Count; ++i)
-            {
-                writer.Write(items[i]);
-            }
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            index = reader.ReadInt32();
-            int count = reader.ReadInt32();
-            for (int i = 0; i < count; ++i)
-                items.Add(reader.ReadString());
         }
     }
 
@@ -2129,34 +1782,6 @@ namespace RealtimeServer
 
     }
 
-    public class LoginOldRequest : MessageBase
-    {
-        public string SessionKey;
-        public LoginType LoginType;
-        public string UserId;
-        public int PasswordHash;
-        public string ProviderName;
-
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(SessionKey);
-            writer.Write(((byte)LoginType));
-            writer.Write(UserId);
-            writer.Write(PasswordHash);
-            writer.Write(ProviderName);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            SessionKey = reader.ReadString();
-            LoginType = (LoginType)reader.ReadByte();
-            UserId = reader.ReadString();
-            PasswordHash = reader.ReadInt32();
-            ProviderName = reader.ReadString();
-        }
-    }
-
     /// <summary>
     /// This is an email activation request
     /// </summary>
@@ -2394,82 +2019,6 @@ namespace RealtimeServer
         public CreateAccountRequest()
         {
             data = new Dictionary<string, string>();
-        }
-    }
-
-    public class CreateAccountOldRequest : MessageBase
-    {
-        public LoginType LoginType;
-        public string Id;
-        public string PasswordHash;
-        public Dictionary<string, string> data;
-
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(((byte)LoginType));
-            writer.Write(Id);
-            writer.Write(PasswordHash);
-
-            writer.Write((byte)data.Count);
-            foreach (var kvp in data)
-            {
-                writer.Write(kvp.Key);
-                writer.Write(kvp.Value);
-            }
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            LoginType = (LoginType)reader.ReadByte();
-            Id = reader.ReadString();
-            PasswordHash = reader.ReadString();
-
-            int count = reader.ReadByte();
-            for (int i = 0; i < count; ++i)
-            {
-                string key = reader.ReadString();
-                string value = reader.ReadString();
-                data.Add(key, value);
-            }
-        }
-
-        public CreateAccountOldRequest()
-        {
-            data = new Dictionary<string, string>();
-        }
-    }
-
-    public class LoginResponse : MessageBase
-    {
-        public string name;
-        public string userId;
-        public string ticket;
-
-        public LoginResponse()
-        {
-            name = userId = ticket = "";
-        }
-
-        public LoginResponse(string name, string userId, string ticket)
-        {
-            this.name = name;
-            this.ticket = ticket;
-            this.userId = userId;
-        }
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(userId);
-            writer.Write(name);
-            writer.Write(ticket);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            userId = reader.ReadString();
-            name = reader.ReadString();
-            ticket = reader.ReadString();
         }
     }
 
@@ -2975,22 +2524,6 @@ namespace RealtimeServer
         public override void Deserialize(BinaryReader reader)
         {
             value = reader.ReadInt32();
-        }
-    }
-
-    //no tests
-    public class BooleanMessage : MessageBase
-    {
-        public bool value;
-
-        public override void Serialize(BinaryWriter writer)
-        {
-            writer.Write(value);
-        }
-
-        public override void Deserialize(BinaryReader reader)
-        {
-            value = reader.ReadBoolean();
         }
     }
 

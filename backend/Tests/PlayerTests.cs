@@ -244,35 +244,6 @@ namespace GrainUnitTests
             loggedIn = await player.IsLoggedIn();
             Assert.False(loggedIn);
         }
-
-        [Fact]
-        public async Task FinishMatchWithCorrectCoinAndElo()
-        {
-            var developerInfo = await CreateDeveloperAndSession("developer2");
-            var sessionKey = developerInfo.Item1;
-            var sessionKey2 = await GrainFactory.GetGrain<IDeveloper>(developerInfo.Item2).InitializeSession(developerInfo.Item3);
-            string guid1 = "device08";
-            string guid2 = "device09";
-            var player1 = GrainFactory.GetGrain<IPlayer>(guid1);
-            var player2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            await player1.CreateAccountWithDevice(player1.GetPrimaryKeyString());
-            await player2.CreateAccountWithDevice(player2.GetPrimaryKeyString());
-            Guid t = Guid.NewGuid();
-            await player1.LoginWithDeviceID(guid1, sessionKey, t);
-            await player2.LoginWithDeviceID(guid2, sessionKey2, t);
-            Guid gameGUID = Guid.NewGuid();
-            IGame game = GrainFactory.GetGrain<IGame>(gameGUID, "gamekey", null);
-            await game.SetGameProperties(30);
-            await game.StartGame(new IPlayer[] { player1, player2 });
-            await game.SetPlayerValue(player1, 10);
-            await game.SetPlayerValue(player2, 15);
-            await game.PlayerFinished(player1, 17);
-            await game.PlayerFinished(player2, 16);
-            int elo1 = await player1.GetEloScore();
-            int elo2 = await player2.GetEloScore();
-            Assert.Equal(1493, elo2);
-            Assert.Equal(1507, elo1);
-        }
     }
 }
 #endif

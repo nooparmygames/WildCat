@@ -326,20 +326,6 @@ namespace RealTimeServerTests
         }
 
         [Fact]
-        public void LoginRequestSerialization()
-        {
-            LoginOldRequest req =
-                new LoginOldRequest { LoginType = RealtimeServer.LoginType.Custom, UserId = "Ashkan", PasswordHash = 49, ProviderName = "DandeMakus" };
-            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.LoginRequest, ApadanaMsgHeader.normal);
-
-            var data = msg.GetData<LoginOldRequest>();
-            Assert.Equal(data.UserId, req.UserId);
-            Assert.Equal(data.LoginType, req.LoginType);
-            Assert.Equal(data.PasswordHash, req.PasswordHash);
-            Assert.Equal(data.ProviderName, req.ProviderName);
-        }
-
-        [Fact]
         public void AuthenticationRequestSerialization()
         {
             AuthenticationRequest req =
@@ -434,7 +420,7 @@ namespace RealTimeServerTests
                     PlayerName = "u2",
                     TimeOut = 12
                 };
-            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.LoginRequest, ApadanaMsgHeader.normal);
+            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.StartChallengeRequest, ApadanaMsgHeader.normal);
 
             var data = msg.GetData<ChallengeMessage>();
             Assert.Equal("u1", data.Player);
@@ -447,24 +433,11 @@ namespace RealTimeServerTests
         }
 
         [Fact]
-        public void LoginResponseSerialization()
-        {
-            LoginResponse req =
-                new LoginResponse("name", "id", "ticket");
-            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.LoginResponse, ApadanaMsgHeader.normal);
-
-            var data = msg.GetData<LoginResponse>();
-            Assert.Equal(data.userId, req.userId);
-            Assert.Equal(data.ticket, req.ticket);
-            Assert.Equal(data.name, req.name);
-        }
-
-        [Fact]
         public void AuthenticationResponseSerialization()
         {
             AuthenticationResponse req =
                 new AuthenticationResponse { name = "name", userId = "id", ticket = "ticket", isNewlyCreated = true };
-            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.LoginResponse, ApadanaMsgHeader.normal);
+            ApadanaMessageBase msg = ApadanaMessageBase.Create(req, ApadanaMsgType.AuthenticateResponse, ApadanaMsgHeader.normal);
 
             var data = msg.GetData<AuthenticationResponse>();
             Assert.Equal(data.userId, req.userId);

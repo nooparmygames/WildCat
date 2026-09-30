@@ -29,16 +29,6 @@ namespace Interfaces
             return "ScriptingAPI.ScriptEventCompiler";
         }
 
-        public static string GetAchievementClassName()
-        {
-            return "Collections.Achievement";
-        }
-
-        public static string GetQuestClassName()
-        {
-            return "Collections.Quest";
-        }
-
         /// <summary>
         /// Gets class name of the Item implementation.
         /// </summary>
@@ -86,16 +76,6 @@ namespace Interfaces
             return $"{gameKey}_eventScripts";
         }
 
-        public static string GetAchievementResourceManagerName(string gameKey)
-        {
-            return $"{gameKey}_achievements";
-        }
-
-        public static string GetQuestResourceManagerName(string gameKey)
-        {
-            return $"{gameKey}_quests";
-        }
-
         /// <summary>
         /// Returns the name of item resource manager for a specific game
         /// </summary>
@@ -130,17 +110,6 @@ namespace Interfaces
         public static string GetEventScriptKey(string gameKey, string eventScriptName)
         {
             return $"{gameKey}_G_{eventScriptName}";
-        }
-
-
-        public static string GetAchievementKey(string gameKey, string achievementName)
-        {
-            return $"{gameKey}_A_{achievementName}";
-        }
-
-        public static string GetQuestKey(string gameKey, string achievementName)
-        {
-            return $"{gameKey}_Q_{achievementName}";
         }
 
         /// <summary>
@@ -184,17 +153,6 @@ namespace Interfaces
         public static string GetPlayPlayerStorageKey(string gameKey, string playerKey, string fileName)
         {
             return $"{gameKey}_{playerKey}_{fileName}";
-        }
-
-        public static string GetLeagueKey(int id, string uniqueId, DateTime dt)
-        {
-            return $"{id}|{uniqueId}|{dt}";
-        }
-
-        public static (int id, string uniqueId, DateTime dt) GetLeagueParts(string league)
-        {
-            var parts = league.Split('|');
-            return (int.Parse(parts[0]), parts[1], DateTime.Parse(parts[2]));
         }
 
         public static string GetPlayerInventoryKey(string gameKey, string player, string inventoryName = "")

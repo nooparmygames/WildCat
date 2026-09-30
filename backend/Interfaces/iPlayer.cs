@@ -54,7 +54,6 @@ namespace Interfaces
 
         Task<int> GetEloScore();
         Task SetEloScore(int score);
-        Task AddGameFinalResult(IGame match, GameResult result, int cost, int opponentElo);
         Task GameStarted(IRelayServerGame game);
         Task GameFinished(IRelayServerGame game);
 
@@ -78,8 +77,6 @@ namespace Interfaces
         [Id(2)] public List<IPlayer> players;
     }
 
-    [GenerateSerializer, Alias("wildcat.GameResult")]
-    public enum GameResult { Winner, Loser, Draw }
     [GenerateSerializer, Alias("wildcat.AdditionResult")]
     public enum AdditionResult : byte { Success, Failure, AlreadyExisting }
 

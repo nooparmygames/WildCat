@@ -58,7 +58,6 @@ namespace SiloHost
                     Console.WriteLine(ex.Message);
                 }
             }
-            await grainFactory.GetGrain<ITimedExecutionManager>("main").StartRunningTasks();
         }
 
         /// <summary>

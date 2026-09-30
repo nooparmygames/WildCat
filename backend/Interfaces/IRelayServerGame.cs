@@ -11,7 +11,6 @@ namespace Interfaces
         Task<Dictionary<IPlayer, Tuple<Guid,string>>> StartGame(IPlayer[] players,GameMode gameMode);
 
         Task SendToAllBut(IPlayer player, int channelId, byte[] data);
-        Task ReceivePlayerData(IPlayer player, int channelId, byte[] data);
         Task SetGameProperty(string key, byte[] value);
         Task SetPlayerProperty(IPlayer player, string key, byte[] data);
 
@@ -108,14 +107,6 @@ namespace Interfaces
     public enum RelayServerGameStatus { NotStarted, Started, SomeJoined, AllJoined, SomeFinished, AllFinished, FinishedWithDisconnect }
     [GenerateSerializer, Alias("wildcat.RelayServerPlayerGameStatus")]
     public enum RelayServerPlayerGameStatus { NotStarted, InGame, Finished, Disconnected }
-
-    [Serializable]
-    public struct RelayServerGameEventData
-    {
-        public enum EventType {GameFinished,MessageBroadcast,PlayerJoined }
-        public EventType Type { get; }
-
-    }
 
     [Serializable]
     [GenerateSerializer]

@@ -22,11 +22,7 @@ namespace Interfaces
         [GenerateSerializer, Alias("wildcat.UNetConnectionDataTransferMessage.EventType")]
         public enum EventType
         {
-            DataTransfer,
-            Login,
-            Logout,
-            GameCreated,
-            GameDestroyed
+            DataTransfer
         }
     }
 }

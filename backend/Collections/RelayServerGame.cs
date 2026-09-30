@@ -234,11 +234,6 @@ namespace Collections
                 || State.State == RelayServerGameStatus.AllJoined;
         }
 
-        public Task ReceivePlayerData(IPlayer player, int channelId, byte[] data)
-        {
-            return SendToAllBut(player, channelId, data);
-        }
-
         public Task<bool> IsValidGame()
         {
             return Task.FromResult(State.State != RelayServerGameStatus.AllFinished && State.State != RelayServerGameStatus.FinishedWithDisconnect);

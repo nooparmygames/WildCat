@@ -81,22 +81,6 @@ namespace Collections
 
         #region MATCH
 
-        public async Task AddGameFinalResult(IGame game, GameResult result, int cost, int opponentElo)
-        {
-            switch (result)
-            {
-                case GameResult.Winner:
-                    break;
-                case GameResult.Loser:
-                    break;
-                case GameResult.Draw:
-                    break;
-            }
-
-            CalculateELO(result, opponentElo);
-            await WriteStateAsync();
-        }
-
         public Task GameStarted(IRelayServerGame game)
         {
             State.RunningGames.Add(game);
@@ -117,16 +101,6 @@ namespace Collections
             }
 
             return WriteStateAsync();
-        }
-
-        private void CalculateELO(GameResult result, int opponentELo)
-        {
-            double expected = 1.0 / (1.0 + Math.Pow(10.0, ((opponentELo - State.EloScore) / 400.0)));
-            double current;
-            if (result == GameResult.Winner) current = 1;
-            else if (result == GameResult.Loser) current = 0;
-            else current = 0;
-            State.EloScore += (int) ((current - expected) * 15);
         }
 
         public Task<int> GetEloScore()

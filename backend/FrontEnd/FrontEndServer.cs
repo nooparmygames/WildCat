@@ -17,7 +17,6 @@ namespace FrontEnd
         private readonly ILogger _Logger;
 
         public Dictionary<int, PlayerInfo> clientConnections;
-        private Dictionary<int, GameServerInfo> gameServerConnections;
         public Dictionary<IPlayer, int> playerConnectionMapper;
         private readonly IClusterClient orleansClient;
         private IStreamProvider streamProvider;
@@ -31,7 +30,6 @@ namespace FrontEnd
         {
             clientConnections = new Dictionary<int, PlayerInfo>();
             playerConnectionMapper = new Dictionary<IPlayer, int>();
-            gameServerConnections = new Dictionary<int, GameServerInfo>();
             orleansClient = clusterClient;
             streamProvider = orleansClient.GetStreamProvider(StreamNames.PROVIDER_NAME);
             this._Logger = logger;
@@ -46,8 +44,6 @@ namespace FrontEnd
         {
             connection.OnDataReceived += DataReceived;
             clientConnections[id] = new PlayerInfo(connection);
-
-            gameServerConnections[id] = new GameServerInfo(connection);
         }
 
         private async Task RegisterConnectionStream(IAsyncStream<UNetConnectionDataTransferMessage> stream)
@@ -92,16 +88,6 @@ namespace FrontEnd
                 case UNetConnectionDataTransferMessage.EventType.DataTransfer:
                     await Send(eventData.player, eventData.data);
                     break;
-                case UNetConnectionDataTransferMessage.EventType.Login:
-                    break;
-                case UNetConnectionDataTransferMessage.EventType.Logout:
-                    break;
-                case UNetConnectionDataTransferMessage.EventType.GameCreated:
-                    //await orleansClient.GetGrain<IRelayServerGame>(e.Item.matchId, e.Item.gameKey, null).Subscribe(GameObserver);
-                    break;
-                case UNetConnectionDataTransferMessage.EventType.GameDestroyed:
-                    //await orleansClient.GetGrain<IRelayServerGame>(e.Item.matchId, e.Item.gameKey, null).Unsubscribe(GameObserver);
-                    break;
             }
         }
 
@@ -112,11 +98,6 @@ namespace FrontEnd
             }
 
             clientConnections.Remove(id);
-            if (gameServerConnections.ContainsKey(id))
-            {
-            }
-
-            gameServerConnections.Remove(id);
             await ClientDisconnected(id);
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -131,7 +112,6 @@ namespace FrontEnd
             var playerInfo = GetPlayerInfo(id);
             if(playerInfo == null)
                 return;
-            var serverTemp = gameServerConnections.ContainsKey(id) ? gameServerConnections[id] : null;
             // await GetClientConnectionGrain(id).DataReceived(id, 0, message, true);
             var connectionId = id;
             var isReliable = true;
@@ -1259,11 +1239,6 @@ namespace FrontEnd
                     msg.requestID);
             if (response.isSuccesful)
             {
-                await playerInfo.connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
-                {
-                    eventType = UNetConnectionDataTransferMessage.EventType.GameCreated, matchId = response.msg.gameId,
-                    gameKey = gk, connectionId = connectionId
-                });
                 //TODO remove this and make it none automatic
                 await orleansClient.GetGrain<IRelayServerGame>(response.msg.gameId, gk, null)
                     .PlayerStarted(player);
@@ -2262,13 +2237,6 @@ namespace FrontEnd
         }
 
         //--------------------------------------------------------------------------------------------------------------------------------
-        private void DisconnectInvalidConnection(int id)
-        {
-            gameServerConnections.Remove(id);
-            clientConnections.Remove(id);
-        }
-
-
         public async Task<bool> Send(int id, byte[] message)
         {
             if(!clientConnections.ContainsKey(id))
@@ -2343,12 +2311,6 @@ namespace FrontEnd
                 switch (msg.Type)
                 {
                     case ChallengeEventData.EventType.Started:
-                        var gk = GameKey;
-                        await connectionStream.OnNextAsync(new UNetConnectionDataTransferMessage
-                        {
-                            eventType = UNetConnectionDataTransferMessage.EventType.GameCreated, matchId = msg.gameID,
-                            gameKey = gk.ToString(), connectionId = ConnectionId
-                        });
                         dataToSend.GameKey = msg.gameID;
                         msgType = ApadanaMsgType.ChallengeAcceptedEvent;
                         response.Succeed(dataToSend);
@@ -2427,18 +2389,6 @@ namespace FrontEnd
                 eventType = UNetConnectionDataTransferMessage.EventType.DataTransfer
             });
             return Task.CompletedTask;
-        }
-    }
-
-    public class GameServerInfo : ConnectionInfo
-    {
-        public List<string> playerIds { get; set; }
-        public string serverId { get; set; }
-
-        public GameServerInfo(ConnectionProcessor processor)
-        {
-            this.processor = processor;
-            this.playerIds = new List<string>();
         }
     }
 }
