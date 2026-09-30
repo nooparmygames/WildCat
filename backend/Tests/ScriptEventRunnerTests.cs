@@ -14,8 +14,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class ScriptEventRunnerTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public ScriptEventRunnerTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;

@@ -16,8 +16,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class PlayerChallengeHandlerTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public PlayerChallengeHandlerTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;
@@ -26,7 +26,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task CreateAndAccepChallenge()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool accepted = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -35,8 +35,8 @@ namespace GrainUnitTests
             var guid2 = "challengedevice02";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<ChallengeEventData>(sessionKeys[0].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<ChallengeEventData>(sessionKeys[1].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<ChallengeEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -93,7 +93,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task CreateAndAccepChallengeWithOfflineOther()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool accepted = false;
             //[sessionKey,DeveloperKey,GameKey]
             var sessionKeys = (await CreateDeveloperAndSession("challoper4", 2));
@@ -101,7 +101,7 @@ namespace GrainUnitTests
             var guid2 = "challengedevice012";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<ChallengeEventData>(sessionKeys[0].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid1);
+            var s1 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[0].Item3, guid1));
             await s1.SubscribeAsync<ChallengeEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -157,7 +157,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task CreateAndAccepChallengeAfterTimeout()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool timedOut = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -166,8 +166,8 @@ namespace GrainUnitTests
             var guid2 = "challengedevice08";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<ChallengeEventData>(sessionKeys[0].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<ChallengeEventData>(sessionKeys[1].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<ChallengeEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -232,7 +232,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task CreateAndAccepChallengeAfterTimeoutAndAcceptNextOne()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool timedOut = false;
             bool accepted = false;
@@ -242,8 +242,8 @@ namespace GrainUnitTests
             var guid2 = "challengedevice06";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<ChallengeEventData>(sessionKeys[0].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<ChallengeEventData>(sessionKeys[1].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[1].Item3, guid2));
             int state = 0;
             await s1.SubscribeAsync<ChallengeEventData>((x, y) =>
             {
@@ -321,7 +321,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task CreateAndDenyChallenge()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool denied = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -330,8 +330,8 @@ namespace GrainUnitTests
             var guid2 = "challengedevice04";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<ChallengeEventData>(sessionKeys[0].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<ChallengeEventData>(sessionKeys[1].Item3, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<ChallengeEventData>((x, y) =>
             {
                 switch (x.Type)

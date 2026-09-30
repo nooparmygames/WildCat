@@ -13,8 +13,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class DeveloperManagerTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public DeveloperManagerTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;

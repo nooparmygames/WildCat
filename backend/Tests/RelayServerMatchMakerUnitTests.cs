@@ -14,8 +14,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class RelayServerMatchMakerUnitTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public RelayServerMatchMakerUnitTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;

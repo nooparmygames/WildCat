@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Kept on netstandard2.0 with no Orleans references so the Unity SDK can share the protocol. -->
     <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
 
 </Project>

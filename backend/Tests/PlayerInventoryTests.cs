@@ -16,8 +16,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class PlayerInventoryTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public PlayerInventoryTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;

@@ -16,8 +16,8 @@ namespace GrainUnitTests
     [Collection(ClusterCollection.Name)]
     public class PlayerFriendListTests
     {
-        private TestCluster cluster;
-        public IGrainFactory GrainFactory => this.cluster.GrainFactory;
+        private InProcessTestCluster cluster;
+        public IGrainFactory GrainFactory => this.cluster.Client;
         public PlayerFriendListTests(ClusterFixture fixture)
         {
             this.cluster = fixture.Cluster;
@@ -25,7 +25,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task InviteAndAcceptFriendship()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool accepted = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -34,8 +34,8 @@ namespace GrainUnitTests
             var guid2 = "friend02";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<FriendListEventData>(sessionKeys[0].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<FriendListEventData>(sessionKeys[1].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<FriendListEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -97,7 +97,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task InviteAndDenyFriendship()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool denied = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -106,8 +106,8 @@ namespace GrainUnitTests
             var guid2 = "friend04";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<FriendListEventData>(sessionKeys[0].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<FriendListEventData>(sessionKeys[1].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<FriendListEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -122,7 +122,7 @@ namespace GrainUnitTests
                         Assert.False(true, "Should receive invitation");
                         break;
                 }
-                return TaskDone.Done;
+                return Task.CompletedTask;
             });
 
             await s2.SubscribeAsync<FriendListEventData>((x, y) =>
@@ -167,7 +167,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task InviteMultipleTimesAndAcceptFriendship()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             int received = 0;
             bool accepted = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -176,8 +176,8 @@ namespace GrainUnitTests
             var guid2 = "friend06";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<FriendListEventData>(sessionKeys[0].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<FriendListEventData>(sessionKeys[1].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<FriendListEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -238,7 +238,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task ChangeStatus()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool changedState = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -247,8 +247,8 @@ namespace GrainUnitTests
             var guid2 = "friend08";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<FriendListEventData>(sessionKeys[0].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<FriendListEventData>(sessionKeys[1].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<FriendListEventData>((x, y) =>
             {
                 switch (x.Type)
@@ -314,7 +314,7 @@ namespace GrainUnitTests
         [Fact]
         public async Task GetFriendsAndTheirData()
         {
-            var provider = cluster.Client.GetStreamProvider("SMS");
+            var provider = cluster.Client.GetStreamProvider(StreamNames.PROVIDER_NAME);
             bool received = false;
             bool accepted = false;
             //[sessionKey,DeveloperKey,GameKey]
@@ -323,8 +323,8 @@ namespace GrainUnitTests
             var guid2 = "friend10";
             var p1 = GrainFactory.GetGrain<IPlayer>(guid1);
             var p2 = GrainFactory.GetGrain<IPlayer>(guid2);
-            var s1 = provider.GetStream<FriendListEventData>(sessionKeys[0].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid1);
-            var s2 = provider.GetStream<FriendListEventData>(sessionKeys[1].Item3, StreamNames.FRIEND_EVENTS_STREAM_NAME + guid2);
+            var s1 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[0].Item3, guid1));
+            var s2 = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(sessionKeys[1].Item3, guid2));
             await s1.SubscribeAsync<FriendListEventData>((x, y) =>
             {
                 switch (x.Type)

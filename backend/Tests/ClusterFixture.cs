@@ -1,52 +1,42 @@
-﻿using Microsoft.Extensions.Configuration;
+using Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Orleans;
-using Orleans.Hosting;
 using Orleans.TestingHost;
-using System;
 using Xunit;
 
 namespace Tests
 {
-    public class ClusterFixture : IDisposable
+    /// <summary>
+    /// One in-process silo plus client shared by every test class in <see cref="ClusterCollection"/>.
+    /// Mirrors the silo configuration in Silo/Program.cs with memory providers.
+    /// </summary>
+    public class ClusterFixture : IAsyncLifetime
     {
-        public ClusterFixture()
-        {
-            var builder = new TestClusterBuilder();
-            builder.AddSiloBuilderConfigurator<TestSiloConfigurations>();
-            builder.AddClientBuilderConfigurator<TestClientConfigurations>();
-            this.Cluster = builder.Build();
-            this.Cluster.Deploy();
-        }
+        public InProcessTestCluster Cluster { get; private set; }
 
-        public void Dispose()
+        public async Task InitializeAsync()
         {
-            this.Cluster.StopAllSilos();
-        }
-
-        public TestCluster Cluster { get; private set; }
-    }
-
-    public class TestSiloConfigurations : ISiloBuilderConfigurator
-    {
-        public void Configure(ISiloHostBuilder hostBuilder)
-        {
-            hostBuilder.AddSimpleMessageStreamProvider("SMS");
-            hostBuilder.AddMemoryGrainStorage("PubSubStore");
-            hostBuilder.AddStartupTask<TestStartupTasks>();
-            hostBuilder.AddMemoryGrainStorageAsDefault();
-            hostBuilder.AddMemoryGrainStorage("blob");
-            hostBuilder.ConfigureServices(services => {
-                services.AddSingleton<Interfaces.IBackendStorageServer, Collections.PlayfabManager>();
+            var builder = new InProcessTestClusterBuilder(initialSilosCount: 1);
+            builder.ConfigureSilo((options, silo) =>
+            {
+                silo.AddMemoryGrainStorageAsDefault();
+                silo.AddMemoryGrainStorage("blob");
+                silo.AddMemoryGrainStorage("PubSubStore");
+                silo.AddMemoryStreams(StreamNames.PROVIDER_NAME);
+                silo.UseInMemoryReminderService();
+                silo.AddStartupTask<TestStartupTasks>();
+                silo.Services.AddSingleton<IBackendStorageServer, Collections.PlayfabManager>();
             });
+            builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));
+            Cluster = builder.Build();
+            await Cluster.DeployAsync();
         }
-    }
 
-    public class TestClientConfigurations : IClientBuilderConfigurator
-    {
-        public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
+        public async Task DisposeAsync()
         {
-            clientBuilder.AddSimpleMessageStreamProvider("SMS");
+            if (Cluster != null)
+            {
+                await Cluster.DisposeAsync();
+            }
         }
     }
 
