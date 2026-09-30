@@ -43,18 +43,13 @@ namespace Backend
         private Dictionary<uint, Result<Guid>> sessionInitializedResults = new Dictionary<uint, Result<Guid>>();
 
         private Dictionary<uint, Result> nameSetResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> registerTournamentResults = new Dictionary<uint, Result>();
         private Dictionary<uint, Result<ChallengeRequestsMessage>> getChallengesResults = new Dictionary<uint, Result<ChallengeRequestsMessage>>();
         private Dictionary<uint, Result<string>> nameReceivedResults = new Dictionary<uint, Result<string>>();
         private Dictionary<uint, Result<GetInventoryResponseMessage>> inventoryReceivedResults = new Dictionary<uint, Result<GetInventoryResponseMessage>>();
         private Dictionary<uint, Result<BuyItemInventoryRequestMessage>> inventoryAddedResults = new Dictionary<uint, Result<BuyItemInventoryRequestMessage>>();
         private Dictionary<uint, Result<RemoveItemInventoryRequestMessage>> inventoryRemovedResults = new Dictionary<uint, Result<RemoveItemInventoryRequestMessage>>();
-        private Dictionary<uint, Result> claimQuestsReceivedResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> DeckSetResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> PurchaseCompletedResults = new Dictionary<uint, Result>();
         private Dictionary<uint, Result<string>> playerNameReceivedResults = new Dictionary<uint, Result<string>>();
         private Dictionary<uint, Result<DateTime>> timeReceivedResults = new Dictionary<uint, Result<DateTime>>();
-        private Dictionary<uint, Result<VerificationStatus, string>> CafeVerificationStatusResults = new Dictionary<uint, Result<VerificationStatus, string>>();
         private Dictionary<uint, Result> cloudDataSavedResults = new Dictionary<uint, Result>();
         private Dictionary<uint, Result> cloudPublicDataSavedResults = new Dictionary<uint, Result>();
         private Dictionary<uint, Result<string>> cloudDataReceivedResults = new Dictionary<uint, Result<string>>();
@@ -83,11 +78,6 @@ namespace Backend
         private Dictionary<uint, Result<string>> createAccountResults = new Dictionary<uint, Result<string>>();
         private Dictionary<uint, Result> addAuthToAccountResults = new Dictionary<uint, Result>();
         private Dictionary<uint, Result> emailActivationResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result<string>> devPublisherDataReceivedResults = new Dictionary<uint, Result<string>>();
-        private Dictionary<uint, Result> devPublisherDataSetResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> SetAchievementProgressResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> SetQuestProgressResults = new Dictionary<uint, Result>();
-        private Dictionary<uint, Result> SetMatchResults = new Dictionary<uint, Result>();
 
         /// <summary>
         /// This singleton gives you access to the rest of the API.
@@ -225,23 +215,6 @@ namespace Backend
 
         private Guid sessionKey = Guid.Empty;
 
-        /// <summary>
-        /// The developer secret to be used for developer calls
-        /// </summary>
-        public string developerSecret
-        {
-            get
-            {
-                return secret.ToString();
-            }
-            set
-            {
-                secret = new Guid(value);
-            }
-        }
-
-        private Guid secret;
-
         void Awake()
         {
             if (_instance == null)
@@ -289,10 +262,6 @@ namespace Backend
                     res.Value.Fail(0, "Disconnected");
                 nameSetResults.Clear();
 
-                foreach (var res in registerTournamentResults)
-                    res.Value.Fail(0, "Disconnected");
-                registerTournamentResults.Clear();
-
                 foreach (var res in getChallengesResults)
                     res.Value.Fail(0, "Disconnected");
                 getChallengesResults.Clear();
@@ -300,18 +269,6 @@ namespace Backend
                 foreach (var res in nameReceivedResults)
                     res.Value.Fail(0, "Disconnected");
                 nameReceivedResults.Clear();
-
-                foreach (var res in claimQuestsReceivedResults)
-                    res.Value.Fail(0, "Disconnected");
-                claimQuestsReceivedResults.Clear();
-
-                foreach (var res in DeckSetResults)
-                    res.Value.Fail(0, "Disconnected");
-                DeckSetResults.Clear();
-
-                foreach (var res in PurchaseCompletedResults)
-                    res.Value.Fail(0, "Disconnected");
-                PurchaseCompletedResults.Clear();
 
                 foreach (var res in inventoryReceivedResults)
                     res.Value.Fail(0, "Disconnected");
@@ -332,10 +289,6 @@ namespace Backend
                 foreach (var res in timeReceivedResults)
                     res.Value.Fail(0, "Disconnected");
                 timeReceivedResults.Clear();
-
-                foreach (var res in CafeVerificationStatusResults)
-                    res.Value.Fail(0, "Disconnected");
-                CafeVerificationStatusResults.Clear();
 
                 foreach (var res in cloudDataSavedResults)
                     res.Value.Fail(0, "Disconnected");
@@ -444,26 +397,6 @@ namespace Backend
                     res.Value.Fail(0, "Disconnected");
                 emailActivationResults.Clear();
 
-                foreach (var res in devPublisherDataReceivedResults)
-                    res.Value.Fail(0, "Disconnected");
-                devPublisherDataReceivedResults.Clear();
-
-                foreach (var res in devPublisherDataSetResults)
-                    res.Value.Fail(0, "Disconnected");
-                devPublisherDataSetResults.Clear();
-
-                foreach (var res in SetAchievementProgressResults)
-                    res.Value.Fail(0, "Disconnected");
-                SetAchievementProgressResults.Clear();
-
-                foreach (var res in SetQuestProgressResults)
-                    res.Value.Fail(0, "Disconnected");
-                SetQuestProgressResults.Clear();
-
-                foreach (var res in SetMatchResults)
-                    res.Value.Fail(0, "Disconnected");
-                SetMatchResults.Clear();
-
                 if (OnDisconnected != null)
                     OnDisconnected(x);
             };
@@ -561,20 +494,6 @@ namespace Backend
                 nameSetResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.RegisterInTournamentResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    registerTournamentResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    registerTournamentResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                registerTournamentResults.Remove(x.requestID);
-            });
-
             client.RegisterHandler(ApadanaMsgType.GetPlayerChallengesResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<ChallengeRequestsMessage>>();
@@ -616,48 +535,6 @@ namespace Backend
                     nameReceivedResults[x.requestID].Fail(data.errorCode, data.errorMsg);
                 }
                 nameReceivedResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.ClaimQuestRewardResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    claimQuestsReceivedResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    claimQuestsReceivedResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                claimQuestsReceivedResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.SetDeckRequest, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    DeckSetResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    DeckSetResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                DeckSetResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.BuyUBCItemResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    PurchaseCompletedResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    PurchaseCompletedResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                PurchaseCompletedResults.Remove(x.requestID);
             });
 
             client.RegisterHandler(ApadanaMsgType.GetInventoryResponse, x =>
@@ -714,20 +591,6 @@ namespace Backend
                     playerNameReceivedResults[x.requestID].Fail(data.errorCode, data.errorMsg);
                 }
                 playerNameReceivedResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.VerifyStoreReceiptResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<VerifyCafeReceiptResponse>>();
-                if (data.isSuccesful)
-                {
-                    CafeVerificationStatusResults[x.requestID].Succeed(data.msg.Status, data.msg.Data);
-                }
-                else
-                {
-                    CafeVerificationStatusResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                CafeVerificationStatusResults.Remove(x.requestID);
             });
 
             client.RegisterHandler(ApadanaMsgType.SetCloudDataResponse, x =>
@@ -1191,76 +1054,6 @@ namespace Backend
                 }
                 emailActivationResults.Remove(x.requestID);
             });
-
-            client.RegisterHandler(ApadanaMsgType.GetPublisherDataResponse_S, x =>
-            {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
-                if (data.isSuccesful)
-                {
-                    print("Publisher data received " + data.msg.value);
-                    devPublisherDataReceivedResults[x.requestID].Succeed(data.msg.value);
-                }
-                else
-                {
-                    devPublisherDataReceivedResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                devPublisherDataReceivedResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.SetPublisherDataResponse_S, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    devPublisherDataSetResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    devPublisherDataSetResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                devPublisherDataSetResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.SetAchievementProgressResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    SetAchievementProgressResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    SetAchievementProgressResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                SetAchievementProgressResults.Remove(x.requestID);
-            });
-
-            client.RegisterHandler(ApadanaMsgType.SetQuestProgressResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    SetQuestProgressResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    SetQuestProgressResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                SetQuestProgressResults.Remove(x.requestID);
-            });
-            client.RegisterHandler(ApadanaMsgType.SetUBCMatchResultResponse, x =>
-            {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
-                if (data.isSuccesful)
-                {
-                    SetMatchResults[x.requestID].Succeed();
-                }
-                else
-                {
-                    SetMatchResults[x.requestID].Fail(data.errorCode, data.errorMsg);
-                }
-                SetMatchResults.Remove(x.requestID);
-            });
         }
 
 
@@ -1543,33 +1336,6 @@ namespace Backend
             return result;
         }
 
-        public Result ClaimQuests(string quest)
-        {
-            AssertIsLoggedIn();
-            var id = client.SendClaimQuestsRequest(quest, ticket);
-            var result = new Result(this);
-            claimQuestsReceivedResults[id] = result;
-            return result;
-        }
-
-        public Result SetDeck(List<string> deck, int index)
-        {
-            AssertIsLoggedIn();
-            var id = client.SendSetDeckRequest(deck, index, ticket);
-            var result = new Result(this);
-            DeckSetResults[id] = result;
-            return result;
-        }
-
-        public Result BuyUBCItem(string item, UBCPurchaseRequestMessage.PurchaseType type)
-        {
-            AssertIsLoggedIn();
-            var id = client.SendPurchaseUBCItemRequest(item, type, ticket);
-            var result = new Result(this);
-            PurchaseCompletedResults[id] = result;
-            return result;
-        }
-
         /// <summary>
         /// Gets the name of a player which you specify his/her user ID from the server
         /// </summary>
@@ -1742,27 +1508,6 @@ namespace Backend
             uint id = client.SendGetPublisherDataRequest(key, ticket);
             var result = new Result<string>(this);
             publisherDataReceivedResults[id] = result;
-            return result;
-        }
-
-        /// <summary>
-        /// Verifies an IAP receipt for Cafe Bazaar
-        /// </summary>
-        /// <param name="product">The product to check its IAPs</param>
-        /// <param name="receipt">The receipt to check its validity</param>
-        /// <param name="OnSuccess">Will be called with the status of the transaction if the response returns back from the server, the verification status might be failed itself which you should check in this callback. the status and a data string will be passed to you, data is the data you suplied when buying the IAP</param>
-        /// <param name="OnFailure">Will be called some error accures on the server, all other failures are in the status enum</param>
-        /// <remarks>
-        /// The product name is obtained from Cafe bazaar and based on your product
-        /// in your game's store.
-        /// The receipt should be received from Cafe Bazaar's IAP sdk
-        /// </remarks>
-        public Result<VerificationStatus, string> VerifyCafeReceipt(string product, string receipt)
-        {
-            AssertIsLoggedIn();
-            uint id = client.SendVerifyCafeReceiptRequestRequest(product, receipt, ticket);
-            var result = new Result<VerificationStatus, string>(this);
-            CafeVerificationStatusResults[id] = result;
             return result;
         }
 
@@ -2170,86 +1915,6 @@ namespace Backend
 
         #region  DevAPI
 
-        /// <summary>
-        /// Gets the publisher's data without game login
-        /// </summary>
-        /// <param name="key">The key to get the data for</param>
-        /// <param name="OnSuccess">This will be called with the retrieved value if successful</param>
-        /// <param name="OnFailure">Will be called if the operation failed</param>
-        /// <remarks>It works only if the developer secret and key are set</remarks>
-        public Result<string> DevGetPublisherData(string key, Action<string> OnSuccess = null, Action<int, string> OnFailure = null)
-        {
-            if (!isSessionInitialized)
-                throw new InvalidOperationException("Session is not initialized");
-            AssertDevKeyAndSecret();
-            uint id = client.SendDevGetPublisherDataRequest(key, developerKey, secret);
-            var result = new Result<string>(this);
-            devPublisherDataReceivedResults[id] = result;
-            return result;
-        }
-
-        /// <summary>
-        /// Sets a data key value pair for the publisher
-        /// </summary>
-        /// <param name="key">The key to store the data for</param>
-        /// <param name="value">The value to store for the key</param>
-        /// <param name="OnSuccess">Called if the operation is successful</param>
-        /// <param name="OnFailure">Called if the operation is failed</param>
-        /// <remarks>This will only work if you set the correct developer key and secret</remarks>
-        public Result DevSetPublisherData(string key, string value)
-        {
-            if (!isSessionInitialized)
-                throw new InvalidOperationException("Session is not initialized");
-            AssertDevKeyAndSecret();
-            uint id = client.SendDevSetPublisherDataRequest(key, value, developerKey, secret);
-            var result = new Result(this);
-            devPublisherDataSetResults[id] = result;
-
-            return result;
-        }
-
-        public Result SetAchievementProgress(string achievement, int progress, string playerId)
-        {
-            if (!isSessionInitialized)
-                throw new InvalidOperationException("Session is not initialized");
-            //AssertDevKeyAndSecret();
-            uint id = client.SendSetAchievementProgressRequest(achievement, progress, playerId);
-            var result = new Result(this);
-            SetAchievementProgressResults[id] = result;
-            return result;
-        }
-
-        public Result SetQuestProgress(string quest, int progress, string playerId)
-        {
-            if (!isSessionInitialized)
-                throw new InvalidOperationException("Session is not initialized");
-            //AssertDevKeyAndSecret();
-            uint id = client.SendSetQuestProgressRequest(quest, progress, playerId);
-            var result = new Result(this);
-            SetQuestProgressResults[id] = result;
-            return result;
-        }
-
-        public Result SetMatchResult(int skill, bool isWon, bool isDraw, int court, string playerId, string tournament, int value)
-        {
-            if (!isSessionInitialized)
-                throw new InvalidOperationException("Session is not initialized");
-            //AssertDevKeyAndSecret();
-            uint id = client.SendSetMatchResultRequest(skill, isWon, isDraw, court, playerId, tournament, value);
-            var result = new Result(this);
-            SetMatchResults[id] = result;
-            return result;
-        }
-
-        public Result RegisterTournament(string tournament)
-        {
-            AssertIsLoggedIn();
-            uint id = client.SendRegisterTournamentRequest(tournament, ticket);
-            var result = new Result(this);
-            registerTournamentResults[id] = result;
-            return result;
-        }
-
         public Result<ChallengeRequestsMessage> GetChallenges()
         {
             AssertIsLoggedIn();
@@ -2284,12 +1949,6 @@ namespace Backend
             var result = new Result<RemoveItemInventoryRequestMessage>(this);
             inventoryRemovedResults[id] = result;
             return result;
-        }
-
-        private void AssertDevKeyAndSecret()
-        {
-            if (secret == Guid.Empty || developerKey == Guid.Empty)
-                throw new InvalidOperationException("");
         }
 
         #endregion

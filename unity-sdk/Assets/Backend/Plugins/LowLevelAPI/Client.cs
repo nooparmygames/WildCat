@@ -141,22 +141,6 @@ public class Client : WebSocketNetworkTransmitter
 
     #region UserMessages
 
-    public uint SendLoginRequest(LoginType type, string userId, int passwordHash, string provider, Guid sessionKey)
-    {
-        LoginOldRequest req = new LoginOldRequest
-        {
-            LoginType = type,
-            UserId = userId,
-            PasswordHash = passwordHash,
-            ProviderName = provider,
-            SessionKey = sessionKey.ToString()
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.LoginRequest, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
     public uint SendAddAuthToAccountRequest(LoginType loginType, string id, string password, Dictionary<string, string> data, string ticket)
     {
         var req = new AddAuthenticationToAccountRequest
@@ -410,84 +394,6 @@ public class Client : WebSocketNetworkTransmitter
         return requestId;
     }
 
-    public uint SendDevGetPublisherDataRequest(string key, Guid developerKey, Guid developerSecret)
-    {
-        GetPublisherDataRequest req = new GetPublisherDataRequest
-        {
-            key = key,
-            developerKey = developerKey,
-            developerSecret = developerSecret
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.GetPublisherDataRequest_S, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendDevSetPublisherDataRequest(string key, string value, Guid developerKey, Guid developerSecret)
-    {
-        SetPublisherDataRequest req = new SetPublisherDataRequest
-        {
-            key = key,
-            value = value,
-            developerKey = developerKey,
-            developerSecret = developerSecret
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.SetPublisherDataRequest_S, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendSetAchievementProgressRequest(string achievement, int progress, string playerId)
-    {
-        SetAchievementProgressByGameServerRequest req = new SetAchievementProgressByGameServerRequest
-        {
-            achievement = achievement,
-            progress = progress,
-            player = playerId,
-            game = ""
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.SetAchievementProgressRequest, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendSetQuestProgressRequest(string quest, int progress, string playerId)
-    {
-        SetQuestProgressByGameServerRequest req = new SetQuestProgressByGameServerRequest
-        {
-            quest = quest,
-            progress = progress,
-            player = playerId,
-            game = ""
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.SetQuestProgressRequest, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendSetMatchResultRequest(int skill, bool isWon, bool isDraw, int court, string playerId,string tournament,int value)
-    {
-        SetMatchResultByGameServerRequestMessage req = new SetMatchResultByGameServerRequestMessage
-        {
-            skill = skill,
-            isWon = isWon,
-            isDraw = isDraw,
-            court = court,
-            player = playerId,
-            game = "",
-            tournament=tournament,
-            value=value
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.SetUBCMatchResultRequest, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
     public uint SendSetCloudDataRequest(string key, string value, string ticket)
     {
         var req = new SetCloudDataRequest
@@ -606,46 +512,11 @@ public class Client : WebSocketNetworkTransmitter
         return requestId;
     }
 
-    public uint SendGetMainDataRequest(string player, string ticket)
-    {
-        var req = new GetMainDataRequestMessage
-        {
-            game = "",
-            player = player
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = (string.IsNullOrEmpty(player)) ? ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetMainDataRequest, ApadanaMsgHeader.normal, ticket, requestId) :
-            ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.GetMainDataRequest, ApadanaMsgHeader.normal, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendRegisterTournamentRequest(string name, string ticket)
-    {
-        var req = new StringMessage
-        {
-            value = name
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.RegisterInTournamentRequst, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
     public uint SendGetChallengesRequest(string ticket)
     {
         var req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
         var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerChallengesRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendGetAchievementsRequest(string ticket)
-    {
-        var req = new EmptyMessage();
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetAchievementsRequest, ApadanaMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -677,75 +548,11 @@ public class Client : WebSocketNetworkTransmitter
         return requestId;
     }
 
-    public uint SendGetquestsRequest(string ticket)
-    {
-        var req = new EmptyMessage();
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetCurrentQuestsRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendMulliganquestsRequest(int index, string ticket)
-    {
-        var req = new MulliganQuestRequestMessage();
-        req.index = index;
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.MulliganQuestRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendClaimQuestsRequest(string quest, string ticket)
-    {
-        var req = new ClaimQuestRewardRequestMessage();
-        req.questId = quest;
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.ClaimQuestRewardRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendSetDeckRequest(List<string> deck, int index, string ticket)
-    {
-        var req = new SetDeckRequestMessage();
-        req.index = index;
-        req.items = deck;
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetDeckRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendPurchaseUBCItemRequest(string item, UBCPurchaseRequestMessage.PurchaseType type, string ticket)
-    {
-        var req = new UBCPurchaseRequestMessage();
-        req.type = type;
-        req.item = item;
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.BuyUBCItemRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
     public uint SendGetPlayerNameRequest(string player, string ticket)
     {
         var req = new StringMessage { value = player };
         uint requestId = IdGen.GetNextId();
         var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerNameRequest, ApadanaMsgHeader.normal, ticket, requestId);
-        SendReliable(msgToSend.ToByteArray());
-        return requestId;
-    }
-
-    public uint SendVerifyCafeReceiptRequestRequest(string product, string receipt, string ticket)
-    {
-        var req = new VerifyCafeReceiptRequest
-        {
-            Product = product,
-            Receipt = receipt
-        };
-        uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.VerifyStoreReceiptRequest, ApadanaMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
