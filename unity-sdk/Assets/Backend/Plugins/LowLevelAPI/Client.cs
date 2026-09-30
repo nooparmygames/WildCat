@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine.Networking;
-using RealtimeServer;
+using WildCat.Protocol;
 using System.Linq;
 using IdGen = RequestIdGenerator;
 
@@ -25,7 +25,7 @@ public class Client : WebSocketNetworkTransmitter
     /// <summary>
     /// This is the list of registered handlers.
     /// </summary>
-	private Dictionary<ApadanaMsgType, List<Action<ApadanaMessageBase>>> handlers = new Dictionary<ApadanaMsgType, List<Action<ApadanaMessageBase>>>();
+	private Dictionary<WildCatMsgType, List<Action<WildCatMessageBase>>> handlers = new Dictionary<WildCatMsgType, List<Action<WildCatMessageBase>>>();
 
     /// <summary>
     /// This queue is used for the callbacks which need to be executed
@@ -33,16 +33,16 @@ public class Client : WebSocketNetworkTransmitter
     /// </summary>
 	private Queue<MessageHandlerData> updateCallbackHandlersQueue = new Queue<MessageHandlerData>();
 
-    public void RegisterHandler(ApadanaMsgType type, Action<ApadanaMessageBase> action)
+    public void RegisterHandler(WildCatMsgType type, Action<WildCatMessageBase> action)
     {
         if (!handlers.ContainsKey(type))
         {
-            handlers.Add(type, new List<Action<ApadanaMessageBase>>());
+            handlers.Add(type, new List<Action<WildCatMessageBase>>());
         }
         handlers[type].Add(action);
     }
 
-    public void UnregisterHandler(ApadanaMsgType type, Action<ApadanaMessageBase> action)
+    public void UnregisterHandler(WildCatMsgType type, Action<WildCatMessageBase> action)
     {
         if (handlers.ContainsKey(type))
         {
@@ -53,7 +53,7 @@ public class Client : WebSocketNetworkTransmitter
         }
     }
 
-    public void UnregisterHandlers(ApadanaMsgType type)
+    public void UnregisterHandlers(WildCatMsgType type)
     {
         if (handlers.ContainsKey(type))
         {
@@ -87,15 +87,15 @@ public class Client : WebSocketNetworkTransmitter
         }
     }
 
-    public void SendGameMessage(string game, byte[] data, ApadanaMsgType type, string ticket, QosType qos)
+    public void SendGameMessage(string game, byte[] data, WildCatMsgType type, string ticket, QosType qos)
     {
         RawMessage msg = new RawMessage { value = data };
         SendGameMessage(game, msg, type, ticket, qos);
     }
 
-    public void SendGameMessage<T>(string game, T msg, ApadanaMsgType type, string ticket, QosType qos) where T : MessageBase, new()
+    public void SendGameMessage<T>(string game, T msg, WildCatMsgType type, string ticket, QosType qos) where T : MessageBase, new()
     {
-        var msgToSend = ApadanaMessageBase.CreateWithGameTarget(msg, type, ApadanaMsgHeader.normal, game, ticket);
+        var msgToSend = WildCatMessageBase.CreateWithGameTarget(msg, type, WildCatMsgHeader.normal, game, ticket);
         var data = msgToSend.ToByteArray();
         SendWithQOS(qos, data);
     }
@@ -151,7 +151,7 @@ public class Client : WebSocketNetworkTransmitter
             data = data
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.AddAuthMechanismToAccountRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.AddAuthMechanismToAccountRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -170,7 +170,7 @@ public class Client : WebSocketNetworkTransmitter
         if (req.AutoCreate && (req.LoginType != LoginType.Device && req.LoginType != LoginType.UserWithPassowrd))
             throw new ArgumentException("AutoCreate can only be true for user and device requests");
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.AuthenticateRequest, ApadanaMsgHeader.normal, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithRequestID(req, WildCatMsgType.AuthenticateRequest, WildCatMsgHeader.normal, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -181,7 +181,7 @@ public class Client : WebSocketNetworkTransmitter
             return 0;
         EmptyMessage req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.HeartBeatRequest, ApadanaMsgHeader.normal, sessionKey, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.HeartBeatRequest, WildCatMsgHeader.normal, sessionKey, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -198,7 +198,7 @@ public class Client : WebSocketNetworkTransmitter
         };
 
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.InviteFriendRequest, ApadanaMsgHeader.normal, sessionKey, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.InviteFriendRequest, WildCatMsgHeader.normal, sessionKey, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -214,7 +214,7 @@ public class Client : WebSocketNetworkTransmitter
         };
 
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetFriendsRequest, ApadanaMsgHeader.normal, sessionKey, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetFriendsRequest, WildCatMsgHeader.normal, sessionKey, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -230,7 +230,7 @@ public class Client : WebSocketNetworkTransmitter
         };
 
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.AcceptFriendRequest, ApadanaMsgHeader.normal, sessionKey, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.AcceptFriendRequest, WildCatMsgHeader.normal, sessionKey, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -246,7 +246,7 @@ public class Client : WebSocketNetworkTransmitter
         };
 
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.DenyFriendRequest, ApadanaMsgHeader.normal, sessionKey, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.DenyFriendRequest, WildCatMsgHeader.normal, sessionKey, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -262,7 +262,7 @@ public class Client : WebSocketNetworkTransmitter
             ticket = sessionKey.ToString()
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.CreateNewAccountRequest, ApadanaMsgHeader.normal, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithRequestID(req, WildCatMsgType.CreateNewAccountRequest, WildCatMsgHeader.normal, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -276,20 +276,20 @@ public class Client : WebSocketNetworkTransmitter
             ticket = sessionKey.ToString()
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.EmailActivationRequest, ApadanaMsgHeader.normal, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithRequestID(req, WildCatMsgType.EmailActivationRequest, WildCatMsgHeader.normal, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
 
     public uint SendInitializeSessionRequest(Guid developerKey, Guid gameKey)
     {
-        InitializeSessionRequest req = new RealtimeServer.InitializeSessionRequest
+        InitializeSessionRequest req = new WildCat.Protocol.InitializeSessionRequest
         {
             DeveloperKey = developerKey,
             GameKey = gameKey
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithRequestID(req, ApadanaMsgType.InitializeSessionRequest, ApadanaMsgHeader.normal, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithRequestID(req, WildCatMsgType.InitializeSessionRequest, WildCatMsgHeader.normal, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -303,7 +303,7 @@ public class Client : WebSocketNetworkTransmitter
             waitTime = MATCHMAKING_TIMEOUT
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.FindMatchRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.FindMatchRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -311,7 +311,7 @@ public class Client : WebSocketNetworkTransmitter
     public uint SendLeaveGameRequest(string game, string ticket)
     {
         EmptyMessage req = new EmptyMessage();
-        var msgToSend = ApadanaMessageBase.CreateWithGameTarget(req, ApadanaMsgType.LeaveGameRequest, ApadanaMsgHeader.normal, game, ticket);
+        var msgToSend = WildCatMessageBase.CreateWithGameTarget(req, WildCatMsgType.LeaveGameRequest, WildCatMsgHeader.normal, game, ticket);
         uint requestId = IdGen.GetNextId();
         msgToSend.SetRequestID(requestId);
         SendReliable(msgToSend.ToByteArray());
@@ -328,7 +328,7 @@ public class Client : WebSocketNetworkTransmitter
             value = data
         };
         uint id = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetMatchPropertyRequest, ApadanaMsgHeader.normal, ticket, id);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.SetMatchPropertyRequest, WildCatMsgHeader.normal, ticket, id);
         SendReliable(msgToSend.ToByteArray());
         return id;
     }
@@ -340,7 +340,7 @@ public class Client : WebSocketNetworkTransmitter
             value = game
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.RejoinMatchRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.RejoinMatchRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -349,7 +349,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         EmptyMessage req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerPendingMatchesRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPlayerPendingMatchesRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -363,7 +363,7 @@ public class Client : WebSocketNetworkTransmitter
             data = data
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.StartChallengeRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.StartChallengeRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -376,7 +376,7 @@ public class Client : WebSocketNetworkTransmitter
             data = data
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.AcceptChallengeRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.AcceptChallengeRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -389,7 +389,7 @@ public class Client : WebSocketNetworkTransmitter
             data = data
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.DenyChallengeRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.DenyChallengeRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -402,7 +402,7 @@ public class Client : WebSocketNetworkTransmitter
             value = value
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetCloudDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -415,7 +415,7 @@ public class Client : WebSocketNetworkTransmitter
             value = value
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetPublicCloudDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.SetPublicCloudDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -428,7 +428,7 @@ public class Client : WebSocketNetworkTransmitter
         };
         req.SetParametersAndTypes(parameters);
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.ExecuteScriptEventRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.ExecuteScriptEventRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -440,7 +440,7 @@ public class Client : WebSocketNetworkTransmitter
             value = key
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetCloudDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetCloudDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -452,7 +452,7 @@ public class Client : WebSocketNetworkTransmitter
             value = key
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPublicCloudDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPublicCloudDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -465,7 +465,7 @@ public class Client : WebSocketNetworkTransmitter
             player = player
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerPublicCloudDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPlayerPublicCloudDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -477,7 +477,7 @@ public class Client : WebSocketNetworkTransmitter
             value = key
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPublisherDataRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPublisherDataRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -489,7 +489,7 @@ public class Client : WebSocketNetworkTransmitter
             value = name
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetNameRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.SetNameRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -498,7 +498,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetServerTimeRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetServerTimeRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -507,7 +507,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetNameRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetNameRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -516,7 +516,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerChallengesRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPlayerChallengesRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -525,7 +525,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = new EmptyMessage();
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetInventoryRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetInventoryRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -534,7 +534,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = addReq;
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.AddItemToInventoryRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.AddItemToInventoryRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -543,7 +543,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = removeReq;
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.RemoveInventoryItemRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.RemoveInventoryItemRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -552,7 +552,7 @@ public class Client : WebSocketNetworkTransmitter
     {
         var req = new StringMessage { value = player };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetPlayerNameRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetPlayerNameRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -567,7 +567,7 @@ public class Client : WebSocketNetworkTransmitter
             count = count
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.GetLeaderboardRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.GetLeaderboardRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -580,7 +580,7 @@ public class Client : WebSocketNetworkTransmitter
             score = score
         };
         uint requestId = IdGen.GetNextId();
-        var msgToSend = ApadanaMessageBase.CreateWithAuthDataAndRequestID(req, ApadanaMsgType.SetLeaderboardRequest, ApadanaMsgHeader.normal, ticket, requestId);
+        var msgToSend = WildCatMessageBase.CreateWithAuthDataAndRequestID(req, WildCatMsgType.SetLeaderboardRequest, WildCatMsgHeader.normal, ticket, requestId);
         SendReliable(msgToSend.ToByteArray());
         return requestId;
     }
@@ -625,7 +625,7 @@ public class Client : WebSocketNetworkTransmitter
         byte[] copy = new byte[size];
         System.Buffer.BlockCopy(data, 0, copy, 0, size);
 
-        var msg = ApadanaMessageBase.CreateMessageFromByteArray(copy);
+        var msg = WildCatMessageBase.CreateMessageFromByteArray(copy);
         if (handlers.ContainsKey(msg.msgType))
         {
             var list = handlers[msg.msgType];
@@ -660,6 +660,6 @@ public class Client : WebSocketNetworkTransmitter
 
 public struct MessageHandlerData
 {
-    public List<Action<ApadanaMessageBase>> callbacks;
-    public ApadanaMessageBase data;
+    public List<Action<WildCatMessageBase>> callbacks;
+    public WildCatMessageBase data;
 }

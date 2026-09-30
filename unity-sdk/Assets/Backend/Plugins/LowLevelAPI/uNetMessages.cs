@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace RealtimeServer
+namespace WildCat.Protocol
 {
     public class MessageBase
     {
@@ -19,7 +19,7 @@ namespace RealtimeServer
     }
     /// <summary>
     /// Different kinds of login types, should
-    /// be synced with Interfaces.LoginType in IPlayer
+    /// be synced with WildCat.Interfaces.LoginType in IPlayer
     /// </summary>
     public enum LoginType : byte { Device, UserWithPassowrd, Email }
 
@@ -42,7 +42,7 @@ namespace RealtimeServer
     /// <summary>
     /// Different message types which can be sent.
     /// </summary>
-    public enum ApadanaMsgType : short
+    public enum WildCatMsgType : short
     {
         InitializeSessionRequest = 6,
         InitializeSessionResponse = 7,
@@ -182,7 +182,7 @@ namespace RealtimeServer
     /// uNet's own header is used for properties like QOS channel to use and ack 
     /// </remarks>
     [Flags]
-    public enum ApadanaMsgHeader : byte
+    public enum WildCatMsgHeader : byte
     {
         normal = 0,
         HasGameTarget = 1,
@@ -197,7 +197,7 @@ namespace RealtimeServer
 
     /// <summary>
     /// All other messages sent in the system are wrapped in this.
-    /// This is the message protocol of Apadana.
+    /// This is the message protocol of WildCat.
     /// </summary>
     /// <remarks>
     /// The first two bytes are a short indicating message type.
@@ -208,17 +208,17 @@ namespace RealtimeServer
     /// The game/player which message is targeted at or
     /// being stored/buffered/... which are not used yet and will be used later on
     /// </remarks>
-    public class ApadanaMessageBase : MessageBase
+    public class WildCatMessageBase : MessageBase
     {
         /// <summary>
         /// This is type of the message
         /// </summary>
-        public ApadanaMsgType msgType;
+        public WildCatMsgType msgType;
 
         /// <summary>
         /// This is header of the message containing message attributes
         /// </summary>
-        public ApadanaMsgHeader header;
+        public WildCatMsgHeader header;
 
         /// <summary>
         /// Ticket of the loggedIn user if applicable
@@ -264,7 +264,7 @@ namespace RealtimeServer
         {
             get
             {
-                return (header & ApadanaMsgHeader.HasGameTarget) == ApadanaMsgHeader.HasGameTarget;
+                return (header & WildCatMsgHeader.HasGameTarget) == WildCatMsgHeader.HasGameTarget;
             }
         }
 
@@ -272,7 +272,7 @@ namespace RealtimeServer
         {
             get
             {
-                return (header & ApadanaMsgHeader.HasPlayerTarget) == ApadanaMsgHeader.HasPlayerTarget;
+                return (header & WildCatMsgHeader.HasPlayerTarget) == WildCatMsgHeader.HasPlayerTarget;
             }
         }
 
@@ -280,7 +280,7 @@ namespace RealtimeServer
         {
             get
             {
-                return (header & ApadanaMsgHeader.HasAuthData) == ApadanaMsgHeader.HasAuthData;
+                return (header & WildCatMsgHeader.HasAuthData) == WildCatMsgHeader.HasAuthData;
             }
         }
 
@@ -288,7 +288,7 @@ namespace RealtimeServer
         {
             get
             {
-                return (header & ApadanaMsgHeader.HasRequestID) == ApadanaMsgHeader.HasRequestID;
+                return (header & WildCatMsgHeader.HasRequestID) == WildCatMsgHeader.HasRequestID;
             }
         }
 
@@ -304,7 +304,7 @@ namespace RealtimeServer
             }
         }
 
-        private ApadanaMessageBase()
+        private WildCatMessageBase()
         {
 
         }
@@ -312,13 +312,13 @@ namespace RealtimeServer
         /// <summary>
         /// Creates a message from a serialized byte array
         /// </summary>
-        /// <param name="serializedMessage">A full ApadanaMessageBase serialized as byte array</param>
+        /// <param name="serializedMessage">A full WildCatMessageBase serialized as byte array</param>
         /// <remarks>
         /// This deserializes a full message and not only a payload, 
         /// The message should contain all header related
         /// info and the header itselfin addition of any payloads
         /// </remarks>
-        public ApadanaMessageBase(byte[] serializedMessage)
+        public WildCatMessageBase(byte[] serializedMessage)
         {
             using (MemoryStream str = new MemoryStream(serializedMessage))
             {
@@ -335,7 +335,7 @@ namespace RealtimeServer
         /// <param name="requestID">The request ID to be set</param>
         public void SetRequestID(uint requestID)
         {
-            header |= ApadanaMsgHeader.HasRequestID;
+            header |= WildCatMsgHeader.HasRequestID;
             this.requestID = requestID;
         }
 
@@ -404,8 +404,8 @@ namespace RealtimeServer
 
         public override void Deserialize(BinaryReader reader)
         {
-            msgType = (ApadanaMsgType)reader.ReadInt16();
-            header = (ApadanaMsgHeader)reader.ReadByte();
+            msgType = (WildCatMsgType)reader.ReadInt16();
+            header = (WildCatMsgHeader)reader.ReadByte();
             if (hasRequestID)
             {
                 requestID = reader.ReadUInt32();
@@ -451,49 +451,49 @@ namespace RealtimeServer
             return res;
         }
 
-        public static ApadanaMessageBase Create<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header) where T : MessageBase, new()
+        public static WildCatMessageBase Create<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header) where T : MessageBase, new()
         {
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
             return msg;
         }
 
-        public static ApadanaMessageBase CreateWithRequestID<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header, uint requestID) where T : MessageBase, new()
+        public static WildCatMessageBase CreateWithRequestID<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header, uint requestID) where T : MessageBase, new()
         {
 
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
-            msg.header |= ApadanaMsgHeader.HasRequestID;
+            msg.header |= WildCatMsgHeader.HasRequestID;
             msg.requestID = requestID;
             return msg;
         }
 
-        public static ApadanaMessageBase CreateWithAuthDataAndRequestID<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header, string ticket, uint requestID) where T : MessageBase, new()
+        public static WildCatMessageBase CreateWithAuthDataAndRequestID<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header, string ticket, uint requestID) where T : MessageBase, new()
         {
             AssertTicketIsNotNullOrEmpty(ticket);
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
-            msg.header |= ApadanaMsgHeader.HasAuthData;
-            msg.header |= ApadanaMsgHeader.HasRequestID;
+            msg.header |= WildCatMsgHeader.HasAuthData;
+            msg.header |= WildCatMsgHeader.HasRequestID;
             msg.ticket = ticket;
             msg.requestID = requestID;
             return msg;
         }
 
-        public static ApadanaMessageBase CreateWithAuthData<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header, string ticket) where T : MessageBase, new()
+        public static WildCatMessageBase CreateWithAuthData<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header, string ticket) where T : MessageBase, new()
         {
             AssertTicketIsNotNullOrEmpty(ticket);
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
-            msg.header |= ApadanaMsgHeader.HasAuthData;
+            msg.header |= WildCatMsgHeader.HasAuthData;
             msg.ticket = ticket;
             return msg;
         }
@@ -515,17 +515,17 @@ namespace RealtimeServer
         /// <param name="ticket"></param>
         /// <returns></returns>
         /// <remarks>This will force HasAuthData and HasGameTarget headers regardless of your passed header</remarks>
-        public static ApadanaMessageBase CreateWithGameTarget<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header, string gameID, string ticket) where T : MessageBase, new()
+        public static WildCatMessageBase CreateWithGameTarget<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header, string gameID, string ticket) where T : MessageBase, new()
         {
             AssertTicketIsNotNullOrEmpty(ticket);
             AssertGameidIsNotNullOrEmpty(gameID);
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
             //Add game target to header
-            msg.header |= ApadanaMsgHeader.HasGameTarget;
-            msg.header |= ApadanaMsgHeader.HasAuthData;
+            msg.header |= WildCatMsgHeader.HasGameTarget;
+            msg.header |= WildCatMsgHeader.HasAuthData;
             msg.ticket = ticket;
             msg.game = gameID;
             return msg;
@@ -548,17 +548,17 @@ namespace RealtimeServer
         /// <param name="ticket"></param>
         /// <returns></returns>
         /// <remarks>This will force HasAuthData and HasPlayerTarget header flags regardless of your passed header</remarks>
-        public static ApadanaMessageBase CreateWithPlayerTargets<T>(T data, ApadanaMsgType msgType, ApadanaMsgHeader header, string[] players, string ticket) where T : MessageBase, new()
+        public static WildCatMessageBase CreateWithPlayerTargets<T>(T data, WildCatMsgType msgType, WildCatMsgHeader header, string[] players, string ticket) where T : MessageBase, new()
         {
             AssertTicketIsNotNullOrEmpty(ticket);
             AssertPlayersAreNotNullOrEmpty(players);
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             msg.SetData(data);
             msg.msgType = msgType;
             msg.header = header;
             //Add player target to header
-            msg.header |= ApadanaMsgHeader.HasPlayerTarget;
-            msg.header |= ApadanaMsgHeader.HasAuthData;
+            msg.header |= WildCatMsgHeader.HasPlayerTarget;
+            msg.header |= WildCatMsgHeader.HasAuthData;
             msg.ticket = ticket;
             msg.players = players;
             return msg;
@@ -575,9 +575,9 @@ namespace RealtimeServer
             }
         }
 
-        public static ApadanaMessageBase CreateMessageFromByteArray(byte[] data)
+        public static WildCatMessageBase CreateMessageFromByteArray(byte[] data)
         {
-            ApadanaMessageBase msg = new ApadanaMessageBase();
+            WildCatMessageBase msg = new WildCatMessageBase();
             using (MemoryStream str = new MemoryStream(data))
             {
                 using (BinaryReader nr = new BinaryReader(str))

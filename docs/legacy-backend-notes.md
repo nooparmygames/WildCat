@@ -7,22 +7,25 @@ end) so bug numbers and history stay readable. CLAUDE.md describes the Orleans 1
 step 1. Read this before touching a grain. File names are relative to `backend/`. Line numbers
 refer to the copied files.
 
+Paths and names follow the WildCat rename from roadmap step 3; the table below gives each
+project's legacy name.
+
 ## Projects
 
-| Project | Role |
+| Project (legacy name) | Role |
 |---|---|
-| `Interfaces` | grain interfaces, state classes, DTOs, helpers (`ResourcesUtility` builds grain keys) |
-| `Collections` | grain implementations plus SMTP and Roslyn scripting |
-| `Messages` | `uNetMessages.cs`: the binary wire protocol shared with the Unity SDK (netstandard2.0) |
-| `Silo` | the host: silo plus WebSocket gateway in one process, memory providers until the PostgreSQL port (Release used MongoDB before step 1); seeds one developer and game from `devsconfig.json` |
-| `FrontEnd` | WebSocket gateway library mapped at `/ws` by the Silo host, using the silo's `IClusterClient` (a separate Orleans client process before step 1); `FrontEndServer.cs`, one class of over 2,000 lines, dispatches every message |
-| `Tests` | xUnit on `InProcessTestCluster` (`TestCluster` before step 1), one shared cluster per collection |
+| `WildCat.Interfaces` (`Interfaces`) | grain interfaces, state classes, DTOs, helpers (`ResourcesUtility` builds grain keys) |
+| `WildCat.Grains` (`Collections`) | grain implementations plus SMTP and Roslyn scripting (namespace `WildCat.Scripting`, was `ScriptingAPI`) |
+| `WildCat.Protocol` (`Messages`) | `uNetMessages.cs`: the binary wire protocol shared with the Unity SDK (netstandard2.0; namespace was `RealtimeServer`) |
+| `WildCat.Host` (`Silo`) | the host: silo plus WebSocket gateway in one process, memory providers until the PostgreSQL port (Release used MongoDB before step 1); seeds one developer and game from `devsconfig.json` |
+| `WildCat.Gateway` (`FrontEnd`) | WebSocket gateway library mapped at `/ws` by the host, using the silo's `IClusterClient` (a separate Orleans client process before step 1); `FrontEndServer.cs`, one class of over 2,000 lines, dispatches every message |
+| `WildCat.Tests` (`Tests`) | xUnit on `InProcessTestCluster` (`TestCluster` before step 1), one shared cluster per collection |
 
 Environment facts that apply everywhere: only `LeaderBoard` names a storage provider ("blob");
 every other `Grain<T>` uses the default provider. All streams go through one memory stream
-provider, "game", with ids built by `Interfaces/StreamNames.cs` (the "SMS" provider before step
-1). No grain uses transactions; the 3.4.3 silo called `UseTransactions()` anyway and the port
-dropped it.
+provider, "game", with ids built by `WildCat.Interfaces/StreamNames.cs` (the "SMS" provider
+before step 1). No grain uses transactions; the 3.4.3 silo called `UseTransactions()` anyway and
+the port dropped it.
 
 ## Grain inventory
 
@@ -48,15 +51,16 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | Item, PackageContainer | IItem, IPackageContainer, S | ItemState, PackageContainerState | catalog definitions; random drops not implemented |
 | ResourceManager | IResourceManager, S | ResourceManagerState | registry of named resources per game (leaderboards, scripts); can emit a C# constants class for SDKs |
 | ScriptEventCompiler | IScriptEventCompiler, S "{gameKey}_G_{event}" | ScriptEventState | stores and compiles a developer's C# event script (Roslyn) into a per-silo static cache |
-| ScriptEventRunner | IScriptEventRunner, G+S | stateless | runs a compiled script with `Globals { args, Apadana }` |
+| ScriptEventRunner | IScriptEventRunner, G+S | stateless | runs a compiled script with `Globals { args, WildCat }` |
 | TimeService | ITimeService, G | stateless worker, reentrant | server time as a culture-dependent string |
 | CustomIDToAccountIDMap, EmailAccountMapId, UserAccountIdMap, NameAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
 
 Non-grain classes: `EmailSenderUtility` (SMTP, sends only in `MASTER` builds, otherwise prints
 the code), `JSONSerializer.cs` (Newtonsoft settings with `TypeNameHandling.All` and grain
-reference converters), `ScriptCompilationUtility` and `ScriptingAPI.Apadana` (the script
-sandbox). Step 2 removed `PlayfabManager` (the DI singleton wrapping the PlayFab APIs),
-`HttpClientUtility` and `ApadanaAPI` (an older, unused script API).
+reference converters), `ScriptCompilationUtility` and `WildCat.Scripting.WildCatScriptApi` (the
+script sandbox, `ScriptingAPI.Apadana` before step 3). Step 2 removed `PlayfabManager` (the DI
+singleton wrapping the PlayFab APIs), `HttpClientUtility` and `ApadanaAPI` (an older, unused
+script API).
 
 ## Flows
 
@@ -92,10 +96,11 @@ either finishes the game (`FinishGameWithOneDisconnect`) or marks the player Dis
 they can rejoin through `GetPendingMatches` and `RejoinMatch`.
 
 Script events: a developer stores a C# method per event. `ScriptCompilationUtility` prepends a
-generated call line, compiles with Roslyn against the Collections and Messages assemblies, and
-validates that every referenced type is a whitelisted primitive, declared in the script,
-`Apadana`, or `GetLeaderBoardResponse`. Scripts get `args` and an `Apadana` object with player
-data get/set, time, leaderboard read/write (count clamped to 20), publisher data, and JSON
+generated call line, compiles with Roslyn against the WildCat.Grains and WildCat.Protocol
+assemblies, and validates that every referenced type is a whitelisted primitive, declared in the
+script, `WildCatScriptApi`, or `GetLeaderBoardResponse`. Scripts get `args` and a `WildCat`
+object (a `WildCatScriptApi`, so scripts write `WildCat.GetPlayerData(...)`) with player data
+get/set, time, leaderboard read/write (count clamped to 20), publisher data, and JSON
 helpers; each call touches the session and is marshalled back onto the grain scheduler. Runs
 are limited to 3 s (but see bugs).
 
@@ -152,7 +157,8 @@ Correctness:
     the port abandons the thread instead, so a runaway script keeps running). It races on the
     placeholder task so every call waits the full 3 s, keeps a non-thread-safe static per-silo
     cache (multi-silo clusters get KeyNotFound), and ignores compile diagnostics.
-    `Apadana.SetPlayerData` and `SetScoreInLeaderBoard` return the inner task without awaiting.
+    `WildCatScriptApi.SetPlayerData` and `SetScoreInLeaderBoard` return the inner task without
+    awaiting.
 16. `Player.RejoinMatch` calls `game.PlayerRejoined`, which calls back into the same player.
     That worked on 3.4.3 only because call chain reentrancy was on by default there
     (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the

@@ -8,10 +8,10 @@ public static class OneTimeRunner
 
     static OneTimeRunner()
     {
-        if (EditorPrefs.HasKey("apadana-run"))
+        if (EditorPrefs.HasKey("wildcat-run"))
         {
-            EditorPrefs.SetInt("apadana-run", 1);
-            ApadanaWindow.ShowApadanaWindow();
+            EditorPrefs.SetInt("wildcat-run", 1);
+            WildCatWindow.ShowWildCatWindow();
         }
     }
 }

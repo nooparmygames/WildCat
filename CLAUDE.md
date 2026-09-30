@@ -13,9 +13,9 @@ password; those credentials must be rotated by the owner regardless of what happ
 ## Repository layout
 
 ```
-backend/           the .NET solution (Apadana.sln): Interfaces, Collections (grains), Messages
-                   (wire protocol), Silo (the host: silo plus gateway), FrontEnd (WebSocket
-                   gateway library), Tests
+backend/           the .NET solution (WildCat.sln): WildCat.Interfaces, WildCat.Grains,
+                   WildCat.Protocol (wire protocol), WildCat.Host (the host: silo plus
+                   gateway), WildCat.Gateway (WebSocket gateway library), WildCat.Tests
 unity-sdk/         Unity project holding only Assets/Backend (the SDK) plus settings
 docs/              legacy-backend-notes.md (grain inventory, flows, bug list),
                    wire-protocol.md (framing and message table),
@@ -34,12 +34,12 @@ and talked to a REST API that was never checked in, so it is rewritten from scra
   No database server is installed locally; use Docker. In a fresh cloud container without
   `dotnet`, install it with `apt-get install -y dotnet-sdk-10.0` (the dot.net install script
   host is blocked by the proxy; the Ubuntu archive is not).
-- Everything targets net10.0 on Orleans 10.3.1 except `Messages` (netstandard2.0, shared with
-  Unity). Shared settings live in `backend/Directory.Build.props` and package versions in
+- Everything targets net10.0 on Orleans 10.3.1 except `WildCat.Protocol` (netstandard2.0, shared
+  with Unity). Shared settings live in `backend/Directory.Build.props` and package versions in
   `backend/Directory.Packages.props` (central package management):
 
 ```bash
-dotnet build backend/Apadana.sln
+dotnet build backend/WildCat.sln
 ```
 
 - Tests use xUnit on an `InProcessTestCluster` shared by one collection fixture. They are slow
@@ -48,18 +48,18 @@ dotnet build backend/Apadana.sln
   at a time when iterating:
 
 ```bash
-dotnet test backend/Tests/Tests.csproj --filter "FullyQualifiedName~LeaderBoardTests"
+dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --filter "FullyQualifiedName~LeaderBoardTests"
 ```
 
 - Run the host: one process runs the silo (localhost clustering, memory storage, memory
   streams, in-memory reminders) and the WebSocket gateway at `/ws` on port 5000:
 
 ```bash
-dotnet run --project backend/Silo
+dotnet run --project backend/WildCat.Host
 ```
 
   Every build uses the memory providers until the PostgreSQL port (roadmap step 5); outside
-  Development the host logs a warning saying so. `backend/Silo/devsconfig.json` seeds one
+  Development the host logs a warning saying so. `backend/WildCat.Host/devsconfig.json` seeds one
   developer and game with placeholder keys and goes away with the configuration model.
 - The Unity SDK cannot be compiled in a Claude session (no Unity install). The PlayFab
   references were removed at copy time; compiling in Unity is unverified.
@@ -68,7 +68,8 @@ dotnet run --project backend/Silo
 
 Read `docs/legacy-backend-notes.md` for the full picture. The short version:
 
-- Grains live in `backend/Collections`, interfaces and state classes in `backend/Interfaces`.
+- Grains live in `backend/WildCat.Grains`, interfaces and state classes in
+  `backend/WildCat.Interfaces`.
   Player, Session, Developer, RelayServerGame, RelayServerMatchMaker, PlayerFriendList,
   PlayerChallengeHandler, LeaderBoard, PlayerInventory, PlayerStorage, ScriptEventCompiler and
   the id-map grains are the core. `Game`/`MatchMaker` and the TimedExecuter subsystem were
@@ -76,17 +77,19 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
 - A developer (publisher) owns games. A client initializes a session with developer key plus
   game key, receives a Guid ticket, logs in as a player, and sends every later message with the
   ticket.
-- The gateway (`backend/FrontEnd/FrontEndServer.cs`, one class of over 2,000 lines) decodes the
-  binary protocol in `backend/Messages/uNetMessages.cs`, calls grains, and pushes server events back
-  through Orleans memory streams (provider `game`, ids built by `Interfaces/StreamNames.cs`).
+- The gateway (`backend/WildCat.Gateway/FrontEndServer.cs`, one class of over 2,000 lines)
+  decodes the binary protocol in `backend/WildCat.Protocol/uNetMessages.cs`, calls grains, and
+  pushes server events back through Orleans memory streams (provider `game`, ids built by
+  `WildCat.Interfaces/StreamNames.cs`).
   It runs inside the silo process and uses the silo's `IClusterClient`.
 - Matches are relay games: the server tracks membership and properties and forwards opaque
   byte arrays between players; it never simulates the game. Matchmaking is per game mode with a
   time-based relaxation schedule.
-- Developers can attach C# scripts to named events; they run in a Roslyn sandbox on the silo.
+- Developers can attach C# scripts to named events; they run in a Roslyn sandbox on the silo
+  and reach the server through the `WildCat` global (`WildCat.Scripting.WildCatScriptApi`).
 - Orleans 3.x allowed call chain reentrancy by default and the legacy grains depend on it
-  (A calls B calls A). `Collections/CallChainReentrancyFilter.cs`, registered through
-  `AddLegacyCallChainReentrancy()` in `Collections/SiloBuilderExtensions.cs`, restores that for
+  (A calls B calls A). `WildCat.Grains/CallChainReentrancyFilter.cs`, registered through
+  `AddLegacyCallChainReentrancy()` in `WildCat.Grains/SiloBuilderExtensions.cs`, restores that for
   every call. Replace it with targeted `RequestContext.AllowCallChainReentrancy()` calls at the
   known cycles before removing it. The same extensions class holds the stream setup shared by
   the host and the test fixture.
@@ -140,7 +143,7 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
    reminders package, tests on `InProcessTestCluster`. Keep behavior identical in this step.
 2. (Done) Remove PlayFab, CafeBazaar, billing, dead subsystems and card-game leftovers listed in
    `docs/legacy-backend-notes.md` and `docs/unity-sdk-notes.md`.
-3. Rename to WildCat.
+3. (Done) Rename to WildCat.
 4. Security fixes before any public deployment: ticket leaked in relayed frames,
    client-controlled inventory grants and scores, missing developer-secret checks,
    unauthenticated environment creation, client-side MD5 replaced by a server-side

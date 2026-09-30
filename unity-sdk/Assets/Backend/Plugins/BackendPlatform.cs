@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
-using RealtimeServer;
-using EmptyMessage = RealtimeServer.EmptyMessage;
+using WildCat.Protocol;
+using EmptyMessage = WildCat.Protocol.EmptyMessage;
 using System.IO;
 
-namespace Backend
+namespace WildCat
 {
 
     /// <summary>
@@ -17,22 +17,22 @@ namespace Backend
     public class BackendPlatform : MonoBehaviour
     {
         /// <summary>
-        /// Current major version of the apadana SDK
+        /// Current major version of the WildCat SDK
         /// </summary>
         public static int majorVersion = 2;
 
         /// <summary>
-        /// Current minor version of the Apadana SDK
+        /// Current minor version of the WildCat SDK
         /// </summary>
         public static int minorVersion = 0;
 
         /// <summary>
-        /// Current hot fix version of the Apadana SDK
+        /// Current hot fix version of the WildCat SDK
         /// </summary>
         public static int hotFixVersion = 0;
 
         /// <summary>
-        /// Release date of latest Apadana version
+        /// Release date of latest WildCat version
         /// </summary>
         public static DateTime releaseDate = new DateTime(2019, 8, 15);
 
@@ -416,9 +416,9 @@ namespace Backend
                     OnConnectionFailed();
             };
 
-            //Handlers of Apadana internal messages
+            //Handlers of WildCat internal messages
 
-            client.RegisterHandler(ApadanaMsgType.LeaveGameResponse, x =>
+            client.RegisterHandler(WildCatMsgType.LeaveGameResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -433,7 +433,7 @@ namespace Backend
                 finishGameSentResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.SetMatchPropertyResponse, x =>
+            client.RegisterHandler(WildCatMsgType.SetMatchPropertyResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -448,7 +448,7 @@ namespace Backend
                 setMatchPropertyResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.RejoinMatchResponse, x =>
+            client.RegisterHandler(WildCatMsgType.RejoinMatchResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -464,7 +464,7 @@ namespace Backend
                 matchRejoinResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPlayerMatchesResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPlayerMatchesResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<PendingMatchesCollectionData>>();
                 if (data.isSuccesful)
@@ -480,7 +480,7 @@ namespace Backend
                 getMatchesResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.SetNameResponse, x =>
+            client.RegisterHandler(WildCatMsgType.SetNameResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -494,7 +494,7 @@ namespace Backend
                 nameSetResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPlayerChallengesResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPlayerChallengesResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<ChallengeRequestsMessage>>();
                 if (data.isSuccesful)
@@ -508,7 +508,7 @@ namespace Backend
                 getChallengesResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetServerTimeResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetServerTimeResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -523,7 +523,7 @@ namespace Backend
                 timeReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetNameResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetNameResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -537,7 +537,7 @@ namespace Backend
                 nameReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetInventoryResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetInventoryResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<GetInventoryResponseMessage>>();
                 if (data.isSuccesful)
@@ -551,7 +551,7 @@ namespace Backend
                 inventoryReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.AddItemToInventoryResponse, x =>
+            client.RegisterHandler(WildCatMsgType.AddItemToInventoryResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<BuyItemInventoryRequestMessage>>();
                 if (data.isSuccesful)
@@ -565,7 +565,7 @@ namespace Backend
                 inventoryAddedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.RemoveInventoryItemResponse, x =>
+            client.RegisterHandler(WildCatMsgType.RemoveInventoryItemResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<RemoveItemInventoryRequestMessage>>();
                 if (data.isSuccesful)
@@ -579,7 +579,7 @@ namespace Backend
                 inventoryRemovedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPlayerNameResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPlayerNameResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -593,7 +593,7 @@ namespace Backend
                 playerNameReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.SetCloudDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.SetCloudDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -607,7 +607,7 @@ namespace Backend
                 cloudDataSavedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.SetPublicCloudDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.SetPublicCloudDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -621,7 +621,7 @@ namespace Backend
                 cloudPublicDataSavedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetCloudDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetCloudDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -635,7 +635,7 @@ namespace Backend
                 cloudDataReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPublicCloudDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPublicCloudDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<GetPublicCloudDataResponse>>();
                 if (data.isSuccesful)
@@ -649,7 +649,7 @@ namespace Backend
                 cloudPublicDataReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPlayerPublicCloudDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPlayerPublicCloudDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<GetPublicCloudDataResponse>>();
                 if (data.isSuccesful)
@@ -663,7 +663,7 @@ namespace Backend
                 cloudPlayerPublicDataReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.ExecuteScriptEventResponse, x =>
+            client.RegisterHandler(WildCatMsgType.ExecuteScriptEventResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<ScriptEventExecutionResponseMessage>>();
                 if (data.isSuccesful)
@@ -677,7 +677,7 @@ namespace Backend
                 scriptEventExecutedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetPublisherDataResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetPublisherDataResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -692,7 +692,7 @@ namespace Backend
                 publisherDataReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetLeaderboardResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetLeaderboardResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<GetLeaderBoardResponse>>();
                 if (data.isSuccesful)
@@ -725,7 +725,7 @@ namespace Backend
                 topLeaderBoardEntriesReceivedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.SetLeaderboardResponse, x =>
+            client.RegisterHandler(WildCatMsgType.SetLeaderboardResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -739,7 +739,7 @@ namespace Backend
                 scoreSetInLeaderBoardResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GetFriendsResponse, x =>
+            client.RegisterHandler(WildCatMsgType.GetFriendsResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<FriendlistCollection>>();
                 if (data.isSuccesful)
@@ -755,7 +755,7 @@ namespace Backend
                 getFriendsResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.InviteFriendResponse, x =>
+            client.RegisterHandler(WildCatMsgType.InviteFriendResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -770,7 +770,7 @@ namespace Backend
                 inviteFriendsResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.AcceptFriendResponse, x =>
+            client.RegisterHandler(WildCatMsgType.AcceptFriendResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -785,7 +785,7 @@ namespace Backend
                 acceptFriendsResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.DenyFriendResponse, x =>
+            client.RegisterHandler(WildCatMsgType.DenyFriendResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -800,7 +800,7 @@ namespace Backend
                 denyFriendsResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.StartChallengeResponse, x =>
+            client.RegisterHandler(WildCatMsgType.StartChallengeResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -814,7 +814,7 @@ namespace Backend
                 challengeSentResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.AcceptChallengeResponse, x =>
+            client.RegisterHandler(WildCatMsgType.AcceptChallengeResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -828,7 +828,7 @@ namespace Backend
                 acceptChallengeSentResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.DenyChallengeRequest, x =>
+            client.RegisterHandler(WildCatMsgType.DenyChallengeRequest, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
@@ -842,7 +842,7 @@ namespace Backend
                 denyChallengeSentResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.FriendshipInvitationEvent, x =>
+            client.RegisterHandler(WildCatMsgType.FriendshipInvitationEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<FriendlistMessage>>();
                 print("received friendship invitation from " + data.msg.friend + data.msg.friendName);
@@ -850,7 +850,7 @@ namespace Backend
                     OnFriendshipInvitation(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
             });
 
-            client.RegisterHandler(ApadanaMsgType.FriendshipAcceptedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.FriendshipAcceptedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<FriendlistMessage>>();
                 print("Friendship accepted from " + data.msg.friend + data.msg.friendName);
@@ -858,7 +858,7 @@ namespace Backend
                     OnFriendshipAccepted(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
             });
 
-            client.RegisterHandler(ApadanaMsgType.FriendshipDeniedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.FriendshipDeniedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<FriendlistMessage>>();
                 print("Friendship denied from " + data.msg.friend + data.msg.friendName);
@@ -866,7 +866,7 @@ namespace Backend
                     OnFriendshipDenied(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
             });
 
-            client.RegisterHandler(ApadanaMsgType.FriendStatusChangedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.FriendStatusChangedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<FriendlistMessage>>();
                 print("Friend status changed " + data.msg.friend + data.msg.status);
@@ -874,7 +874,7 @@ namespace Backend
                     OnFriendStatusChanged(data.msg.friend, data.msg.status);
             });
 
-            client.RegisterHandler(ApadanaMsgType.StartChallengeRequestedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.StartChallengeRequestedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<ChallengeMessage>>();
                 print("received challenge request from " + data.isSuccesful + data.msg.Player);
@@ -882,21 +882,21 @@ namespace Backend
                     OnchallengeRequestReceived(data.msg.Player, data.msg.PlayerName, data.msg.TimeOut, data.msg.data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.ChallengeDeniedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.ChallengeDeniedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<ChallengeMessage>>().msg;
                 if (OnchallengeDenied != null)
                     OnchallengeDenied(data.Player, data.PlayerName, data.data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.ChallengeAcceptedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.ChallengeAcceptedEvent, x =>
             {
                 var data = x.GetData<OptionalResponse<ChallengeMessage>>().msg;
                 if (OnchallengeStarted != null)
                     OnchallengeStarted(data.Player, data.PlayerName, data.GameKey, data.data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.MatchPropertyChangedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.MatchPropertyChangedEvent, x =>
             {
                 var data = x.GetData<MatchPropertyChangeData>();
                 print("match property changed IsGameProp" + data.isGameProperty);
@@ -912,28 +912,28 @@ namespace Backend
                 }
             });
 
-            client.RegisterHandler(ApadanaMsgType.GamePlayerRejoinedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.GamePlayerRejoinedEvent, x =>
             {
                 var data = x.GetData<MatchPlayerEventData>();
                 if (OnMatchPlayerRejoined != null)
                     OnMatchPlayerRejoined(data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GamePlayerRemovedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.GamePlayerRemovedEvent, x =>
             {
                 var data = x.GetData<MatchPlayerEventData>();
                 if (OnMatchPlayerRemoved != null)
                     OnMatchPlayerRemoved(data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.MatchRejoinSyncEvent, x =>
+            client.RegisterHandler(WildCatMsgType.MatchRejoinSyncEvent, x =>
             {
                 var data = x.GetData<MatchSyncEventData>();
                 if (OnMatchRejoinSyncDataReceived != null)
                     OnMatchRejoinSyncDataReceived(data);
             });
 
-            client.RegisterHandler(ApadanaMsgType.GameFinishedEvent, x =>
+            client.RegisterHandler(WildCatMsgType.GameFinishedEvent, x =>
             {
                 print("Received GameFinish Event");
                 var data = x.GetData<GameFinishedEvent>();
@@ -949,7 +949,7 @@ namespace Backend
                 }
             });
 
-            client.RegisterHandler(ApadanaMsgType.InitializeSessionResponse, x =>
+            client.RegisterHandler(WildCatMsgType.InitializeSessionResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<GuidMessage>>();
                 if (data.isSuccesful)
@@ -964,7 +964,7 @@ namespace Backend
                 sessionInitializedResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.FindMatchResponse, x =>
+            client.RegisterHandler(WildCatMsgType.FindMatchResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<FindMatchResponse>>();
                 print("Received FindMatchResponse success: " + data.isSuccesful);
@@ -993,7 +993,7 @@ namespace Backend
 
 
 
-            client.RegisterHandler(ApadanaMsgType.AuthenticateResponse, x =>
+            client.RegisterHandler(WildCatMsgType.AuthenticateResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<AuthenticationResponse>>();
                 if (data.isSuccesful)
@@ -1011,7 +1011,7 @@ namespace Backend
                 authResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.CreateNewAccountResponse, x =>
+            client.RegisterHandler(WildCatMsgType.CreateNewAccountResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
@@ -1025,7 +1025,7 @@ namespace Backend
                 createAccountResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.AddAuthMechanismToAccountResponse, x =>
+            client.RegisterHandler(WildCatMsgType.AddAuthMechanismToAccountResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 print("Received add authentication response " + data.isSuccesful);
@@ -1040,7 +1040,7 @@ namespace Backend
                 addAuthToAccountResults.Remove(x.requestID);
             });
 
-            client.RegisterHandler(ApadanaMsgType.EmailActivationResponse, x =>
+            client.RegisterHandler(WildCatMsgType.EmailActivationResponse, x =>
             {
                 var data = x.GetData<OptionalResponse<EmptyMessage>>();
                 print("Activation response received " + data.isSuccesful);
@@ -1068,8 +1068,8 @@ namespace Backend
         }
 
         /// <summary>
-        /// This method connects to a local Apadana server and should only be used by Apadana developers or people
-        /// with custom Apadana servers on their machines
+        /// This method connects to a local WildCat server and should only be used by WildCat developers or people
+        /// with custom WildCat servers on their machines
         /// </summary>
         public void ConnectLocally()
         {
@@ -1605,7 +1605,7 @@ namespace Backend
         /// <param name="game">The game to update player's value in</param>
         /// <param name="value">The updated player value</param>
         /// <remarks>OnGameUpdated is called when the opponent value is received.</remarks>
-        public void UpdateGame<T>(string game, T value, ApadanaMsgType type, QosType qos) where T : MessageBase, new()
+        public void UpdateGame<T>(string game, T value, WildCatMsgType type, QosType qos) where T : MessageBase, new()
         {
             AssertIsLoggedIn();
             if (IsSupportedQOS(qos))
@@ -1953,12 +1953,12 @@ namespace Backend
 
         #endregion
 
-        public void RegisterHandler(ApadanaMsgType type, Action<ApadanaMessageBase> action)
+        public void RegisterHandler(WildCatMsgType type, Action<WildCatMessageBase> action)
         {
             client.RegisterHandler(type, action);
         }
 
-        public void UnregisterHandler(ApadanaMsgType type, Action<ApadanaMessageBase> action)
+        public void UnregisterHandler(WildCatMsgType type, Action<WildCatMessageBase> action)
         {
             client.UnregisterHandler(type, action);
         }

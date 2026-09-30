@@ -3,9 +3,9 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using RealtimeServer;
+using WildCat.Protocol;
 using UnityEngine.Networking;
-using Backend;
+using WildCat;
 using System.Linq;
 
 public class Sample : MonoBehaviour
@@ -55,7 +55,7 @@ public class Sample : MonoBehaviour
     /// </summary>
     public enum GameMessageType
     {
-        GameStart = ApadanaMsgType.HighestInternal + 1,
+        GameStart = WildCatMsgType.HighestInternal + 1,
         Update,
         GameFinish
     }
@@ -122,7 +122,7 @@ public class Sample : MonoBehaviour
     private List<LeaderBoardEntry> entriesToShow;
 
     /// <summary>
-    /// If true, will try to connect to a local apadana server
+    /// If true, will try to connect to a local WildCat server
     /// </summary>
     public bool isLocal;
 
@@ -404,7 +404,7 @@ public class Sample : MonoBehaviour
         GUILayout.EndVertical();
     }
 
-    public IEnumerator InitiApadanaForServer()
+    public IEnumerator InitWildCatForServer()
     {
         //we need to parse game and developer keys to Guid to be able to send them
         developer = new Guid(developerKey);
@@ -514,7 +514,7 @@ public class Sample : MonoBehaviour
         };
 
         //uNet like message registration for player update messages in game
-        BackendPlatform.Instance.RegisterHandler((ApadanaMsgType)GameMessageType.Update, x =>
+        BackendPlatform.Instance.RegisterHandler((WildCatMsgType)GameMessageType.Update, x =>
         {
             UpdateOtherPlayer(x);
         });
@@ -578,7 +578,7 @@ public class Sample : MonoBehaviour
         }
     }
 
-    private void UpdateOtherPlayer(ApadanaMessageBase x)
+    private void UpdateOtherPlayer(WildCatMessageBase x)
     {
         var data = x.GetData<Vector3Message>();
         if (other == null)
@@ -612,15 +612,15 @@ public class Sample : MonoBehaviour
     /// <summary>
     /// Sends player position to the server 10 times a second
     /// </summary>
-    /// <param name="apadana"></param>
+    /// <param name="platform"></param>
     /// <param name="game"></param>
     /// <returns></returns>
-    IEnumerator UpdateGame(BackendPlatform apadana, string game)
+    IEnumerator UpdateGame(BackendPlatform platform, string game)
     {
 
         while (state == ApplicationState.InGame)
         {
-            apadana.UpdateGame<Vector3Message>(game, new Vector3Message { msg = transform.position }, (ApadanaMsgType)GameMessageType.Update, QosType.Reliable);
+            platform.UpdateGame<Vector3Message>(game, new Vector3Message { msg = transform.position }, (WildCatMsgType)GameMessageType.Update, QosType.Reliable);
             yield return new WaitForSeconds(0.05f); //20 times per second
         }
     }

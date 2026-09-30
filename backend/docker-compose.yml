@@ -1,8 +1,8 @@
 services:
-  silo:
-    image: ${DOCKER_REGISTRY-}silo
+  wildcat:
+    image: ${DOCKER_REGISTRY-}wildcat
     build:
       context: .
-      dockerfile: Silo/Dockerfile
+      dockerfile: WildCat.Host/Dockerfile
     ports:
       - "5000:5000"

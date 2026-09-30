@@ -1,21 +1,25 @@
 # Wire protocol between the Unity SDK and the gateway
 
-Defined in `backend/Messages/uNetMessages.cs` (server copy) and
+Defined in `backend/WildCat.Protocol/uNetMessages.cs` (server copy) and
 `unity-sdk/Assets/Backend/Plugins/LowLevelAPI/uNetMessages.cs` (client copy, diverged: the
 server copy defaults strings to ""). Documented from the code on 2026-09-30 and updated after
 roadmap step 2, which removed the same message types from both copies. The two copies must
 become one shared source.
 
+Paths and names follow the WildCat rename from roadmap step 3: both copies use the namespace
+`WildCat.Protocol` (was `RealtimeServer`), and `WildCatMessageBase` and `WildCatMsgType` were
+called `ApadanaMessageBase` and `ApadanaMsgType`.
+
 ## Framing
 
-One WebSocket binary message carries exactly one `ApadanaMessageBase`. Fragmented messages are
+One WebSocket binary message carries exactly one `WildCatMessageBase`. Fragmented messages are
 reassembled by the gateway up to 2 MB. Everything is written with .NET `BinaryWriter`
 (little-endian; strings are 7-bit-varint length plus UTF-8; Guid is int32 16 plus
 `Guid.ToByteArray()`; DateTime is `ToString()`/`Parse` and therefore culture dependent;
 TimeSpan is a double of milliseconds).
 
 ```
-int16  msgType            ApadanaMsgType (explicit values 6..162 with gaps, HighestInternal = 1023)
+int16  msgType            WildCatMsgType (explicit values 6..162 with gaps, HighestInternal = 1023)
 byte   header flags       HasGameTarget=1, HasPlayerTarget=2, HasAuthData=4, (8 reserved),
                           HasRequestID=16, stored=32, buffered=64, hasTime=128 (last three unused)
 [uint32 requestID]        if HasRequestID   (client sets it; server echoes it on the response)
@@ -40,7 +44,7 @@ player grain at most every 5 s per connection.
 
 ## Handled messages
 
-Every `ApadanaMsgType` member carries an explicit value equal to the ordinal the legacy code
+Every `WildCatMsgType` member carries an explicit value equal to the ordinal the legacy code
 got by counting the enum, so no surviving id changed. Messages removed in step 2 leave gaps;
 do not reuse those ids. C = client, S = server.
 

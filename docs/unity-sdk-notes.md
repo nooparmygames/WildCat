@@ -4,6 +4,10 @@
 ProjectSettings and a trimmed package manifest. The vendored PlayFab SDK, the basketball art,
 the DOTS packages and the broken prefabs were not copied. Surveyed 2026-09-30.
 
+Paths and names follow the WildCat rename from roadmap step 3: the SDK code uses the namespace
+`WildCat` (was `Backend`) and its protocol copy `WildCat.Protocol`, while the `Assets/Backend`
+folder layout and the `BackendPlatform` class name stay until the step 8 rewrite.
+
 Edits made during the copy: the three `PlayfabErrorCode` properties in `Result.cs`, the
 `AuthenticateWithPlayfab` method and the two `Debug.Log` lines that printed the developer secret
 were removed from `BackendPlatform.cs`; the sample's public server IP became `localhost`; the
@@ -23,7 +27,7 @@ the same message types and enum members as the server copy and pins the same exp
 ## Layout
 
 ```
-Assets/Backend/Editor/Scripts/      ApadanaWindow (about box), ApadanaMenus (docs links, "Create Clone"
+Assets/Backend/Editor/Scripts/      WildCatWindow (about box), WildCatMenus (docs links, "Create Clone"
                                     symlink helper for running two editors), OneTimeRunner (dead)
 Assets/Backend/Plugins/BackendPlatform.cs   the public API, about 2,000 lines, singleton MonoBehaviour
 Assets/Backend/Plugins/Result.cs            Result, Result<T>, Result<T,Q>: poll or `yield return r.Wait()`
@@ -31,7 +35,7 @@ Assets/Backend/Plugins/LowLevelAPI/         Client (request/response plumbing), 
                                             (websocket-sharp), NetworkTransmitter (dead UNet LLAPI),
                                             RequestIdGenerator, uNetMessages.cs (protocol copy)
 Assets/Backend/Plugins/Sample/              Sample.cs IMGUI demo, TimestampedBuffer (interpolation), test.unity
-Assets/Backend/Plugins/Prefabs/Apadana.prefab   references a missing script GUID (broken)
+Assets/Backend/Plugins/Prefabs/WildCat.prefab   references a missing script GUID (broken)
 ```
 
 There is no asmdef. `UnityEngine.Networking` types (`QosType`, `NetworkError`) from the
@@ -108,7 +112,7 @@ static counter with a small race outside its lock.
   null reference in `OnFriendStatusChanged` before the list loads, callbacks re-registered on
   every Start, `TimestampedBuffer.GetValue` divides by zero on equal timestamps, sends at 20 Hz
   while the comment says 10.
-- `Apadana.prefab` and `test.unity` reference a script GUID that no longer exists.
+- `WildCat.prefab` and `test.unity` reference a script GUID that no longer exists.
 
 ## Cleanup plan
 
@@ -121,7 +125,8 @@ static counter with a small race outside its lock.
    with session resume, and a real heartbeat with RTT.
 4. Share the protocol definition with the server (see docs/wire-protocol.md) instead of a
    diverged copy.
-5. Rebuild the sample scene and prefab, rename the brand (Apadana) to the new project name,
-   replace the editor menu links, and package as a UPM package (`com.<org>.<name>`).
+5. Rebuild the sample scene and prefab and package as a UPM package (`com.<org>.wildcat`).
+   (Step 3 renamed the brand from Apadana to WildCat and pointed the editor menu links at the
+   GitHub repository.)
 6. Server side must stop trusting client-supplied inventory grants and scores before the SDK
    exposes them again.

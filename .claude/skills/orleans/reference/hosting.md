@@ -130,7 +130,7 @@ authorization before exposing it.
 ## Aspire (8.0+)
 
 AppHost: `builder.AddOrleans("cluster").WithClustering(redis).WithGrainStorage("Default", redis)
-.WithReminders(redis).WithMemoryStreaming("game")` then `AddProject<Projects.Silo>("silo")
+.WithReminders(redis).WithMemoryStreaming("game")` then `AddProject<Projects.WildCat_Host>("silo")
 .WithReference(orleans).WaitFor(redis).WithReplicas(3)`; web frontends reference
 `orleans.AsClient()`. Silo: `builder.AddServiceDefaults(); builder.AddKeyedRedisClient(
 "orleans-redis"); builder.UseOrleans();` with no delegate, because Aspire injects ClusterId,

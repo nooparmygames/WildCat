@@ -3,7 +3,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace RealtimeServer {
+namespace WildCat.Protocol {
 	public static class AuthenticationExtentions {
 
 		public static string ToSha1(this string str) {
