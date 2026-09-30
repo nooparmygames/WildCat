@@ -33,14 +33,37 @@ namespace WildCat.Tests
         }
 
         /// <summary>
-        /// The interleaving call was sent an eighth of a hash time into the call that hashes. Had
-        /// the hash held the grain's turn, the answer would have waited the rest of it (seven
-        /// eighths of a hash time); off the turn it comes back at once.
+        /// Starts <paramref name="hashing"/>, sends <paramref name="interleaving"/> an eighth of a
+        /// hash time later and times its answer. Had the hash held the grain's turn, that answer
+        /// would have waited the rest of it (seven eighths of a hash time) and come after the
+        /// hashing call's; off the turn it comes back at once, while the hash is still running.
         /// </summary>
-        private static void AssertAnsweredDuringTheHash(TimeSpan callTime, TimeSpan hashTime, string call)
+        /// <remarks>
+        /// The hash time is measured on the test thread, and on a busy machine the grain's hash can
+        /// run faster than that. Then the hashing call may be done before the interleaving call is
+        /// even sent, and the attempt shows nothing either way, so it is tried again (the callers
+        /// stay below the Player grain's five wrong passwords before a lockout). With the hash on the
+        /// grain's turn every attempt fails.
+        /// </remarks>
+        private static async Task AssertAnsweredDuringTheHash(Func<Task> hashing, Func<Task> interleaving, TimeSpan hashTime, string call)
         {
-            Assert.True(callTime < hashTime / 2,
-                $"{call} took {callTime.TotalMilliseconds} ms while one hash takes {hashTime.TotalMilliseconds} ms");
+            const int Attempts = 3;
+            var seen = new List<string>();
+            for (int attempt = 1; attempt <= Attempts; attempt++)
+            {
+                Task hashed = hashing();
+                await Task.Delay(hashTime / 8);
+                var watch = Stopwatch.StartNew();
+                await interleaving().WaitAsync(TestSetup.Timeout);
+                TimeSpan callTime = watch.Elapsed;
+                bool hashStillRunning = !hashed.IsCompleted;
+                await hashed.WaitAsync(TestSetup.Timeout);
+                if (hashStillRunning && callTime < hashTime / 2)
+                    return;
+                seen.Add($"{call} took {callTime.TotalMilliseconds} ms, "
+                         + (hashStillRunning ? "while the hash was still running" : "after the hashing call was done"));
+            }
+            Assert.Fail($"One hash takes {hashTime.TotalMilliseconds} ms. {string.Join("; ", seen)}.");
         }
 
         private async Task<(IPlayer Player, string User)> CreateUserPasswordPlayer(string password)
@@ -62,15 +85,9 @@ namespace WildCat.Tests
             await player.GetState();
 
             // A wrong password: the whole login is the password check, with no other await in it.
-            var login = player.LoginWithUserNameAndPassword(user, "wrong-password", sessionKey, Guid.NewGuid());
-            await Task.Delay(hashTime / 8);
-            var watch = Stopwatch.StartNew();
-            await player.GetState().WaitAsync(TestSetup.Timeout);
-            var getStateTime = watch.Elapsed;
-
-            AssertAnsweredDuringTheHash(getStateTime, hashTime, "GetState");
-            Assert.False(login.IsCompleted);
-            Assert.Null(await login.WaitAsync(TestSetup.Timeout));
+            await AssertAnsweredDuringTheHash(
+                async () => Assert.Null(await player.LoginWithUserNameAndPassword(user, "wrong-password", sessionKey, Guid.NewGuid())),
+                () => player.GetState(), hashTime, "GetState");
         }
 
         [Fact]
@@ -81,14 +98,9 @@ namespace WildCat.Tests
             Assert.True(await player.ChangePasswordForUserId(user, "warm-up-password"));
             await player.GetState();
 
-            var change = player.ChangePasswordForUserId(user, "second-password");
-            await Task.Delay(hashTime / 8);
-            var watch = Stopwatch.StartNew();
-            await player.GetState().WaitAsync(TestSetup.Timeout);
-            var getStateTime = watch.Elapsed;
-
-            Assert.True(await change.WaitAsync(TestSetup.Timeout));
-            AssertAnsweredDuringTheHash(getStateTime, hashTime, "GetState");
+            await AssertAnsweredDuringTheHash(
+                async () => Assert.True(await player.ChangePasswordForUserId(user, TestSetup.UniqueId("password"))),
+                () => player.GetState(), hashTime, "GetState");
         }
 
         [Fact]
@@ -102,15 +114,9 @@ namespace WildCat.Tests
             await player.Activate((await player.GetState()).ActivationCodes[email].Code);
             Assert.Null(await player.LoginWithEmail(email, "wrong-password", sessionKey, Guid.NewGuid()));
 
-            var login = player.LoginWithEmail(email, "wrong-password", sessionKey, Guid.NewGuid());
-            await Task.Delay(hashTime / 8);
-            var watch = Stopwatch.StartNew();
-            await player.GetState().WaitAsync(TestSetup.Timeout);
-            var getStateTime = watch.Elapsed;
-
-            AssertAnsweredDuringTheHash(getStateTime, hashTime, "GetState");
-            Assert.False(login.IsCompleted);
-            Assert.Null(await login.WaitAsync(TestSetup.Timeout));
+            await AssertAnsweredDuringTheHash(
+                async () => Assert.Null(await player.LoginWithEmail(email, "wrong-password", sessionKey, Guid.NewGuid())),
+                () => player.GetState(), hashTime, "GetState");
         }
 
         [Fact]
@@ -122,15 +128,9 @@ namespace WildCat.Tests
             Assert.False(await developer.IsPasswordCorrect("wrong-password"));
             Assert.True(await developer.IsSecretValid(secret));
 
-            var check = developer.IsPasswordCorrect("wrong-password");
-            await Task.Delay(hashTime / 8);
-            var watch = Stopwatch.StartNew();
-            Assert.True(await developer.IsSecretValid(secret).WaitAsync(TestSetup.Timeout));
-            var secretCheckTime = watch.Elapsed;
-
-            AssertAnsweredDuringTheHash(secretCheckTime, hashTime, "IsSecretValid");
-            Assert.False(check.IsCompleted);
-            Assert.False(await check.WaitAsync(TestSetup.Timeout));
+            await AssertAnsweredDuringTheHash(
+                async () => Assert.False(await developer.IsPasswordCorrect("wrong-password")),
+                async () => Assert.True(await developer.IsSecretValid(secret)), hashTime, "IsSecretValid");
             Assert.True(await developer.IsPasswordCorrect("right-password"));
         }
     }

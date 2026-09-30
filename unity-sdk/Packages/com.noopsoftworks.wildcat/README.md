@@ -115,8 +115,10 @@ destroyed it drops the connection and pumps once more, so code awaiting a call s
   server restarts, are retried with the same backoff. `Disconnected` is raised once when the
   connection closes for good.
 - A heartbeat every 10 seconds keeps the player online on the server and measures the round
-  trip time (`Connection.RoundTripTime`, `SmoothedRoundTripTime`); a heartbeat without an answer
-  drops the socket and starts a reconnection.
+  trip time (`Connection.RoundTripTime`, `SmoothedRoundTripTime`) from the moment its frame goes
+  to the socket, so frames queued ahead of it do not count; a heartbeat without an answer drops
+  the socket and starts a reconnection. `ServerTime.GetAsync` measures its round trip the same way
+  for `ServerTime.Offset`.
 
 ## Security
 

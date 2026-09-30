@@ -492,6 +492,19 @@ namespace WildCat.Sdk.Tests
             Assert.True(client.IsLoggedIn);
         }
 
+        /// <summary>
+        /// The fake server's clock is this machine's clock, so the true offset is zero. Taking half
+        /// the round trip off leaves an error of at most half the round trip, and the round trip lies
+        /// inside the window the test watched. A bound from the window instead of a fixed one keeps
+        /// the check exact on a slow machine.
+        /// </summary>
+        private static void AssertOffsetWithinHalfOf(TimeSpan window, TimeSpan offset)
+        {
+            double limit = window.TotalMilliseconds / 2 + 5; // 5 ms for the clock's resolution
+            Assert.True(Math.Abs(offset.TotalMilliseconds) <= limit,
+                "Offset was " + offset.TotalMilliseconds + " ms, more than half the " + window.TotalMilliseconds + " ms window");
+        }
+
         [Fact]
         public async Task TheServerTimeOffsetDoesNotIncludeTheWaitForThePump()
         {
@@ -500,15 +513,39 @@ namespace WildCat.Sdk.Tests
             using WildCatClient client = NewClient(server, null, dispatcher);
             await PumpedAsync(dispatcher, client.ConnectAsync());
 
+            DateTime asked = DateTime.UtcNow;
             Task<DateTime> time = client.ServerTime.GetAsync();
-            await Wait.UntilAsync(() => dispatcher.Count > 0, "the answer");
+            // The offset is measured on the network thread as the answer arrives, before any pump.
+            await Wait.UntilAsync(() => client.ServerTime.IsSynchronized, "the answer");
+            TimeSpan window = DateTime.UtcNow - asked;
+            TimeSpan measured = client.ServerTime.Offset;
             await Task.Delay(600); // a long frame
             await PumpedAsync(dispatcher, time);
 
-            // The fake server's clock is this machine's clock, so the offset should be about zero.
-            Assert.True(Math.Abs(client.ServerTime.Offset.TotalMilliseconds) < 100,
-                "Offset was " + client.ServerTime.Offset.TotalMilliseconds + " ms");
-            Assert.True(client.ServerTime.IsSynchronized);
+            Assert.Equal(measured, client.ServerTime.Offset);
+            AssertOffsetWithinHalfOf(window, measured);
+        }
+
+        [Fact]
+        public async Task TheServerTimeOffsetDoesNotIncludeTheWaitInTheSendQueue()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            using WildCatClient client = await LoggedInAsync(server);
+            server.HoldSends();
+            // A relayed message takes the writer, which waits in SendAsync like a stalled socket, so
+            // the time request waits in the queue behind it.
+            Assert.True(client.Relay.Send(Guid.NewGuid(), RelayClient.MessageType(1), new IntegerMessage { value = 1 }));
+            await Wait.UntilAsync(() => server.SendsHeld == 1, "the writer to be busy");
+            Task<DateTime> time = client.ServerTime.GetAsync();
+            await Task.Delay(600);
+
+            DateTime released = DateTime.UtcNow;
+            server.ReleaseSends();
+            await Wait.For(time);
+            TimeSpan window = DateTime.UtcNow - released;
+
+            // Counting the 600 ms in the queue as network delay would put the offset near +300 ms.
+            AssertOffsetWithinHalfOf(window, client.ServerTime.Offset);
         }
 
         [Fact]

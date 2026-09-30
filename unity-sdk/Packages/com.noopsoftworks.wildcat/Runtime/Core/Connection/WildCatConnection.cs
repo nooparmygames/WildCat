@@ -124,7 +124,10 @@ namespace WildCat
             get { return logger; }
         }
 
-        /// <summary>The round trip time of the last heartbeat, or zero before the first one.</summary>
+        /// <summary>
+        /// The round trip time of the last answered heartbeat, from the moment its frame went to the
+        /// socket (the wait behind other queued frames does not count), or zero before the first one.
+        /// </summary>
         public TimeSpan RoundTripTime
         {
             get
@@ -431,11 +434,13 @@ namespace WildCat
         /// overwrite what a reconnection or a disconnect did in between. When the socket is gone or
         /// the connection closed, the answer is ignored and the request fails with
         /// <see cref="WildCatDisconnectedException"/>; when the hook throws, the request fails
-        /// with that exception.
+        /// with that exception. Its second argument is the round trip: from the moment the writer
+        /// handed the frame to the socket until the answer arrived, so time spent waiting in the
+        /// send queue behind other frames does not count as network delay.
         /// </remarks>
         internal Task<T> SendRequestAsync<T>(WildCatMsgType requestType, MessageBase payload, WildCatMsgType responseType,
             bool sendTicket, string gameTarget, TimeSpan? timeout, bool isInternal, CancellationToken cancellationToken,
-            Action<T> onAnswer = null)
+            Action<T, TimeSpan> onAnswer = null)
             where T : MessageBase, new()
         {
             if (payload == null)
@@ -700,8 +705,12 @@ namespace WildCat
                     // A request that timed out or was cancelled while it waited in the queue is not
                     // sent: nobody waits for its answer, and the caller, told it failed, should be
                     // able to count on the server never having run it.
-                    if (next.Request != null && next.Request.IsFinished)
-                        continue;
+                    if (next.Request != null)
+                    {
+                        if (next.Request.IsFinished)
+                            continue;
+                        next.Request.MarkSent();
+                    }
                     await current.Transport.SendAsync(next.Bytes, current.Stop.Token).ConfigureAwait(false);
                 }
             }
@@ -740,7 +749,9 @@ namespace WildCat
                     withLogin = loggedIn;
                 }
 
-                Stopwatch watch = Stopwatch.StartNew();
+                // Measured from the moment the frame went out, not from when it was queued: a queue
+                // full of relay frames is the game's own backlog, not network delay.
+                TimeSpan measured = TimeSpan.Zero;
                 try
                 {
                     // HeartBeat keeps the player online on the server but needs a login; before that,
@@ -748,19 +759,21 @@ namespace WildCat
                     if (withLogin)
                     {
                         await SendRequestAsync<EmptyMessage>(WildCatMsgType.HeartBeatRequest, new EmptyMessage(),
-                            WildCatMsgType.HeartBeatResponse, true, null, options.HeartbeatTimeout, true, CancellationToken.None).ConfigureAwait(false);
+                            WildCatMsgType.HeartBeatResponse, true, null, options.HeartbeatTimeout, true, CancellationToken.None,
+                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(false);
                     }
                     else
                     {
                         await SendRequestAsync<DateTimeMessage>(WildCatMsgType.GetServerTimeRequest, new EmptyMessage(),
-                            WildCatMsgType.GetServerTimeResponse, false, null, options.HeartbeatTimeout, true, CancellationToken.None).ConfigureAwait(false);
+                            WildCatMsgType.GetServerTimeResponse, false, null, options.HeartbeatTimeout, true, CancellationToken.None,
+                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(false);
                     }
-                    RecordRoundTrip(watch.Elapsed);
+                    RecordRoundTrip(measured);
                 }
                 catch (WildCatException)
                 {
-                    // Any answer shows the socket works, even a refusal (an expired login, for example).
-                    RecordRoundTrip(watch.Elapsed);
+                    // Any answer shows the socket works, even a refusal (an expired login, for
+                    // example). A refusal carries no round trip, so the last one stays.
                 }
                 catch (TimeoutException ex)
                 {
@@ -1296,6 +1309,7 @@ namespace WildCat
         private abstract class PendingRequest
         {
             private int finished;
+            private long sentAt;
 
             protected PendingRequest(uint id, WildCatMsgType requestType, WildCatMsgType responseType, Link link, bool isInternal)
             {
@@ -1304,6 +1318,7 @@ namespace WildCat
                 ResponseType = responseType;
                 Link = link;
                 IsInternal = isInternal;
+                sentAt = Stopwatch.GetTimestamp();
             }
 
             public uint Id { get; }
@@ -1317,6 +1332,19 @@ namespace WildCat
             public void MarkFinished()
             {
                 Volatile.Write(ref finished, 1);
+            }
+
+            /// <summary>Called by the writer just before the frame goes to the socket; the round trip starts here.</summary>
+            public void MarkSent()
+            {
+                Interlocked.Exchange(ref sentAt, Stopwatch.GetTimestamp());
+            }
+
+            /// <summary>The time since the frame went to the socket (since the request was made, until then).</summary>
+            protected TimeSpan SinceSent()
+            {
+                long elapsed = Stopwatch.GetTimestamp() - Interlocked.Read(ref sentAt);
+                return TimeSpan.FromTicks((long)(elapsed * ((double)TimeSpan.TicksPerSecond / Stopwatch.Frequency)));
             }
 
             public WildCatMsgType RequestType { get; }
@@ -1356,10 +1384,10 @@ namespace WildCat
 
         private sealed class PendingRequest<T> : PendingRequest where T : MessageBase, new()
         {
-            private readonly Action<T> onAnswer;
+            private readonly Action<T, TimeSpan> onAnswer;
 
             public PendingRequest(uint id, WildCatMsgType requestType, WildCatMsgType responseType, Link link, bool isInternal,
-                Action<T> onAnswer)
+                Action<T, TimeSpan> onAnswer)
                 : base(id, requestType, responseType, link, isInternal)
             {
                 this.onAnswer = onAnswer;
@@ -1369,6 +1397,7 @@ namespace WildCat
 
             public override Action Answer(WildCatMessageBase frame, WildCatConnection owner)
             {
+                TimeSpan roundTrip = SinceSent();
                 Exception error = null;
                 T value = null;
                 try
@@ -1397,7 +1426,7 @@ namespace WildCat
                     error = ex;
                 }
                 if (error == null && onAnswer != null)
-                    error = owner.ApplyAnswer(this, () => onAnswer(value));
+                    error = owner.ApplyAnswer(this, () => onAnswer(value, roundTrip));
                 if (error != null)
                     return () => Completion.TrySetException(error);
                 return () => Completion.TrySetResult(value);

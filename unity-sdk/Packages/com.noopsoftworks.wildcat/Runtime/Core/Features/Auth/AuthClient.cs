@@ -110,7 +110,7 @@ namespace WildCat
             };
             AuthenticationResponse answer = await Connection.SendRequestAsync<AuthenticationResponse>(WildCatMsgType.AuthenticateRequest,
                 request, WildCatMsgType.AuthenticateResponse, false, null, null, isInternal, cancellationToken,
-                accepted => Apply(login, ticket, accepted)).ConfigureAwait(false);
+                (accepted, roundTrip) => Apply(login, ticket, accepted)).ConfigureAwait(false);
             return new LoginResult(answer.userId, answer.name, answer.isNewlyCreated);
         }
 
