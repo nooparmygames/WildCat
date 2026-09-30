@@ -14,7 +14,8 @@ password; those credentials must be rotated by the owner regardless of what happ
 
 ```
 backend/           the .NET solution (Apadana.sln): Interfaces, Collections (grains), Messages
-                   (wire protocol), Silo, FrontEnd (WebSocket gateway), Tests
+                   (wire protocol), Silo (the host: silo plus gateway), FrontEnd (WebSocket
+                   gateway library), Tests
 unity-sdk/         Unity project holding only Assets/Backend (the SDK) plus settings
 docs/              legacy-backend-notes.md (grain inventory, flows, bug list),
                    wire-protocol.md (framing and message table),
@@ -29,36 +30,37 @@ and talked to a REST API that was never checked in, so it is rewritten from scra
 
 ## Toolchain and commands
 
-- .NET SDK 10.0.401 (also 9.0 and 6.0) is installed. Node 24 and npm 11 are installed for the
-  panel. Docker 29 is available. No database server is installed locally; use Docker.
-- The legacy solution still targets net5.0 and builds on the .NET 10 SDK (24 warnings, all
-  known):
+- .NET SDK 10.0 is installed. Node and npm are installed for the panel. Docker is available.
+  No database server is installed locally; use Docker. In a fresh cloud container without
+  `dotnet`, install it with `apt-get install -y dotnet-sdk-10.0` (the dot.net install script
+  host is blocked by the proxy; the Ubuntu archive is not).
+- Everything targets net10.0 on Orleans 10.3.1 except `Messages` (netstandard2.0, shared with
+  Unity). Shared settings live in `backend/Directory.Build.props` and package versions in
+  `backend/Directory.Packages.props` (central package management):
 
 ```bash
 dotnet build backend/Apadana.sln
 ```
 
-- Tests use xUnit on an in-memory `TestCluster`. They are slow (100-player matchmaking loads,
-  multi-second sleeps), order dependent within a collection, and some wait forever on failure.
-  Run one class at a time when iterating:
+- Tests use xUnit on an `InProcessTestCluster` shared by one collection fixture. They are slow
+  (100-player matchmaking loads, multi-second sleeps), order dependent within a collection, and
+  some wait forever on failure, so pass `--blame-hang-timeout 4m` for full runs. Run one class
+  at a time when iterating:
 
 ```bash
 dotnet test backend/Tests/Tests.csproj --filter "FullyQualifiedName~LeaderBoardTests"
 ```
 
-- Run the silo in Debug (localhost clustering, memory storage, in-memory reminders) and then the
-  gateway, which connects as an Orleans client and listens for WebSockets at `/ws` on port 5000:
+- Run the host: one process runs the silo (localhost clustering, memory storage, memory
+  streams, in-memory reminders) and the WebSocket gateway at `/ws` on port 5000:
 
 ```bash
 dotnet run --project backend/Silo
 ```
 
-```bash
-dotnet run --project backend/FrontEnd
-```
-
-  Release builds still expect MongoDB at the address in `devsconfig.json`; that file holds
-  placeholder keys and an empty password and goes away with the PostgreSQL port.
+  Every build uses the memory providers until the PostgreSQL port (roadmap step 5); outside
+  Development the host logs a warning saying so. `backend/Silo/devsconfig.json` seeds one
+  developer and game with placeholder keys and goes away with the configuration model.
 - The Unity SDK cannot be compiled in a Claude session (no Unity install). The PlayFab
   references were removed at copy time; compiling in Unity is unverified.
 
@@ -75,7 +77,8 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   ticket.
 - The gateway (`backend/FrontEnd/FrontEndServer.cs`, one 2,444-line class) decodes the binary
   protocol in `backend/Messages/uNetMessages.cs`, calls grains, and pushes server events back
-  through Orleans SMS streams keyed by player id.
+  through Orleans memory streams (provider `game`, ids built by `Interfaces/StreamNames.cs`).
+  It runs inside the silo process and uses the silo's `IClusterClient`.
 - Matches are relay games: the server tracks membership and properties and forwards opaque
   byte arrays between players; it never simulates the game. Matchmaking is per game mode with a
   time-based relaxation schedule.
