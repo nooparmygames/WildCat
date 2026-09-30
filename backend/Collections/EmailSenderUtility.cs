@@ -159,6 +159,14 @@ namespace Collections
 
         public static void SendEmail(string senderEmail, string receiver, string subject, string bodyParam)
         {
+            // SMTP settings were removed with the secrets and come back from configuration later.
+            // Until then, print the code instead of building a MailMessage, which throws on an
+            // empty sender address.
+            if (string.IsNullOrEmpty(SMTP_ADDRESS) || string.IsNullOrEmpty(senderEmail))
+            {
+                Console.WriteLine($"######## {bodyParam}");
+                return;
+            }
             senderEmail = senderEmail.ToLower();
             var mail = new MailMessage(senderEmail, receiver);
             var client = new SmtpClient(SMTP_ADDRESS, SMTP_PORT)

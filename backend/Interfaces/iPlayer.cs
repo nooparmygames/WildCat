@@ -78,7 +78,9 @@ namespace Interfaces
         [Id(2)] public List<IPlayer> players;
     }
 
+    [GenerateSerializer, Alias("wildcat.GameResult")]
     public enum GameResult { Winner, Loser, Draw }
+    [GenerateSerializer, Alias("wildcat.AdditionResult")]
     public enum AdditionResult : byte { Success, Failure, AlreadyExisting }
 
     [GenerateSerializer]

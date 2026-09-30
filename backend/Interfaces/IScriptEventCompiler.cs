@@ -20,6 +20,7 @@ namespace Interfaces
     [Alias("wildcat.EventParameter")]
     public class EventParameter
     {
+        [GenerateSerializer, Alias("wildcat.EventParameter.ParamType")]
         public enum ParamType { BoolParam, ByteParam, ShortParam, IntParam, LongParam, FloatParam, DoubleParam, StringParam, ByteArrayParam }
         [Id(0)] public ParamType Type { get; set; }
         [Id(1)] public string Name { get; set; }

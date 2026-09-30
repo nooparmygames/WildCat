@@ -101,7 +101,9 @@ namespace Interfaces
         [Id(2)] public DateTime lastMessageTime { get; set; }
     }
 
+    [GenerateSerializer, Alias("wildcat.RelayServerGameStatus")]
     public enum RelayServerGameStatus { NotStarted, Started, SomeJoined, AllJoined, SomeFinished, AllFinished, FinishedWithDisconnect }
+    [GenerateSerializer, Alias("wildcat.RelayServerPlayerGameStatus")]
     public enum RelayServerPlayerGameStatus { NotStarted, InGame, Finished, Disconnected }
 
     [Serializable]

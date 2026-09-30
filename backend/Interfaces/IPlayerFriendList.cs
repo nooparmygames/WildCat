@@ -157,6 +157,7 @@ namespace Interfaces
     /// <summary>
     /// A user's online status
     /// </summary>
+    [GenerateSerializer, Alias("wildcat.OnlineStatus")]
     public enum OnlineStatus : byte { Online, Offline }
 
     [Serializable]
@@ -164,6 +165,7 @@ namespace Interfaces
     [Alias("wildcat.FriendListEventData")]
     public struct FriendListEventData
     {
+        [GenerateSerializer, Alias("wildcat.FriendListEventData.EventType")]
         public enum EventType { Invite, Accept, Deny, StateChange }
         [Id(0)] public IPlayer Friend { get; set; }
         [Id(1)] public EventType Type { get; set; }

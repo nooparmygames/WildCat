@@ -19,6 +19,7 @@ namespace Interfaces
         [Id(4)] public byte[] data;
         [Id(5)] public string gameKey;
         [Id(6)] public Guid matchId;
+        [GenerateSerializer, Alias("wildcat.UNetConnectionDataTransferMessage.EventType")]
         public enum EventType
         {
             DataTransfer,

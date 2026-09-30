@@ -14,5 +14,6 @@ namespace Interfaces
         Task<Tuple<VerificationStatus,string>> VerifyCafeBazaar(string product, string Receipt,bool isFirstAtempt=true);
     }
 
+    [GenerateSerializer, Alias("wildcat.VerificationStatus")]
     public enum VerificationStatus : byte { Verified, WasFraud, TokenExpired, FailedToConnect }
 }

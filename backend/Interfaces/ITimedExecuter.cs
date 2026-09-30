@@ -20,6 +20,7 @@ namespace Interfaces
     [Alias("wildcat.TimedExecuterState")]
     public class TimedExecuterState
     {
+        [GenerateSerializer, Alias("wildcat.TimedExecuterState.State")]
         public enum State
         {
             NotStarted,
@@ -39,6 +40,7 @@ namespace Interfaces
     [Alias("wildcat.ExecutionTask")]
     public class ExecutionTask
     {
+        [GenerateSerializer, Alias("wildcat.ExecutionTask.Type")]
         public enum Type { Notification, TournamentRunner }
         [Id(0)] public Type type;
         [Id(1)] public DateTime dt;

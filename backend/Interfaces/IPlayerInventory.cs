@@ -111,6 +111,7 @@ namespace Interfaces
             [Id(1)] public int size { get; set; }
             [Id(2)] public DateTime startTime;
             [Id(3)] public DateTime endTime;
+            [GenerateSerializer, Alias("wildcat.PlayerInventoryState.StateValues.Status")]
             public enum Status { NotCountingTimeForUnlock, CountingTimeForUnlock }
             [Id(4)] public Status status;
 

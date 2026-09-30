@@ -10,6 +10,7 @@ namespace Interfaces
     [Alias("wildcat.GameInfo")]
     public class GameInfo
     {
+        [GenerateSerializer, Alias("wildcat.GameInfo.GameGenre")]
         public enum GameGenre
         {
             Action,
@@ -20,12 +21,14 @@ namespace Interfaces
             Sports
         }
 
+        [GenerateSerializer, Alias("wildcat.GameInfo.GameRegion")]
         public enum GameRegion
         {
             Iran,
             Oversea
         }
 
+        [GenerateSerializer, Alias("wildcat.GameInfo.GameAgeRating")]
         public enum GameAgeRating
         {
             EveryOne,

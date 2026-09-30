@@ -33,8 +33,10 @@ namespace Interfaces
 
 
 
+    [GenerateSerializer, Alias("wildcat.GameFinalState")]
     public enum GameFinalState {FinishedWithWinner,FinishedInDraw,Started,NotStarted }
 
+    [GenerateSerializer, Alias("wildcat.PlayerStateInGame")]
     public enum PlayerStateInGame { Playing,Finished,Disconnected}
 
     [GenerateSerializer]

@@ -36,13 +36,26 @@ namespace Interfaces
         }
     }
 
+    /// <summary>
+    /// One leaderboard reward entry. Stored state uses this class instead of a (string, int)
+    /// tuple because the JSON grain storage serializer does not allow ValueTuple types.
+    /// </summary>
+    [GenerateSerializer]
+    [Alias("wildcat.LeaderBoardReward")]
+    public class LeaderBoardReward
+    {
+        [Id(0)] public string Item { get; set; }
+        [Id(1)] public int Count { get; set; }
+    }
+
     [GenerateSerializer]
     [Alias("wildcat.LeaderBoardState")]
     public class LeaderBoardState
     {
+        [GenerateSerializer, Alias("wildcat.LeaderBoardState.LeaderBoardType")]
         public enum LeaderBoardType { Weekly, Monthly, Yearly, Permanent }
         [Id(0)] public LeaderBoardType Type { get; set; }
-        [Id(1)] public (string, int)[] rewards { get; set; }
+        [Id(1)] public List<LeaderBoardReward> rewards { get; set; }
         [Id(2)] public string Name { get; set; }
         // public List<LeaderBoardEntry> entries { get; set; }
         [Id(3)] public int NumberOfLists { get; set; }

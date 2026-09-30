@@ -27,6 +27,7 @@ namespace Interfaces
         public const ulong CALL_BATCH_SIZE = 1000;
         public const ulong MESSAGE_BATCH_SIZE = 10000;
 
+        [GenerateSerializer, Alias("wildcat.InvoiceData.InvoicePaymentStatus")]
         public enum InvoicePaymentStatus { Paid, UnPaid, ProcessingPayment, Cancelled }
 
         [Id(0)] public InvoicePaymentStatus status;

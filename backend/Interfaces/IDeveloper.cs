@@ -64,6 +64,7 @@ namespace Interfaces
     [Alias("wildcat.DeveloperState")]
     public class DeveloperState
     {
+        [GenerateSerializer, Alias("wildcat.DeveloperState.DeveloperStatus")]
         public enum DeveloperStatus { Normal, Banned, Limited }
 
         [Id(0)] public bool IsCreated { get; set; }

@@ -180,10 +180,10 @@ namespace Collections
 
         public Task SetRewards(string[] items, int[] itemCounts)
         {
-            (string, int)[] rewards = new (string, int)[itemCounts.Length];
-            for (int i = 0; i < rewards.Length; ++i)
+            List<LeaderBoardReward> rewards = new List<LeaderBoardReward>(itemCounts.Length);
+            for (int i = 0; i < itemCounts.Length; ++i)
             {
-                rewards[i] = (items[i], itemCounts[i]);
+                rewards.Add(new LeaderBoardReward { Item = items[i], Count = itemCounts[i] });
             }
             State.rewards = rewards;
             return WriteStateAsync();
@@ -192,7 +192,8 @@ namespace Collections
 
         public Task<(string, int)[]> GetRewards()
         {
-            return Task.FromResult(State.rewards);
+            // The interface keeps the legacy tuple array; state stores LeaderBoardReward entries.
+            return Task.FromResult(State.rewards?.Select(x => (x.Item, x.Count)).ToArray());
         }
     }
 }

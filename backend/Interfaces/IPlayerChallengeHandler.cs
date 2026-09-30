@@ -17,6 +17,7 @@ namespace Interfaces
         Task<(List<ChallengeRequestState> sent, List<ChallengeRequestState> received)> GetChallengeRequests();
     }
 
+    [GenerateSerializer, Alias("wildcat.ChallengeAcceptionStatus")]
     public enum ChallengeAcceptionStatus : byte
     {
         Received,
@@ -29,6 +30,7 @@ namespace Interfaces
     [Alias("wildcat.ChallengeEventData")]
     public struct ChallengeEventData
     {
+        [GenerateSerializer, Alias("wildcat.ChallengeEventData.EventType")]
         public enum EventType { Request, Started, Deny }
         [Id(0)] public IPlayer otherPlayer { get; set; }
         [Id(1)] public EventType Type { get; set; }
@@ -83,6 +85,7 @@ namespace Interfaces
     [Alias("wildcat.ChallengeRequestState")]
     public struct ChallengeRequestState
     {
+        [GenerateSerializer, Alias("wildcat.ChallengeRequestState.Status")]
         public enum Status:byte { Pending, Started, Finished }
         [Id(0)] public Status State { get; set; }
         [Id(1)] public IPlayer Player { get; set; }

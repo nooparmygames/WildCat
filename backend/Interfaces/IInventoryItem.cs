@@ -8,6 +8,7 @@ namespace Interfaces
         Task<string> GetItemName();
     }
 
+    [GenerateSerializer, Alias("wildcat.InventoryItemType")]
     public enum InventoryItemType : byte
     {
         Item,
