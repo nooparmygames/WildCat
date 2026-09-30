@@ -15,7 +15,8 @@ compact binary protocol. It covers:
 - server script events: C# snippets a developer attaches to named events, compiled with Roslyn
   and run on the server
 
-A Unity client SDK lives in `unity-sdk/`.
+A client SDK for Unity 6, the UPM package `com.noopsoftworks.wildcat`, lives in
+`unity-sdk/Packages/` (see its [README](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md)).
 
 WildCat started in 2019 as a private platform called Apadana (Orleans 3, MongoDB, PlayFab) and is
 being cleaned up for an open-source release.
@@ -51,8 +52,9 @@ one developer and one game with placeholder keys:
 | game "SampleGame" | `22222222-2222-2222-2222-222222222222` |
 
 Clients connect to `ws://localhost:5000/ws` and initialize a session with the developer key and
-game key. In the Unity SDK that is `ConnectLocally()` followed by
-`InitializeSession(developerKey, gameKey)`. SMTP is not configured, so activation and password
+game key. In the Unity SDK that is `await client.ConnectAsync()` followed by
+`await client.Session.InitializeAsync(developerKey, gameKey)`; the SDK's Basic sample ships a
+settings asset with this URL and these keys. SMTP is not configured, so activation and password
 reset codes appear in the host's log.
 
 ### B: Docker Compose, with PostgreSQL
@@ -135,8 +137,11 @@ backend/                  the .NET solution (WildCat.sln)
   WildCat.Interfaces/     grain interfaces, state classes, shared helpers
   WildCat.Protocol/       binary wire protocol (netstandard2.1, shared with the Unity SDK)
   WildCat.Tests/          xUnit tests on an in-process Orleans cluster
-unity-sdk/                Unity project holding the client SDK in Assets/Backend
-tools/                    sync-protocol.sh (.ps1): copies the protocol into the SDK
+unity-sdk/                Unity 6 project around the SDK
+  Packages/com.noopsoftworks.wildcat/   the SDK as a UPM package (Runtime, Editor, Samples~)
+  Tests/                  plain .NET tests of the SDK core against the real gateway
+tools/                    sync-protocol.sh (.ps1): copies the protocol into the SDK;
+                          unity-package-meta.sh: writes missing Unity .meta files
 deploy/postgres/          Orleans PostgreSQL scripts, run when the database is created
 docs/                     design notes, see Documentation
 compose.yaml              PostgreSQL plus the host
@@ -153,6 +158,15 @@ timeout for full runs and filter by class while iterating:
 ```bash
 dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --blame-hang-timeout 4m
 dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --filter "FullyQualifiedName~LeaderBoardTests"
+```
+
+The Unity SDK's engine-free core is tested the same way, without Unity: the test project compiles
+the package's Runtime/Protocol and Runtime/Core sources and runs them against the gateway on an
+in-process cluster, and the CoreCheck project builds the core as Unity would (netstandard2.1, C# 9):
+
+```bash
+dotnet test unity-sdk/Tests/WildCat.Sdk.Tests/WildCat.Sdk.Tests.csproj
+dotnet build unity-sdk/Tests/WildCat.Sdk.CoreCheck/WildCat.Sdk.CoreCheck.csproj
 ```
 
 The PostgreSQL integration tests are skipped unless the environment variable
@@ -178,10 +192,12 @@ GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on ever
 request. A newer push to the same branch or pull request cancels the run still going for the
 older one. The jobs:
 
-- `backend`: builds `backend/WildCat.sln` in Release and runs the whole test suite with
+- `backend`: builds `backend/WildCat.sln` in Release (which includes the Unity SDK test and
+  CoreCheck projects) and runs the whole backend test suite and then the Unity SDK tests with
   `--blame-hang-timeout 4m`. A PostgreSQL 17 service container gets the scripts from
   `deploy/postgres` and `WILDCAT_TEST_POSTGRES` points at it, so the PostgreSQL provider tests run
-  too. The trx results are kept as the `backend-test-results` artifact, also when tests fail.
+  too. The trx results of both are kept as the `backend-test-results` artifact, also when tests
+  fail.
 - `compose`: follows quick start B up to `docker compose up`: copies `.env.example` to `.env`,
   sets a password and a generated signing key, and checks `compose.yaml` with
   `docker compose config -q`.
@@ -208,8 +224,11 @@ go install github.com/rhysd/actionlint/cmd/actionlint@latest
   and the message table
 - [docs/gateway.md](docs/gateway.md): how the gateway handles a frame, and how to add and test a
   message handler
-- [docs/unity-sdk-notes.md](docs/unity-sdk-notes.md): the Unity SDK's API, transport and cleanup
-  plan
+- [unity-sdk/Packages/com.noopsoftworks.wildcat/README.md](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md):
+  the Unity SDK: install, quick start, migration from the old SDK; its Documentation~/index.md
+  is the manual
+- [docs/unity-sdk-notes.md](docs/unity-sdk-notes.md): the Unity SDK's design, what is verified
+  and what is not, and what became of the old SDK
 - [docs/legacy-admin-panel.md](docs/legacy-admin-panel.md): what the old admin panel did and the
   REST contract it expected
 - [deploy/postgres/README.md](deploy/postgres/README.md): where the database scripts come from

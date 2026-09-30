@@ -1,160 +1,165 @@
 # Unity SDK notes
 
-`unity-sdk/` is the `Assets/Backend` folder of the original Unity 2020.3.18 project plus its
-ProjectSettings and a trimmed package manifest. The vendored PlayFab SDK, the basketball art,
-the DOTS packages and the broken prefabs were not copied. Surveyed 2026-09-30.
-
-Paths and names follow the WildCat rename from roadmap step 3: the SDK code uses the namespace
-`WildCat` (was `Backend`) and its protocol copy `WildCat.Protocol`, while the `Assets/Backend`
-folder layout and the `BackendPlatform` class name stay until the step 8 rewrite.
-
-Edits made during the copy: the three `PlayfabErrorCode` properties in `Result.cs`, the
-`AuthenticateWithPlayfab` method and the two `Debug.Log` lines that printed the developer secret
-were removed from `BackendPlatform.cs`; the sample's public server IP became `localhost`; the
-developer and game key GUIDs in `Sample/test.unity` were zeroed; the hardcoded game id in
-`Client.cs` became an empty string. Nothing else changed at copy time, so every bug below is
-still present.
-
-Removed in step 2: `VerifyCafeReceipt` with `CafeVerificationStatusResults`; the card-game calls
-`BuyUBCItem`, `SetDeck`, `ClaimQuests`, `RegisterTournament`, `SetAchievementProgress`,
-`SetQuestProgress` and `SetMatchResult` with their result tables, handlers and `Client` senders
-(plus the unused login, quest, achievement and main data senders); the developer-only
-`DevGetPublisherData` and `DevSetPublisherData`, which sent the developer secret from the
-client; and the `ENABLE_PLAYFABSERVER_API` scripting define. The SDK's `Messages.cs` lost
-the same message types and enum members as the server copy and pins the same explicit ids
-(see docs/wire-protocol.md).
-
-Changed in step 4: passwords go to the server in plain text (the server stores a salted PBKDF2
-hash), so production builds must connect over wss://; `AuthenticateExtensions.cs` with `ToMd5`
-and `ToSha1` is gone. `AddInventoryItems` and `SetScoreInLeaderBoard` are `[Obsolete]` because
-the server now rejects messages 111 and 28 from clients with error code 1; grant items and set
-scores from a server script event run through `ExecuteScriptEvent`. The SDK never had a call
-for 113 (SetItemToInventory). The sample's "Send score" button still calls
-`SetScoreInLeaderBoard`, so it gets that error and an obsolete warning.
-
-Changed in step 6: the protocol is no longer a hand-kept copy. `LowLevelAPI/Messages.cs` is gone;
-`Plugins/Protocol/` is generated from `backend/WildCat.Protocol` by `tools/sync-protocol.sh` and
-must not be edited (see docs/wire-protocol.md). Encoding goes through `WireCodec`: frames are sent
-as `WireCodec.Encode(msg)` (was `msg.ToByteArray()`) and read with `WireCodec.Decode(bytes)`
-(was `WildCatMessageBase.CreateMessageFromByteArray`), and payloads are read with
-`msg.GetPayload<T>()` (was `GetData<T>()`). Custom payloads, like the sample's `Vector3Message`,
-override `Serialize(WireWriter)` and `Deserialize(WireReader)` (they used `BinaryWriter`,
-`BinaryReader` and the `WriteBytesFull` extension). The wire format changed with it (UTC tick
-DateTimes, int32 counts, null-safe strings), so an SDK and a server from before and after step 6
-cannot talk to each other. `GetServerTime` reads a UTC `DateTime` from a `DateTimeMessage`
-instead of parsing a culture dependent string, and `SetPlayerMatchProperty(Guid, string,
-MessageBase)` encodes its value through the codec instead of calling itself.
+Since roadmap step 8 the Unity SDK is the UPM package `com.noopsoftworks.wildcat` in
+`unity-sdk/Packages/com.noopsoftworks.wildcat`, for Unity 6 (6000.0) only. It replaced the
+`Assets/Backend` SDK (`BackendPlatform`) that came over from the Apadana project. The package's
+README.md is the user guide (install, quick start, migration table) and its Documentation~/index.md
+the manual (architecture, API, options, testing). This page keeps the history and the status for
+people working on the SDK. Updated 2026-09-30.
 
 ## Layout
 
 ```
-Assets/Backend/Editor/Scripts/      WildCatWindow (about box), WildCatMenus (docs links, "Create Clone"
-                                    symlink helper for running two editors), OneTimeRunner (dead)
-Assets/Backend/Plugins/BackendPlatform.cs   the public API, about 2,000 lines, singleton MonoBehaviour
-Assets/Backend/Plugins/Result.cs            Result, Result<T>, Result<T,Q>: poll or `yield return r.Wait()`
-Assets/Backend/Plugins/LowLevelAPI/         Client (request/response plumbing), WebSocketNetworkTransmitter
-                                            (websocket-sharp), NetworkTransmitter (dead UNet LLAPI),
-                                            RequestIdGenerator
-Assets/Backend/Plugins/Protocol/            generated copy of backend/WildCat.Protocol (do not edit)
-Assets/Backend/Plugins/Sample/              Sample.cs IMGUI demo, TimestampedBuffer (interpolation), test.unity
-Assets/Backend/Plugins/Prefabs/WildCat.prefab   references a missing script GUID (broken)
+unity-sdk/
+  Packages/com.noopsoftworks.wildcat/   the package (embedded in this Unity project)
+    Runtime/Protocol/   asmdef WildCat.Protocol, generated by tools/sync-protocol.sh (never edit)
+    Runtime/Core/       asmdef WildCat.Core, engine free: WildCatClient, WildCatConnection,
+                        transports, feature clients (Session, Auth, Profile, CloudData, Friends,
+                        Challenges, Matchmaking, Matches, Relay, Leaderboards, Inventory, Scripts,
+                        ServerTime)
+    Runtime/Unity/      asmdef WildCat.Unity: WildCatBehaviour, WildCatSettings, UnityWildCatLogger,
+                        AsCoroutine helpers, device id helpers, WebGL/ (browser WebSocket + .jslib)
+    Editor/             asmdef WildCat.Editor: WildCat menu, About window, settings and scene setup
+    Samples~/Basic/     IMGUI sample with a WildCatSettings asset for the development host
+    Documentation~/     the manual
+  Packages/manifest.json, ProjectSettings/   a Unity 6 project around the package
+  Tests/WildCat.Sdk.Tests/     xUnit tests of Runtime/Protocol and Runtime/Core against the real server
+  Tests/WildCat.Sdk.CoreCheck/ builds Runtime/Core as netstandard2.1, C# 9, warnings as errors
+tools/unity-package-meta.sh    writes missing .meta files for files added without Unity
 ```
 
-There is no asmdef. `UnityEngine.Networking` types (`QosType`, `NetworkError`) from the
-deprecated UNet package are still referenced. websocket-sharp does not work on WebGL.
+The ProjectSettings files other than ProjectVersion.txt (now 6000.0.58f2) are still the 2020.3
+ones; Unity 6 upgrades them on first open. The old `Packages/manifest.json` (2D, VS Code and
+DOTS-era packages) was trimmed to what the sample needs.
 
-## Public API (BackendPlatform)
+## Design in short
 
-Results: every call returns a `Result` object with `isComplete`, `isSuccessful`, `errorCode`,
-`errorMessage`, `value`. `Wait()` returns a coroutine. No Tasks, no timeouts, callback
-parameters on some overloads are ignored. Pending results complete on the main thread from
-`Client.Update`; on disconnect all pending results fail with "Disconnected". Server pushes arrive
-as C# events or public delegate fields.
+- One `WildCatConnection` per client: a single writer drains a ConcurrentQueue of frames
+  (SemaphoreSlim signalled; netstandard2.1 has no Channels), a receive loop matches answers to
+  pending requests by request id, pushes go to per-type handlers, a heartbeat loop measures the
+  round trip time. Everything is `ConfigureAwait(false)`; application callbacks and Task
+  completions go through `IMainThreadDispatcher` (WildCatBehaviour pumps a QueuedDispatcher in
+  Update), internal requests (heartbeat, resume) complete on the network thread.
+- Errors: `WildCatException` (code and text from an OptionalResponse or an ErrorMsg),
+  `TimeoutException` (per request, 15 s default), `WildCatDisconnectedException` (not connected,
+  dropped, reconnecting).
+- Reconnection: exponential backoff 1 s to 30 s with plus or minus 20 percent jitter, then a new
+  InitializeSession with the same keys and an Authenticate with the last credentials; the
+  server refusing the resume stops reconnecting (ResumeFailed).
+- Frame shapes follow the gateway: InitializeSession, Authenticate, CreateNewAccount and
+  EmailActivation carry the ticket in the payload (header without ticket), GetServerTime carries
+  none, LeaveGame carries the game target and the ticket, everything else the ticket in the
+  header. Relayed game messages carry the game target and the ticket, no request id.
+- Passwords are plain text on the wire (server-side PBKDF2 since step 4), so the SDK refuses
+  to send them over ws:// except to loopback unless `AllowPlainTextPasswordsWithoutTls` is set.
 
-- Connection: `Connect(url, port)` (port ignored, url is a full ws:// URL), `ConnectLocally()`
-  (ws://localhost:5000/ws), `Disconnect()`, `InitializeSession(developerKey, gameKey)`, events
-  `OnConnected`, `OnConnectionFailed`, field `OnDisconnected`.
-- Auth: `AuthenticateWithTestDevice`, `AuthenticateWithDevice` (uses
-  `SystemInfo.deviceUniqueIdentifier`), `AuthenticateWithUserAndPassword`,
-  `AuthenticateWithEmail`, `CreateAccountWith*`, `AddUserNameAndPasswordToAccount`,
-  `AddEmailAndPasswordToAccount`, `ActivateEmail`. Passwords are sent in plain text (MD5-hashed
-  client side before step 4), so use wss:// in production.
-- Profile: `SetName`, `GetName`, `GetPlayerName(playerId)`.
-- Friends: `GetFriends(publicDataKeys)`, `InviteFriendByUserName/Email/PlayerId`,
-  `AcceptFriendInvitation`, `DenyFriendInvitation`, events `OnFriendListReceived`,
-  `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`,
-  `OnFriendStatusChanged`.
-- Inventory: `GetInventory`, `RemoveInventoryItems`, and the obsolete `AddInventoryItems`
-  (rejected by the server since step 4).
-- Leaderboards: the obsolete `SetScoreInLeaderBoard` (rejected since step 4),
-  `GetRankInLeaderBoard`, `GetAroundPlayersInLeaderBoard`, `GetTopPlayersInLeaderBoard`.
-- Matchmaking and matches: `FindMatch(gameMode, skill)` (15 s timeout, error 1),
-  `FinishGame(game)`, `SetPlayerMatchProperty`, `SetGlobalMatchProperty` (10 KB values),
-  `RejoinMatch`, `GetPendingMatches`, events `OnGameFinished`, `OnGameFinishedDueToDisconnect`,
-  `OnMatchPropertyChanged`, `OnPlayerInMatchPropertyChanged`, fields `OnMatchPlayerRemoved`,
-  `OnMatchPlayerRejoined`, `OnMatchRejoinSyncDataReceived`.
-- Relay: `UpdateGame<T>(game, msg, type, qos)` fire-and-forget with custom message types above
-  1023; `RegisterHandler(type, handler)` / `UnregisterHandler` for raw messages, payload via
-  `msg.GetPayload<T>()`.
-- Challenges: `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`,
-  `GetChallenges` (161/162), events
-  `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied`.
-- Cloud data: `SaveCloudData`, `SavePublicCloudData`, `GetCloudData`, `GetPublicCloudData`,
-  `GetPlayerPublicCloudData`, `GetPublisherData`.
-- Scripts: `ExecuteScriptEvent(name, params object[] args)` for int, short, long, bool, byte,
-  byte[], float, double, string.
-- Time: `GetServerTime()` (UTC; sends the ticket, which the server does not check).
+## Verification status
 
-## Transport
+Verified with plain .NET (CI runs both in the backend job):
 
-`Client : WebSocketNetworkTransmitter` wraps websocket-sharp. Events arrive on worker threads;
-`DataEvent` parses on the worker thread, looks up the handler dictionary without a lock and
-pushes to a plain `Queue` without a lock (thread-safety bug); `Update` drains it on the main
-thread. QoS channels are accepted and ignored (everything is reliable, ordered TCP).
-`OnError` is a no-op, so websocket failures surface as `OnDisconnected` only. Heartbeat: a
-`HeartBeatRequest` after 10 s without sends; no RTT. No reconnection. Request ids come from a
-static counter with a small race outside its lock.
+- `WildCat.Sdk.Tests` compiles the package's Runtime/Protocol and Runtime/Core sources into the
+  test assembly (the backend's own WildCat.Protocol.dll gets the extern alias `server` so the
+  names do not clash) and runs them against an in-process Orleans test cluster plus the real
+  gateway on Kestrel: sessions, device, user name and email logins, gateway refusals, find match
+  with two clients, relay order, match properties and events, friends and challenges events,
+  cloud data, leaderboards through a script event, inventory, request timeouts and late answers,
+  heartbeats, explicit disconnect and reconnect, server-side drops with session resume, backoff,
+  giving up, the queued dispatcher. `CoreTests` add an in-memory fake server for exact frame
+  checks; `PackageLayoutTests` check package.json, the asmdefs and the .meta files.
+- `WildCat.Sdk.CoreCheck` proves the Core compiles as Unity compiles it.
 
-## Bugs to fix before anyone uses it
+Not verified in Unity (no Unity install was available for step 8):
 
-- `Client.Disconnect()` clears the handler table including the internal response handlers, so
-  after an explicit disconnect and reconnect no response is ever processed. `OnDisconnected`
-  fires twice.
-- `DenyChallengeRequest` registers its response handler on the request type, so its Result
-  never completes. (`SetDeck` had the same bug until step 2 removed it.)
-- `AddInventoryItems` and `RemoveInventoryItems` never set `inventoryName` and throw on the
-  null write.
-- `CreateAccountWithUserAndPassword` sends the `userName` property instead of the argument.
-- Leaderboard responses are identified by guessing from flags; a Top query on an empty board
-  never completes.
-- Fixed in step 6: `GetFriendsRequestMessage.Deserialize` never allocated its array, the
-  player-target count was int32 vs int16, and `SetPlayerMatchProperty(Guid, string,
-  MessageBase)` called itself (see docs/wire-protocol.md). The deserializers with null lists
-  belonged to card-game messages removed in step 2.
-- There is no handler for ErrorMsg (8), so a request the gateway refuses before its handler
-  (no session, not logged in, unknown id) leaves its Result pending, and no calls exist yet for
-  RecoverPassword (84), ResendActivation (86) and ResetPasswordWithCode (163).
-- Sample: leaderboard never displays (`entriesToShow` unassigned), `int.Parse` on empty input,
-  null reference in `OnFriendStatusChanged` before the list loads, callbacks re-registered on
-  every Start, `TimestampedBuffer.GetValue` divides by zero on equal timestamps, sends at 20 Hz
-  while the comment says 10.
-- `WildCat.prefab` and `test.unity` reference a script GUID that no longer exists.
+- `Runtime/Unity`, `Editor/` and `Samples~/Basic` were compiled only against hand-written
+  stand-ins for the UnityEngine and UnityEditor members they use (also with `UNITY_WEBGL`
+  defined for the WebGL transport), in a throwaway project that is not in the repository.
+- The WebGL `.jslib` and transport never ran in a browser; Task.Delay and the request timers on
+  WebGL's single thread are unverified.
+- The .meta files, the asmdefs and the sample's `WildCatSettings.asset` were written by hand (the
+  asset's field names are checked against the script by a test).
+- There is no sample scene or prefab: the sample builds its objects at run time and its README
+  lists the three setup steps (Add Client To Scene, add Basic Sample, Play).
 
-## Cleanup plan
+First things to do with Unity at hand: open `unity-sdk/` in Unity 6, let it upgrade the project
+settings, import the Basic sample, run it against `dotnet run --project backend/WildCat.Host`
+with a build as the second player, and try a WebGL build.
 
-1. Add an asmdef, remove the UNet types (own `Qos` enum), delete `NetworkTransmitter.cs`,
-   `Singleton.cs`, `OneTimeRunner.cs`. (The UBC/quest/league/deck/"Old" messages, the dev
-   publisher-data calls and the CafeBazaar code went in step 2.)
-2. Replace the polling `Result` with `Task`-based or `UniTask`-style calls with timeouts, keep a
-   coroutine-friendly wrapper.
-3. Make the transport thread-safe (concurrent queue, immutable handler map), add reconnection
-   with session resume, and a real heartbeat with RTT.
-4. (Done in step 6) Share the protocol definition with the server: `Plugins/Protocol` is
-   generated from `backend/WildCat.Protocol`; move it into the UPM package's Runtime folder and
-   point `tools/sync-protocol.sh` there.
-5. Rebuild the sample scene and prefab and package as a UPM package (`com.<org>.wildcat`).
-   (Step 3 renamed the brand from Apadana to WildCat and pointed the editor menu links at the
-   GitHub repository.)
-6. Delete the obsolete `AddInventoryItems` and `SetScoreInLeaderBoard` (the server stopped
-   trusting client grants and scores in step 4) and show script-granted items and scores in
-   the sample instead.
+## The old SDK and what became of it
+
+`Assets/Backend` held `BackendPlatform.cs` (a 2,000 line singleton MonoBehaviour), `Result.cs`
+(polled results), `Singleton.cs`, `LowLevelAPI/` (websocket-sharp transport, a dead UNet
+`NetworkTransmitter`, `RequestIdGenerator`), the step 6 protocol copy, an IMGUI sample with a
+scene and prefab whose script GUIDs no longer existed, and editor scripts (About window, menus,
+the dead `OneTimeRunner`). Step 8 deleted all of it; the logo moved to the package's
+`Editor/Images`.
+
+Earlier steps had already changed it: step 2 removed CafeBazaar, the card-game calls and the
+developer-secret calls; step 3 renamed it to WildCat; step 4 made passwords plain text for the
+server-side hash and marked `AddInventoryItems` and `SetScoreInLeaderBoard` obsolete (the server
+refuses both from clients); step 6 replaced the hand-kept `Messages.cs` with the generated
+protocol copy and `WireCodec`.
+
+The old bugs and where they went:
+
+| Old bug | Now |
+|---|---|
+| `Client.Disconnect()` cleared all handlers, so nothing worked after reconnecting; `OnDisconnected` fired twice | handlers belong to the client, not the socket; `Disconnected` fires once (tested) |
+| `DenyChallengeRequest` waited on the request type and never completed | answers are matched by request id (tested) |
+| `AddInventoryItems` and `RemoveInventoryItems` threw on a null inventory name | grants removed; `Inventory.RemoveAsync(inventory, items)` sends the name |
+| `CreateAccountWithUserAndPassword` sent the `userName` property | `Auth.CreateAccountWithUserNameAsync` sends its argument |
+| Leaderboard answers identified by guessing; an empty Top never completed | matched by request id; an empty board answers (tested) |
+| No handler for ErrorMsg (8), so refused requests stayed pending | `WildCatException` with `IsGatewayRefusal` (tested) |
+| No calls for RecoverPassword (84), ResendActivation (86), ResetPasswordWithCode (163) | `Auth.RecoverPasswordAsync`, `ResendActivationCodeAsync`, `ResetPasswordAsync` |
+| Handler table and queue shared between the socket thread and Update without locks | copy-on-write handler table, concurrent queues, one writer |
+| No timeouts, no reconnection, heartbeat without RTT, UNet types, websocket-sharp (no WebGL) | all addressed; ClientWebSocket plus a browser transport for WebGL |
+| `GetInventory` sent an EmptyMessage where the server reads the inventory name | `Inventory.GetAsync(inventory)` |
+| Sample: leaderboard never shown, `int.Parse` on empty input, null friend list in status events, callbacks registered on every Start, divide by zero in TimestampedBuffer, 20 Hz sends labelled 10 | rewritten sample without these |
+
+## Old API to new API
+
+The old calls were `BackendPlatform.Instance.X(...)` returning a `Result`; the new ones hang off a
+`WildCatClient` (in a scene, `WildCatBehaviour.Client`) and return Tasks. A successful Result is a
+completed Task, `errorCode` and `errorMessage` are `WildCatException.ErrorCode` and `Message`, and
+`value` is the Task's result (`TaskYieldInstruction<T>.Result` in coroutines).
+
+| Old | New |
+|---|---|
+| `Connect(url, port)`, `ConnectLocally()` | `ConnectAsync()` with the URL in `WildCatSettings`/`WildCatClientOptions` |
+| `Disconnect()` | `DisconnectAsync()` or `Dispose()` |
+| `InitializeSession(dev, game)` | `Session.InitializeAsync(dev, game)`; `WildCatBehaviour.ConnectAndInitializeAsync()` |
+| `OnConnected`, `OnConnectionFailed`, `OnDisconnected` | `Connected`, ConnectAsync throwing, `Disconnected`; new `Reconnecting`, `Reconnected` |
+| `AuthenticateWithDevice`, `AuthenticateWithTestDevice` | `Auth.LoginWithThisDeviceAsync`, `Auth.LoginWithDeviceAsync(deviceId)` |
+| `AuthenticateWithUserAndPassword`, `AuthenticateWithEmail` | `Auth.LoginWithUserNameAsync`, `Auth.LoginWithEmailAsync` |
+| `CreateAccountWithDevice`, `...WithUserAndPassword`, `...WithEmail` | `Auth.CreateAccountWith{ThisDevice,Device,UserName,Email}Async` |
+| `AddUserNameAndPasswordToAccount`, `AddEmailAndPasswordToAccount`, `ActivateEmail` | `Auth.AddUserNameAsync`, `Auth.AddEmailAsync`, `Auth.ActivateEmailAsync` |
+| `SetName`, `GetName`, `GetPlayerName` | `Profile.SetNameAsync`, `GetNameAsync`, `GetPlayerNameAsync` |
+| `SaveCloudData`, `GetCloudData`, `SavePublicCloudData`, `GetPublicCloudData`, `GetPlayerPublicCloudData`, `GetPublisherData` | `CloudData.SetAsync`, `GetAsync`, `SetPublicAsync`, `GetPublicAsync`, `GetPlayerPublicAsync`, `GetPublisherDataAsync` |
+| `GetFriends`, `InviteFriendBy{UserName,Email,PlayerId}`, `AcceptFriendInvitation`, `DenyFriendInvitation` | `Friends.GetAsync`, `InviteBy{UserName,Email,PlayerId,DisplayName}Async`, `AcceptAsync`, `DenyAsync` |
+| `OnFriendListReceived`, `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`, `OnFriendStatusChanged` | the `Friends.GetAsync` result, `Friends.InvitationReceived`, `InvitationAccepted`, `InvitationDenied`, `StatusChanged` |
+| `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`, `GetChallenges` | `Challenges.SendAsync`, `AcceptAsync`, `DenyAsync`, `GetAsync` |
+| `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied` | `Challenges.ChallengeReceived`, `ChallengeAccepted`, `ChallengeDenied` |
+| `FindMatch(game, skill)` | `Matchmaking.FindMatchAsync(gameMode, skill, maxWait)` (null when nobody was found) |
+| `FinishGame`, `SetPlayerMatchProperty`, `SetGlobalMatchProperty`, `RejoinMatch`, `GetPendingMatches` | `Matches.LeaveAsync`, `SetPlayerPropertyAsync`, `SetGlobalPropertyAsync`, `RejoinAsync`, `GetPendingAsync` |
+| `OnGameFinished`, `OnGameFinishedDueToDisconnect`, `OnMatchPropertyChanged`, `OnPlayerInMatchPropertyChanged`, `OnMatchPlayerRemoved`, `OnMatchPlayerRejoined`, `OnMatchRejoinSyncDataReceived` | `Matches.Finished`, `PropertyChanged`, `PlayerLeft`, `PlayerRejoined`, `Resynced`; new `PlayerJoined` |
+| `UpdateGame<T>(game, msg, type, qos)`, `RegisterHandler`, `UnregisterHandler` | `Relay.Send(matchId, type, msg)`, `Relay.On<T>(type, handler)` (dispose to unregister) |
+| `GetTopPlayersInLeaderBoard`, `GetAroundPlayersInLeaderBoard`, `GetRankInLeaderBoard` | `Leaderboards.GetTopAsync`, `GetAroundMeAsync`, `GetRankAsync` |
+| `SetScoreInLeaderBoard`, `AddInventoryItems` (obsolete since step 4) | removed; a server script event run with `Scripts.ExecuteAsync` |
+| `GetInventory`, `RemoveInventoryItems` | `Inventory.GetAsync(inventory)`, `Inventory.RemoveAsync(inventory, items)`; new `UnlockAsync`, `GetUnlockTimeAsync` |
+| `ExecuteScriptEvent(name, args)` | `Scripts.ExecuteAsync(name, args)`, `Scripts.ExecuteAsync<T>(name, args)` |
+| `GetServerTime()` | `ServerTime.GetAsync()`, then `ServerTime.Now` |
+| `yield return result.Wait()` | `yield return task.AsCoroutine()` |
+
+## Server issues the SDK tests found
+
+Left for the server work (the SDK tests avoid them and say why):
+
+- `RelayServerGameState.SetPlayerProperties` (WildCat.Interfaces/IRelayServerGame.cs) assigns a
+  new empty table to `PlayerProperties` when the player has no entry, then indexes the missing
+  entry, so SetMatchProperty (129) with `isPlayerProperty` always fails with code -1 and the
+  exception text. It should add `PlayerProperties[playerKey] = new Dictionary<string, byte[]>()`.
+- `Push/ChallengeEventFrames` never sets `ChallengeMessage.TimeOut`, so StartChallengeRequestedEvent
+  (19) always says 15 seconds whatever the challenger asked for (`ChallengeEventData` has no
+  timeout field to copy).
+- GetPlayerChallenges (161) puts received challenges in the sent list (known, in wire-protocol.md).
+- GamePlayerAddedEvent (9) carries the player's display name in `Player`, not the account id,
+  unlike the other match events.

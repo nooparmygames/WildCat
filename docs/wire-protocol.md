@@ -2,7 +2,8 @@
 
 One source, `backend/WildCat.Protocol` (netstandard2.1, C# 9, no Orleans, ASP.NET or Newtonsoft
 references, namespace `WildCat.Protocol`), shared by the server and the Unity SDK. The SDK's copy
-in `unity-sdk/Assets/Backend/Plugins/Protocol` is generated from it (see "The SDK copy" below);
+in the Unity package's `Runtime/Protocol` (`unity-sdk/Packages/com.noopsoftworks.wildcat`) is
+generated from it (see "The SDK copy" below);
 until roadmap step 6 the SDK kept its own diverged `LowLevelAPI/Messages.cs`. Documented from the
 code on 2026-09-30 and updated after roadmap steps 2 (removed messages), 3 (the WildCat rename:
 namespace `RealtimeServer`, `ApadanaMessageBase` and `ApadanaMsgType` became `WildCat.Protocol`,
@@ -99,7 +100,8 @@ client), and other values where a message documents them.
 
 ErrorMsg (8) is the gateway's answer to a request it refuses before any handler runs. Its payload
 is an `OptionalResponse<EmptyMessage>` that is never successful, and it echoes the request id when
-the request had one:
+the request had one (the step 8 SDK fails the waiting request with a `WildCatException` whose
+`IsGatewayRefusal` is set; the old SDK ignored ErrorMsg and left the request pending):
 
 - code 1, "The message could not be read.": the frame does not decode (no request id then);
 - code 1, "Unsupported message type": no handler for an id up to 1023. This covers requests the
@@ -131,8 +133,10 @@ always goes to every other player); message type, request id, game target and pa
 exactly as sent. A game message without `HasGameTarget` has nowhere to go and is dropped without
 an answer, and so is one for a match that is not running.
 
-The client sends `HeartBeatRequest` after 10 s without any send; the gateway also pings the
-player grain at most every 5 s per connection while requests arrive.
+The SDK sends a heartbeat every 10 s (`HeartBeatRequest` with the ticket once a player is logged
+in, `GetServerTime` before that), measures its round trip, and drops and reconnects the socket
+when one gets no answer in 15 s; the old SDK sent `HeartBeatRequest` after 10 s without any send.
+The gateway also pings the player grain at most every 5 s per connection while requests arrive.
 
 ## Handled messages
 
@@ -300,17 +304,19 @@ Wire format changes, made on both sides at once since the SDK now gets the same 
 
 ## The SDK copy
 
-`unity-sdk/Assets/Backend/Plugins/Protocol` is generated, never edited: change
-`backend/WildCat.Protocol`, then run from anywhere
+`unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol` (the Unity package's
+`WildCat.Protocol` assembly; `Assets/Backend/Plugins/Protocol` before step 8) is generated, never
+edited: change `backend/WildCat.Protocol`, then run from anywhere
 
 ```bash
 tools/sync-protocol.sh          # or, on Windows: pwsh tools/sync-protocol.ps1
 ```
 
 The script deletes the copy and writes it again from every `.cs` file of the protocol project
-except `ServerOnly/`, `obj/` and `bin/`, adds a README saying so, and writes Unity `.meta` files
-whose GUIDs are the MD5 of `wildcat-protocol:` plus the path relative to the copy (`""` for the
-folder itself), so running it twice changes nothing. `WildCat.Tests/ProtocolSyncTests` fails when
+except `ServerOnly/`, `obj/` and `bin/`, adds a README saying so and the assembly definition
+`WildCat.Protocol.asmdef` (from `tools/protocol-copy-asmdef.json`, no engine references), and
+writes Unity `.meta` files whose GUIDs are the MD5 of `wildcat-protocol:` plus the path relative
+to the copy (`""` for the folder itself), so running it twice changes nothing. `WildCat.Tests/ProtocolSyncTests` fails when
 the copy's files or contents differ from the source (ignoring line endings and BOMs), when a
 `.meta` GUID is not the expected one, when `ServerOnly/` leaks into the copy, or when the copy does
 not compile on its own as C# 9. The protocol project itself targets netstandard2.1 with
