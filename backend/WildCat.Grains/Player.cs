@@ -556,7 +556,7 @@ namespace WildCat.Grains
                 return false;
             string code = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
             State.ActivationCodes[email] = NewEmailCode(code);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             // Like a reset code, the caller asked for this email, so a failed send fails the call.
             await emailSender.SendAsync(email, EmailTexts.ActivationSubject, EmailTexts.ActivationBody(code));
             return true;
