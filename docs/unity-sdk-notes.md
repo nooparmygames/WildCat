@@ -8,14 +8,24 @@ Edits made during the copy: the three `PlayfabErrorCode` properties in `Result.c
 `AuthenticateWithPlayfab` method and the two `Debug.Log` lines that printed the developer secret
 were removed from `BackendPlatform.cs`; the sample's public server IP became `localhost`; the
 developer and game key GUIDs in `Sample/test.unity` were zeroed; the hardcoded game id in
-`Client.cs` became an empty string. Nothing else changed, so every bug below is still present.
+`Client.cs` became an empty string. Nothing else changed at copy time, so every bug below is
+still present.
+
+Removed in step 2: `VerifyCafeReceipt` with `CafeVerificationStatusResults`; the card-game calls
+`BuyUBCItem`, `SetDeck`, `ClaimQuests`, `RegisterTournament`, `SetAchievementProgress`,
+`SetQuestProgress` and `SetMatchResult` with their result tables, handlers and `Client` senders
+(plus the unused login, quest, achievement and main data senders); the developer-only
+`DevGetPublisherData` and `DevSetPublisherData`, which sent the developer secret from the
+client; and the `ENABLE_PLAYFABSERVER_API` scripting define. The SDK's `uNetMessages.cs` lost
+the same message types and enum members as the server copy and pins the same explicit ids
+(see docs/wire-protocol.md).
 
 ## Layout
 
 ```
 Assets/Backend/Editor/Scripts/      ApadanaWindow (about box), ApadanaMenus (docs links, "Create Clone"
                                     symlink helper for running two editors), OneTimeRunner (dead)
-Assets/Backend/Plugins/BackendPlatform.cs   the public API, 2,300 lines, singleton MonoBehaviour
+Assets/Backend/Plugins/BackendPlatform.cs   the public API, about 2,000 lines, singleton MonoBehaviour
 Assets/Backend/Plugins/Result.cs            Result, Result<T>, Result<T,Q>: poll or `yield return r.Wait()`
 Assets/Backend/Plugins/LowLevelAPI/         Client (request/response plumbing), WebSocketNetworkTransmitter
                                             (websocket-sharp), NetworkTransmitter (dead UNet LLAPI),
@@ -47,10 +57,7 @@ as C# events or public delegate fields.
   `AcceptFriendInvitation`, `DenyFriendInvitation`, events `OnFriendListReceived`,
   `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`,
   `OnFriendStatusChanged`.
-- Inventory: `GetInventory`, `AddInventoryItems`, `RemoveInventoryItems`, plus card-game
-  leftovers (`BuyUBCItem`, `SetDeck`, `ClaimQuests`, `RegisterTournament`,
-  `SetAchievementProgress`, `SetQuestProgress`, `SetMatchResult`) whose server handlers do not
-  exist.
+- Inventory: `GetInventory`, `AddInventoryItems`, `RemoveInventoryItems`.
 - Leaderboards: `SetScoreInLeaderBoard`, `GetRankInLeaderBoard`,
   `GetAroundPlayersInLeaderBoard`, `GetTopPlayersInLeaderBoard`.
 - Matchmaking and matches: `FindMatch(gameMode, skill)` (15 s timeout, error 1),
@@ -64,14 +71,11 @@ as C# events or public delegate fields.
 - Challenges: `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`, events
   `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied`.
 - Cloud data: `SaveCloudData`, `SavePublicCloudData`, `GetCloudData`, `GetPublicCloudData`,
-  `GetPlayerPublicCloudData`, `GetPublisherData`, developer-only `DevGetPublisherData` and
-  `DevSetPublisherData` (send the developer secret from the client; remove).
+  `GetPlayerPublicCloudData`, `GetPublisherData`.
 - Scripts: `ExecuteScriptEvent(name, params object[] args)` for int, short, long, bool, byte,
   byte[], float, double, string.
 - Time: `GetServerTime()` (needs a ticket despite only checking the connection; culture
   dependent parse).
-- IAP: `VerifyCafeReceipt`. Dropped; delete with `CafeVerificationStatusResults` and the
-  `VerifyStoreReceipt*` messages.
 
 ## Transport
 
@@ -88,16 +92,17 @@ static counter with a small race outside its lock.
 - `Client.Disconnect()` clears the handler table including the internal response handlers, so
   after an explicit disconnect and reconnect no response is ever processed. `OnDisconnected`
   fires twice.
-- `SetDeck` and `DenyChallengeRequest` register their response handlers on the request type, so
-  their Results never complete.
+- `DenyChallengeRequest` registers its response handler on the request type, so its Result
+  never completes. (`SetDeck` had the same bug until step 2 removed it.)
 - `SetPlayerMatchProperty(Guid, string, MessageBase)` calls itself (stack overflow).
 - `AddInventoryItems` and `RemoveInventoryItems` never set `inventoryName` and throw on the
   null write.
 - `CreateAccountWithUserAndPassword` sends the `userName` property instead of the argument.
 - Leaderboard responses are identified by guessing from flags; a Top query on an empty board
   never completes.
-- `GetFriendsRequestMessage.Deserialize` never allocates its array; other deserializers use
-  null lists; player-target count is int32 vs int16 (see docs/wire-protocol.md).
+- `GetFriendsRequestMessage.Deserialize` never allocates its array; player-target count is
+  int32 vs int16 (see docs/wire-protocol.md). The deserializers with null lists belonged to
+  card-game messages removed in step 2.
 - Sample: leaderboard never displays (`entriesToShow` unassigned), `int.Parse` on empty input,
   null reference in `OnFriendStatusChanged` before the list loads, callbacks re-registered on
   every Start, `TimestampedBuffer.GetValue` divides by zero on equal timestamps, sends at 20 Hz
@@ -107,8 +112,8 @@ static counter with a small race outside its lock.
 ## Cleanup plan
 
 1. Add an asmdef, remove the UNet types (own `Qos` enum), delete `NetworkTransmitter.cs`,
-   `Singleton.cs`, `OneTimeRunner.cs`, the UBC/quest/league/deck/"Old" messages, the dev
-   publisher-data calls, and the CafeBazaar code.
+   `Singleton.cs`, `OneTimeRunner.cs`. (The UBC/quest/league/deck/"Old" messages, the dev
+   publisher-data calls and the CafeBazaar code went in step 2.)
 2. Replace the polling `Result` with `Task`-based or `UniTask`-style calls with timeouts, keep a
    coroutine-friendly wrapper.
 3. Make the transport thread-safe (concurrent queue, immutable handler map), add reconnection
@@ -117,5 +122,5 @@ static counter with a small race outside its lock.
    diverged copy.
 5. Rebuild the sample scene and prefab, rename the brand (Apadana) to the new project name,
    replace the editor menu links, and package as a UPM package (`com.<org>.<name>`).
-6. Server side must stop trusting client-supplied inventory grants, scores and game-server
-   calls before the SDK exposes them again.
+6. Server side must stop trusting client-supplied inventory grants and scores before the SDK
+   exposes them again.

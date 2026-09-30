@@ -2,7 +2,8 @@
 
 Defined in `backend/Messages/uNetMessages.cs` (server copy) and
 `unity-sdk/Assets/Backend/Plugins/LowLevelAPI/uNetMessages.cs` (client copy, diverged: the
-server copy defaults strings to ""). Documented from the code on 2026-09-30. The two copies must
+server copy defaults strings to ""). Documented from the code on 2026-09-30 and updated after
+roadmap step 2, which removed the same message types from both copies. The two copies must
 become one shared source.
 
 ## Framing
@@ -14,7 +15,7 @@ reassembled by the gateway up to 2 MB. Everything is written with .NET `BinaryWr
 TimeSpan is a double of milliseconds).
 
 ```
-int16  msgType            ApadanaMsgType (implicit enum ordinals 0..162, HighestInternal = 1023)
+int16  msgType            ApadanaMsgType (explicit values 6..162 with gaps, HighestInternal = 1023)
 byte   header flags       HasGameTarget=1, HasPlayerTarget=2, HasAuthData=4, (8 reserved),
                           HasRequestID=16, stored=32, buffered=64, hasTime=128 (last three unused)
 [uint32 requestID]        if HasRequestID   (client sets it; server echoes it on the response)
@@ -39,15 +40,16 @@ player grain at most every 5 s per connection.
 
 ## Handled messages
 
-Ids come from counting the enum; pin them with explicit values before publishing this as a
-spec. C = client, S = server.
+Every `ApadanaMsgType` member carries an explicit value equal to the ordinal the legacy code
+got by counting the enum, so no surviving id changed. Messages removed in step 2 leave gaps;
+do not reuse those ids. C = client, S = server.
 
 Session and auth
 
 | Id | Message | Payload | Grain path |
 |---|---|---|---|
 | 6/7 | InitializeSessionRequest / Response | {Guid DeveloperKey, Guid GameKey} / {Guid session} | `IDeveloper.InitializeSession` |
-| 76/77 | AuthenticateRequest / Response | {ticket, byte LoginType (Device, UserWithPassword, Email, Custom), Id, PasswordHash (client MD5), bool AutoCreate, dict} / {userId, name, ticket, bool isNewlyCreated} | id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*` |
+| 76/77 | AuthenticateRequest / Response | {ticket, byte LoginType (Device, UserWithPassword, Email), Id, PasswordHash (client MD5), bool AutoCreate, dict} / {userId, name, ticket, bool isNewlyCreated} | id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*` |
 | 78/79 | CreateNewAccountRequest / Response | {ticket, LoginType, Id, PasswordHash, dict} / {accountId} | `IPlayerCreator(0)` (no session check) |
 | 80/81 | EmailActivationRequest / Response | {ticket, email, code} / empty | `IPlayer.Activate` |
 | 82/83 | AddAuthMechanismToAccountRequest / Response | {LoginType, Id, PasswordHash, dict} / empty | `IPlayer.AddPlayer*` |
@@ -64,14 +66,14 @@ Profile and cloud data
 | 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, value} | `IPlayer.*PublicString` |
 | 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, value} | `IPlayer(player).GetPlayerPublicString` |
 | 34/35 | GetPublisherData | {key} / {value} | `IDeveloperStorage(devKey).GetString` |
-| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage` (Get ignores the secret) |
+| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage` (Get ignores the secret); server-to-server, the SDK no longer sends them |
 
 Friends
 
 | Id | Message | Payload | Grain path |
 |---|---|---|---|
 | 88/89 | GetFriends | {string[] publicKeys} / {friends: {userId, name, status, dict}[], sent[], received[]} | `IPlayerFriendList.GetFriends` |
-| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId, PlayfabId), bytes} / empty | resolves id maps then `Invite` |
+| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | resolves id maps then `Invite` |
 | 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptInvitation`, `DenyInvitation` |
 | 92, 95, 98, 99 | FriendshipInvitationEvent, FriendshipAcceptedEvent, FriendshipDeniedEvent, FriendStatusChangedEvent (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream |
 
@@ -106,22 +108,27 @@ Leaderboards, inventory, scripting, time, dev
 | 109/110 | GetInventory | {invName} / {(name, count)[]} | `IPlayerInventory.GetInventory` |
 | 111..116 | AddItemToInventory, SetItemToInventory, RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `AddItem`, `SetItem`, `RemoveItem` (client-chosen grants) |
 | 119..122 | UnlockInventory, GetInventoryUnlockTime | {invName} | `Unlock`, `GetUnlocktime` |
-| 40/41 | VerifyStoreReceipt | {Product, Receipt} / {byte Status, Data} | CafeBazaar. Dropped. |
 | 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `IScriptEventRunner.Run` |
 | 42/43 | GetServerTime | none / {string} | `ITimeService` |
 | 44/45 | CreateEnvironment (not in MASTER builds) | developer profile / {DeveloperKey, GameKey} | seeds developer, game "game1", leaderboard "global", mode "multi", script "Test" |
 
 Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dropped without a
-response): 0-5 (old CreateAccount/Login/Logout), 11/12 JoinGame, 46-61 developer and CafeBazaar
-admin ids, 84-87 RecoverPassword and ResendActivation, 102-108 guild and defined items, 117/118
-BuyItem, 123/124 ConsumeItem, 135-160 achievements, store data, league, quests, Mulligan,
-BuyUBCItem, SetDeck, SetUBCMatchResult, GetMainData, RegisterInTournament.
+response): 84-87 RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem,
+123/124 ConsumeItem. The grain logic behind them exists; only the gateway handlers are missing.
+
+Removed in step 2 (the ids are now gaps): 0-5 old CreateAccount/Login/Logout, 11/12 JoinGame,
+40/41 VerifyStoreReceipt (CafeBazaar, the only handled one), 46-61 developer and CafeBazaar admin
+ids, 102-106 guild, and 135-160 achievements, store data, league, quests, Mulligan, BuyUBCItem,
+SetDeck, SetUBCMatchResult, GetMainData, RegisterInTournament. `LoginType.Custom` and
+`InvitationType.PlayfabId` went with PlayFab; both were the last members of their byte enums, so
+the other values did not move.
 
 ## Protocol-level bugs
 
 - Player-target count int32 vs int16 mismatch.
 - `GetFriendsRequestMessage.Deserialize` writes into an empty array (throws for any non-zero
-  count); `GetPlayerStoreDataMessage` and `SetDeckRequestMessage` deserialize into null lists.
+  count). `GetPlayerStoreDataMessage` and `SetDeckRequestMessage`, which deserialized into null
+  lists, were removed in step 2.
 - `GetPublicCloudDataResponse` writes a null string when the key is missing (throws, no
   response).
 - `FindMatchResponse(string gameId, ...)` ignores its `gameId`.
@@ -133,7 +140,7 @@ BuyUBCItem, SetDeck, SetUBCMatchResult, GetMainData, RegisterInTournament.
 ## Direction for the rewrite
 
 Keep the transport shape (one binary WebSocket message per request, request id echo, typed
-error envelope) because the Unity SDK is built around it, but pin explicit message ids, strip
+error envelope) because the Unity SDK is built around it, keep the pinned message ids, strip
 the ticket from relayed frames, serialize DateTime as ticks or ISO 8601, split the file per
 feature area, and consider generating both copies from one schema (MessagePack or protobuf are
 the obvious candidates).

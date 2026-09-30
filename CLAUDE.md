@@ -71,12 +71,13 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
 - Grains live in `backend/Collections`, interfaces and state classes in `backend/Interfaces`.
   Player, Session, Developer, RelayServerGame, RelayServerMatchMaker, PlayerFriendList,
   PlayerChallengeHandler, LeaderBoard, PlayerInventory, PlayerStorage, ScriptEventCompiler and
-  the id-map grains are the core. `Game`/`MatchMaker` and the TimedExecuter subsystem are dead.
+  the id-map grains are the core. `Game`/`MatchMaker` and the TimedExecuter subsystem were
+  removed in roadmap step 2.
 - A developer (publisher) owns games. A client initializes a session with developer key plus
   game key, receives a Guid ticket, logs in as a player, and sends every later message with the
   ticket.
-- The gateway (`backend/FrontEnd/FrontEndServer.cs`, one 2,444-line class) decodes the binary
-  protocol in `backend/Messages/uNetMessages.cs`, calls grains, and pushes server events back
+- The gateway (`backend/FrontEnd/FrontEndServer.cs`, one class of over 2,000 lines) decodes the
+  binary protocol in `backend/Messages/uNetMessages.cs`, calls grains, and pushes server events back
   through Orleans memory streams (provider `game`, ids built by `Interfaces/StreamNames.cs`).
   It runs inside the silo process and uses the silo's `IClusterClient`.
 - Matches are relay games: the server tracks membership and properties and forwards opaque

@@ -3,7 +3,8 @@
 This is the rewrite reference for the developer panel. The old panel (an AngularJS 1.x app built
 on the commercial "Fuse" theme, Persian RTL, gulp/bower toolchain) is not copied into this repo:
 the theme is a paid template and cannot be redistributed, the toolchain is dead, and the code was
-already half broken. Only this document survives. Survey date 2026-09-30.
+already half broken. Only this document survives. Survey date 2026-09-30; updated after roadmap
+step 2 dropped billing, which removed the usage dashboard from the contract.
 
 One important finding: the REST API this panel calls (`/api/v1/...`) does not exist in the backend
 in this repo. The backend's `FrontEnd` project only exposes the game WebSocket at `/ws`. The HTTP
@@ -14,9 +15,9 @@ panel expected, not as something that exists.
 ## What the panel really was
 
 The real product was: auth (register with email activation, login, forgot/reset password), a
-per-game usage dashboard, a games list, a per-game config area with five tabs, a developer-wide
-key/value page, and an admin-only developer list. Everything else (invoice, profile, quick panel
-chat, error pages, theme switcher) was Fuse demo content.
+games list, a per-game config area with five tabs, a developer-wide key/value page, and an
+admin-only developer list. Everything else (invoice, profile, quick panel chat, error pages,
+theme switcher) was Fuse demo content.
 
 Side navigation had three items: Home (dashboard), Games, Publisher data. Admins reached the
 Developers page through a toolbar link only.
@@ -45,18 +46,12 @@ The client-side MD5 is a legacy quirk. The backend hashes again with SHA1 (see
 `Interfaces/AuthenticationExtentions.cs`). A rewrite should replace this with a proper password
 hash on the server and TLS in transit.
 
-### Dashboard (`/dashboard?developerId=`)
-
-GET `/developers/accounting` (or GET `/admin/developers/:id/accounting` when an admin views a
-developer). Response: `{games: [{gameKey, gameName, callCount, messageCount}]}`. One card per game
-showing the two counters. Clicking a card opened that game's config. No charts, dates or money:
-"accounting" meant these two counters only.
-
 ### Developers (admin only, `/developers`)
 
 GET `/admin/developers` returned `[{firstName, lastName, email, phoneNumber, key}]`. Table with
-full name, email, phone, key, and a link to `/dashboard?developerId=<key>`. Pagination and search
-were intended but never wired. No client-side route guard; the server enforced admin access.
+full name, email, phone, key, and a link to `/dashboard?developerId=<key>` (the dropped usage
+dashboard). Pagination and search were intended but never wired. No client-side route guard;
+the server enforced admin access.
 
 ### Games (`/games`)
 
@@ -121,11 +116,14 @@ Developer-scoped key/value store (maps to `Interfaces/IDeveloperStorage.cs`). GE
 
 ## Rebuild list
 
-Keep: auth flow (with a modern password hash instead of client-side MD5), role-aware shell with real
-route guards, usage dashboard, admin developer list with pagination, games CRUD plus the
-credentials dialog, leaderboards, items, script events, game modes, publisher data. Persian and
-English UI text (the old panel defaulted to Persian; ship English as the default for open source
-and keep the strings in a translation file).
+Keep: auth flow (with a modern password hash instead of client-side MD5), role-aware shell with
+real route guards, admin developer list with pagination, games CRUD plus the credentials dialog,
+leaderboards, items, script events, game modes, publisher data. Persian and English UI text (the
+old panel defaulted to Persian; ship English as the default for open source and keep the strings in
+a translation file).
 
-Drop: CafeBazaar IAP tab and its WebSocket/callback endpoints, achievements stub, invoice and
-profile demo pages, quick panel, Fuse layout switcher and theming, stock Fuse error pages.
+Drop: usage dashboard (per-game call and message counters from GET `/developers/accounting` and
+GET `/admin/developers/:id/accounting`; the billing counters are gone, and usage metrics may come
+back later through OpenTelemetry), CafeBazaar IAP tab and its WebSocket/callback endpoints,
+achievements stub, invoice and profile demo pages, quick panel, Fuse layout switcher and theming,
+stock Fuse error pages.
