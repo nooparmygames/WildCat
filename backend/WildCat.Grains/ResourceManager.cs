@@ -63,6 +63,14 @@ namespace WildCat.Grains
             return false;
 
         }
+
+        public async Task<bool> RemoveResourceByKey(string key)
+        {
+            if (key == null || !State.resources.Remove(key))
+                return false;
+            await WriteStateAsync();
+            return true;
+        }
     }
 
     [GenerateSerializer]

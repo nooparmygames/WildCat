@@ -195,5 +195,14 @@ namespace WildCat.Grains
             // The interface keeps the legacy tuple array; state stores LeaderBoardReward entries.
             return Task.FromResult(State.rewards?.Select(x => (x.Item, x.Count)).ToArray());
         }
+
+        public Task<LeaderBoardInfo> GetInfo()
+        {
+            return Task.FromResult(new LeaderBoardInfo
+            {
+                Name = State.Name,
+                AcceptBetterScoresOnly = State.AcceptBetterScoresOnly
+            });
+        }
     }
 }

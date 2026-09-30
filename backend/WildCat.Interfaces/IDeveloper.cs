@@ -32,6 +32,48 @@ namespace WildCat.Interfaces
         /// </summary>
         [ReadOnly]
         Task<bool> IsSecretValid(Guid secret);
+
+        /// <summary>
+        /// Creates a new email activation code for a developer whose status is
+        /// <see cref="DeveloperState.DeveloperStatus.NotActivated"/> and returns it so the caller can
+        /// email it. Only a hash of the code is stored; an earlier code stops working. Returns null
+        /// when the developer is already activated.
+        /// </summary>
+        Task<string> CreateActivationCode();
+
+        /// <summary>
+        /// Activates the developer when <paramref name="code"/> matches the current activation code.
+        /// Returns true for an account that is already active. A code stops working after it expires
+        /// or after five wrong attempts.
+        /// </summary>
+        Task<bool> Activate(string code);
+
+        /// <summary>
+        /// Creates a password reset code, valid for one hour, and returns it so the caller can email
+        /// it. Only a hash of the code is stored; an earlier code stops working.
+        /// </summary>
+        Task<string> CreatePasswordResetCode();
+
+        /// <summary>
+        /// Checks <paramref name="code"/> against the current password reset code and, when it
+        /// matches, uses it up. The caller then sets the new password with
+        /// <see cref="ChangePassword"/>. A code stops working after it expires or after five wrong
+        /// attempts.
+        /// </summary>
+        Task<bool> ConsumePasswordResetCode(string code);
+    }
+
+    /// <summary>
+    /// A one-time code sent by email (activation or password reset). Only the SHA-256 hash of the
+    /// code is kept.
+    /// </summary>
+    [GenerateSerializer]
+    [Alias("wildcat.OneTimeCodeState")]
+    public class OneTimeCodeState
+    {
+        [Id(0)] public string Hash { get; set; }
+        [Id(1)] public DateTime ExpiresAtUtc { get; set; }
+        [Id(2)] public int FailedAttempts { get; set; }
     }
 
     [Serializable]
@@ -39,8 +81,12 @@ namespace WildCat.Interfaces
     [Alias("wildcat.DeveloperState")]
     public class DeveloperState
     {
+        /// <summary>
+        /// Normal is an active account. NotActivated is a self-registered account that has not
+        /// confirmed its email yet; accounts created any other way start as Normal.
+        /// </summary>
         [GenerateSerializer, Alias("wildcat.DeveloperState.DeveloperStatus")]
-        public enum DeveloperStatus { Normal, Banned, Limited }
+        public enum DeveloperStatus { Normal, Banned, Limited, NotActivated }
 
         [Id(0)] public bool IsCreated { get; set; }
         [Id(1)] public string PasswordHash { get; set; }
@@ -54,6 +100,8 @@ namespace WildCat.Interfaces
         [Id(9)] public Guid DeveloperSecret { get; set; }
         [Id(10)] public ICollection<GameInfo> GameInfos { get; set; }
         [Id(11)] public Dictionary<string, string> AdditionalData { get; set; }
+        [Id(12)] public OneTimeCodeState ActivationCode { get; set; }
+        [Id(13)] public OneTimeCodeState PasswordResetCode { get; set; }
 
         public DeveloperState()
         {

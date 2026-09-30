@@ -6,6 +6,20 @@ the theme is a paid template and cannot be redistributed, the toolchain is dead,
 already half broken. Only this document survives. Survey date 2026-09-30; updated after roadmap
 step 2 dropped billing, which removed the usage dashboard from the contract.
 
+## Implemented in step 7
+
+The new admin API is in `backend/WildCat.Admin`, co-hosted with the silo; `admin-api.md` lists the
+final endpoints, configuration and error format. Compared with the legacy contract below: every
+route is under `/api/v1` with real HTTP verbs (PUT upserts, DELETE deletes, no `.../delete`
+POSTs); auth is `/auth/register`, `/auth/activate`, `/auth/resend-activation`, `/auth/login`,
+`/auth/request-password-reset`, `/auth/reset-password` and `/auth/change-password` with plain
+passwords; the profile moved to `/me` (with `isAdmin` instead of `type`); game modes are at
+`/games/{gameKey}/game-modes` with a `criteria` array; publisher data is at
+`/publisher-data/{key}`; `/admin/developers` pages and searches; errors are problem details with
+`detail`. Script events gained a DELETE, which empties the script until step 9 can clear it.
+
+## The legacy contract
+
 One important finding: the REST API this panel calls (`/api/v1/...`) does not exist in the backend
 in this repo. The backend's gateway (`WildCat.Gateway`) only exposes the game WebSocket at `/ws`.
 The HTTP admin API lived in some other project that was never checked in. So the panel rewrite

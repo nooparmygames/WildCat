@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 using WildCat.Grains;
 using WildCat.Gateway;
+using WildCat.Admin;
 
 // One process hosts the Orleans silo and the WebSocket gateway. UseOrleans is called before the
 // web host is built so the silo starts before Kestrel accepts connections, and the gateway uses the
@@ -30,6 +31,7 @@ builder.Services.AddHostedService<SeedHostedService>();
 
 builder.Services.Configure<ConsoleLifetimeOptions>(options => { options.SuppressStatusMessages = true; });
 builder.Services.AddGameGateway(builder.Configuration.GetSection(GameGatewayOptions.SectionName));
+builder.Services.AddWildCatAdmin(builder.Configuration);
 
 // There is deliberately no HTTPS redirection or HSTS here: TLS terminates at the reverse proxy in
 // front of the host, and clients reach it with wss://. The forwarded headers middleware takes the
@@ -61,7 +63,11 @@ if (orleansOptions.Provider == OrleansProvider.Memory && !app.Environment.IsDeve
 }
 
 app.UseForwardedHeaders();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 app.UseWebSockets();
 app.MapGameGateway("/ws");
+app.MapWildCatAdmin();
 
 app.Run();

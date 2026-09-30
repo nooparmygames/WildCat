@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="GreetingWithName" xml:space="preserve">
+    <value>Hello {0},</value>
+    <comment>{0} is the developer's first name.</comment>
+  </data>
+  <data name="GreetingWithoutName" xml:space="preserve">
+    <value>Hello,</value>
+  </data>
+  <data name="ActivationSubject" xml:space="preserve">
+    <value>Activate your WildCat developer account</value>
+  </data>
+  <data name="ActivationBody" xml:space="preserve">
+    <value>Thanks for signing up. Enter this code on the activation page of the WildCat panel, together with your email address, to activate your developer account:
+
+{0}
+
+The code is valid for 7 days. If you did not create a WildCat account, you can ignore this email.</value>
+    <comment>{0} is the activation code.</comment>
+  </data>
+  <data name="PasswordResetSubject" xml:space="preserve">
+    <value>Reset your WildCat password</value>
+  </data>
+  <data name="PasswordResetBody" xml:space="preserve">
+    <value>Someone asked to reset the password of your WildCat developer account. Enter this code on the password reset page of the WildCat panel to choose a new password:
+
+{0}
+
+The code is valid for one hour. If you did not ask for a reset, you can ignore this email; your password has not changed.</value>
+    <comment>{0} is the reset code.</comment>
+  </data>
+  <data name="LinkLine" xml:space="preserve">
+    <value>You can also open this link: {0}</value>
+    <comment>{0} is a link to the panel page with the email and code filled in.</comment>
+  </data>
+</root>

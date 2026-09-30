@@ -75,5 +75,76 @@ namespace WildCat.Grains
             State.SecondaryIndex.Remove(key);
             return WriteStateAsync();
         }
+
+        public async Task<DeveloperRegistration> RegisterDeveloper(string email, string password, string firstName, string lastName)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ArgumentException("The email cannot be empty.", nameof(email));
+            PasswordHasher.EnsureAcceptable(password);
+            if (State.developers.Keys.Any(x => string.Equals(x, email, StringComparison.OrdinalIgnoreCase)))
+                return null;
+
+            var id = Guid.NewGuid();
+            var developer = GrainFactory.GetGrain<IDeveloper>(id);
+            // CreateDeveloper replaces the plain password in PasswordHash with its hash.
+            await developer.CreateDeveloper(new DeveloperState
+            {
+                Email = email,
+                PasswordHash = password,
+                FirstName = firstName,
+                LastName = lastName,
+                Status = DeveloperState.DeveloperStatus.NotActivated
+            });
+            State.developers.Add(email, id);
+            await WriteStateAsync();
+            string code = await developer.CreateActivationCode();
+            return new DeveloperRegistration { Key = id, ActivationCode = code };
+        }
+
+        public Task<DeveloperSearchResult> SearchDevelopers(string search, int skip, int take)
+        {
+            IEnumerable<KeyValuePair<string, Guid>> matches = State.developers;
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = search.Trim();
+                matches = matches.Where(x => x.Key.Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+            var ordered = matches
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Key, StringComparer.Ordinal)
+                .ToList();
+            return Task.FromResult(new DeveloperSearchResult
+            {
+                Total = ordered.Count,
+                Items = ordered
+                    .Skip(Math.Max(0, skip))
+                    .Take(Math.Max(0, take))
+                    .Select(x => new DeveloperIndexEntry { Email = x.Key, Key = x.Value })
+                    .ToList()
+            });
+        }
+
+        public Task SetGameOwner(Guid gameKey, Guid developerKey)
+        {
+            State.GameOwners ??= new Dictionary<Guid, Guid>();
+            if (State.GameOwners.TryGetValue(gameKey, out var existing) && existing == developerKey)
+                return Task.CompletedTask;
+            State.GameOwners[gameKey] = developerKey;
+            return WriteStateAsync();
+        }
+
+        public Task RemoveGameOwner(Guid gameKey)
+        {
+            if (State.GameOwners == null || !State.GameOwners.Remove(gameKey))
+                return Task.CompletedTask;
+            return WriteStateAsync();
+        }
+
+        public Task<Guid> GetGameOwner(Guid gameKey)
+        {
+            if (State.GameOwners != null && State.GameOwners.TryGetValue(gameKey, out var owner))
+                return Task.FromResult(owner);
+            return Task.FromResult(Guid.Empty);
+        }
     }
 }

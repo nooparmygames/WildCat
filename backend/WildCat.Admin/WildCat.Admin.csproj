@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The admin REST API for the developer panel. A class library hosted inside the silo process
+       (see WildCat.Host/Program.cs): AddWildCatAdmin registers its services, MapWildCatAdmin maps
+       the endpoints under /api/v1, the OpenAPI document and the optional /panel files. -->
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Orleans.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WildCat.Tests" />
+  </ItemGroup>
+
+</Project>

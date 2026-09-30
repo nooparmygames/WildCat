@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.Orleans.TestingHost" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
     <PackageReference Include="Microsoft.Orleans.Reminders" />
@@ -17,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\WildCat.Admin\WildCat.Admin.csproj" />
     <ProjectReference Include="..\WildCat.Gateway\WildCat.Gateway.csproj" />
     <ProjectReference Include="..\WildCat.Grains\WildCat.Grains.csproj" />
     <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />

@@ -44,6 +44,9 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       WildCat__Orleans__Provider: PostgreSQL
       ConnectionStrings__WildCat: "Host=postgres;Port=5432;Database=wildcat;Username=wildcat;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example to .env)}"
+      # The admin API refuses to start outside Development without a JWT signing key. Generate one
+      # with `openssl rand -base64 32` and put it in .env.
+      WildCat__Admin__JwtSigningKey: ${WILDCAT_ADMIN_JWT_SIGNING_KEY:?Set WILDCAT_ADMIN_JWT_SIGNING_KEY in .env (see .env.example)}
     depends_on:
       postgres:
         condition: service_healthy

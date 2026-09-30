@@ -15,6 +15,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Tests", "WildCat.Te
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Gateway", "WildCat.Gateway\WildCat.Gateway.csproj", "{094F2DF1-2978-40F8-9F3F-5D0AE66931A8}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Admin", "WildCat.Admin\WildCat.Admin.csproj", "{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +47,10 @@ Global
 		{094F2DF1-2978-40F8-9F3F-5D0AE66931A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{094F2DF1-2978-40F8-9F3F-5D0AE66931A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{094F2DF1-2978-40F8-9F3F-5D0AE66931A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

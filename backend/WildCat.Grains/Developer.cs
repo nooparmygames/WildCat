@@ -83,7 +83,9 @@ namespace WildCat.Grains
         public Task ChangeName(string first, string last)
         {
             AssertIsCreated();
-            throw new NotImplementedException();
+            State.FirstName = first;
+            State.LastName = last;
+            return WriteStateAsync();
         }
 
         /// <summary>
@@ -176,6 +178,96 @@ namespace WildCat.Grains
         public Task<bool> IsSecretValid(Guid secret)
         {
             return Task.FromResult(isCreated && SecretsMatch(State.DeveloperSecret, secret));
+        }
+
+        public async Task<string> CreateActivationCode()
+        {
+            AssertIsCreated();
+            if (State.Status != DeveloperState.DeveloperStatus.NotActivated)
+                return null;
+            string code = NewCode();
+            State.ActivationCode = NewCodeState(code, ActivationCodeLifetime);
+            await WriteStateAsync();
+            return code;
+        }
+
+        public async Task<bool> Activate(string code)
+        {
+            AssertIsCreated();
+            if (State.Status != DeveloperState.DeveloperStatus.NotActivated)
+                return State.Status != DeveloperState.DeveloperStatus.Banned;
+
+            bool valid = CheckCode(State.ActivationCode, code);
+            if (valid)
+            {
+                State.Status = DeveloperState.DeveloperStatus.Normal;
+                State.ActivationCode = null;
+            }
+            else if (State.ActivationCode != null && State.ActivationCode.FailedAttempts >= MaxCodeAttempts)
+            {
+                State.ActivationCode = null;
+            }
+            await WriteStateAsync();
+            return valid;
+        }
+
+        public async Task<string> CreatePasswordResetCode()
+        {
+            AssertIsCreated();
+            string code = NewCode();
+            State.PasswordResetCode = NewCodeState(code, PasswordResetCodeLifetime);
+            await WriteStateAsync();
+            return code;
+        }
+
+        public async Task<bool> ConsumePasswordResetCode(string code)
+        {
+            AssertIsCreated();
+            bool valid = CheckCode(State.PasswordResetCode, code);
+            if (valid || (State.PasswordResetCode != null && State.PasswordResetCode.FailedAttempts >= MaxCodeAttempts))
+                State.PasswordResetCode = null;
+            await WriteStateAsync();
+            return valid;
+        }
+
+        private const int MaxCodeAttempts = 5;
+        private const int CodeLength = 10;
+        // No 0/O or 1/I, so a code read from an email is easy to type.
+        private const string CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        private static readonly TimeSpan ActivationCodeLifetime = TimeSpan.FromDays(7);
+        private static readonly TimeSpan PasswordResetCodeLifetime = TimeSpan.FromHours(1);
+
+        private static string NewCode() => RandomNumberGenerator.GetString(CodeAlphabet, CodeLength);
+
+        private static OneTimeCodeState NewCodeState(string code, TimeSpan lifetime) => new OneTimeCodeState
+        {
+            Hash = HashOneTimeCode(code),
+            ExpiresAtUtc = DateTime.UtcNow + lifetime,
+            FailedAttempts = 0
+        };
+
+        private static string HashOneTimeCode(string code)
+        {
+            string normalized = (code ?? "").Trim().ToUpperInvariant();
+            return Convert.ToBase64String(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized)));
+        }
+
+        /// <summary>
+        /// True when <paramref name="given"/> matches an unexpired code. A mismatch counts as a failed
+        /// attempt; the caller writes state and drops the code after <see cref="MaxCodeAttempts"/>.
+        /// </summary>
+        private static bool CheckCode(OneTimeCodeState stored, string given)
+        {
+            if (stored == null || string.IsNullOrEmpty(stored.Hash) || string.IsNullOrWhiteSpace(given))
+                return false;
+            if (stored.ExpiresAtUtc < DateTime.UtcNow || stored.FailedAttempts >= MaxCodeAttempts)
+                return false;
+            byte[] expected = Convert.FromBase64String(stored.Hash);
+            byte[] actual = Convert.FromBase64String(HashOneTimeCode(given));
+            if (CryptographicOperations.FixedTimeEquals(expected, actual))
+                return true;
+            stored.FailedAttempts++;
+            return false;
         }
 
         /// <summary>

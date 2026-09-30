@@ -16,6 +16,20 @@ namespace WildCat.Interfaces
         Task FinishLeaderBoard();
         Task SetRewards(string[] items, int[] itemCounts);
         Task<(string, int)[]> GetRewards();
+
+        /// <summary>
+        /// The settings the admin panel shows: name and whether only better scores replace a
+        /// player's entry.
+        /// </summary>
+        Task<LeaderBoardInfo> GetInfo();
+    }
+
+    [GenerateSerializer]
+    [Alias("wildcat.LeaderBoardInfo")]
+    public class LeaderBoardInfo
+    {
+        [Id(0)] public string Name { get; set; }
+        [Id(1)] public bool AcceptBetterScoresOnly { get; set; }
     }
 
     [GenerateSerializer]

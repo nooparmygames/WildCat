@@ -24,5 +24,23 @@ namespace WildCat.Tests
         {
             return sent.Where(e => string.Equals(e.To, to, StringComparison.OrdinalIgnoreCase)).ToList();
         }
+
+        /// <summary>
+        /// Waits, up to five seconds, until <paramref name="count"/> emails went to
+        /// <paramref name="to"/> (some are sent in the background) and returns the last one.
+        /// </summary>
+        public async Task<SentEmail> WaitForAsync(string to, int count = 1)
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (true)
+            {
+                var emails = SentTo(to);
+                if (emails.Count >= count)
+                    return emails[count - 1];
+                if (DateTime.UtcNow > deadline)
+                    throw new TimeoutException($"Expected {count} email(s) to {to}, got {emails.Count}.");
+                await Task.Delay(20);
+            }
+        }
     }
 }

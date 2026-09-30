@@ -23,5 +23,12 @@ namespace WildCat.Interfaces
         Task<List<IManagedResource>> GetResources(string className);
         Task<bool> HasResource(string key);
         Task<string> GetResourcesCSharpCode(string className);
+
+        /// <summary>
+        /// Removes the resource registered under <paramref name="key"/> without calling the
+        /// resource grain, so it works even when that grain cannot activate. Returns false when
+        /// nothing was registered under the key.
+        /// </summary>
+        Task<bool> RemoveResourceByKey(string key);
     }
 }

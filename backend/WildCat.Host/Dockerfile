@@ -28,6 +28,7 @@ COPY ["WildCat.Grains/WildCat.Grains.csproj", "WildCat.Grains/"]
 COPY ["WildCat.Interfaces/WildCat.Interfaces.csproj", "WildCat.Interfaces/"]
 COPY ["WildCat.Protocol/WildCat.Protocol.csproj", "WildCat.Protocol/"]
 COPY ["WildCat.Gateway/WildCat.Gateway.csproj", "WildCat.Gateway/"]
+COPY ["WildCat.Admin/WildCat.Admin.csproj", "WildCat.Admin/"]
 RUN dotnet restore "WildCat.Host/WildCat.Host.csproj"
 COPY . .
 WORKDIR /src/WildCat.Host
