@@ -204,23 +204,23 @@ create; the message is the script's own, so scripts can refuse a request with a 
 failure, such as a `NullReferenceException` in the script, is code -1 "Internal error" and is logged.
 Before step 6b every failure sent the raw exception message with code -1.
 
-Friends (adapter)
+Friends (handlers since step 6b; all need a logged in player and use the session's game)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 88/89 | GetFriends | {string[] publicKeys} / {friends: {userId, name, status, map}[], sent, received} | `IPlayerFriendList.GetFriends` |
-| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | resolves id maps then `Invite` |
-| 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptInvitation`, `DenyInvitation` |
-| 92, 95, 98, 99 | FriendshipInvitationEvent, FriendshipAcceptedEvent, FriendshipDeniedEvent, FriendStatusChangedEvent (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream (`Push/FriendEventFrames.cs`) |
+| 88/89 | GetFriends | {string[] publicKeys} / {friends: {userId, name, status, map}[], sent, received} | `GetFriendsHandler`, `IPlayerFriendList.GetFriends`; the map holds the asked keys the friend has |
+| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | `InviteFriendHandler`: account id (must exist), email (lower case) or user name map, then `Invite`; player names never match (bug 20); code 1 "Player not found.", yourself, or already friends |
+| 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptFriendHandler`, `DenyFriendHandler`: `AcceptInvitation`, `DenyInvitation`; code 1 when accepting without an invitation or for an empty id; denying without one succeeds silently |
+| 92, 95, 98, 99 | FriendshipInvitationEvent (to the invitee), FriendshipAcceptedEvent, FriendshipDeniedEvent (to the inviter), FriendStatusChangedEvent (to each friend on login and logout) (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream (`Push/FriendEventFrames.cs`) |
 
-Challenges (adapter)
+Challenges (handlers since step 6b; all need a logged in player and use the session's game)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 17/18 | StartChallenge | {uint TimeOut, Player, PlayerName, bytes, Guid GameKey} / empty (1 disconnected, 2 requested you as well) | `IPlayerChallengeHandler.SendChallengeRequest` |
-| 20/21, 23/24 | AcceptChallenge, DenyChallenge | ChallengeMessage / empty (1 timeout) | `AcceptChallenge`, `DenyChallenge` on the challenger's handler |
-| 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetChallengeRequests` (bug: received lands in sent) |
-| 19, 22, 25 | StartChallengeRequestedEvent, ChallengeAcceptedEvent, ChallengeDeniedEvent (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
+| 17/18 | StartChallenge | {uint TimeOut (seconds), Player, PlayerName, bytes, Guid GameKey} / empty | `StartChallengeHandler`, `IPlayerChallengeHandler.SendChallengeRequest` (offline players too); code 1 unknown player or yourself, 2 the other player has an open challenge to you; a new challenge replaces the pending one |
+| 20/21, 23/24 | AcceptChallenge, DenyChallenge | ChallengeMessage (Player = challenger) / empty | `AcceptChallengeHandler`, `DenyChallengeHandler`: `AcceptChallenge`, `DenyChallenge` on the challenger's handler; accept: code 1 timed out or no pending challenge; deny without one succeeds silently |
+| 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetPlayerChallengesHandler`, `GetChallengeRequests` (received ones were listed under sent before step 6b) |
+| 19, 22, 25 | StartChallengeRequestedEvent (to the challengee), ChallengeAcceptedEvent (to both), ChallengeDeniedEvent (to the challenger) (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
 
 Matchmaking, match state and relay (handlers since step 6b)
 

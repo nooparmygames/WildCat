@@ -266,6 +266,20 @@ Correctness:
     `First` before its null check; `SetFriendStatus` throws on asymmetric lists and can fail
     logins. `PlayerChallengeHandler` never persists sends and accepts; two simultaneous
     challenges deadlock.
+    Fixed in step 6b, with the friend and challenge handlers: `GetSentInvitations` returns the
+    sent invitations; accepting without an invitation, inviting yourself or a friend throw
+    `FriendListException` (client texts, answered with code 1) instead of
+    InvalidOperationException from `First`; `SetFriendStatus` ignores a one-sided entry; a
+    repeated invitation is listed once (the duplicate check compared the receiver, always the
+    player itself) but still pushed. `PlayerChallengeHandler` writes its state on send, receive
+    and accept; only a pending challenge can be accepted (accepting twice started a second
+    match), and a missing one throws `ChallengeNotFoundException`; a timed-out one leaves both
+    lists; denying reaches the challenger only when a challenge to the denier was pending (any
+    player could push ChallengeDeniedEvent to any other); only a pending, unexpired challenge
+    counts as "requested you as well" (after one challenge the other player could never
+    challenge back); a new challenge to the same player replaces the pending one; sent entries
+    keep their data; request times are UTC. Two simultaneous challenges still deadlock until
+    the call timeout.
 19. Removed in step 2: `PlayfabManager` had an endless retry loop ending in
     `Environment.Exit(1)`, a wrong ticket check and an unsafe HashSet; PlayFab is gone.
 20. `NameToAccountIdMap.SetId` is never called, so name lookups always return null.
@@ -300,6 +314,11 @@ Correctness:
     failures with code 1 and a fixed text (unexpected ones with "Internal error"), LeaveGame
     without a game target gets an answer, the LeaveGame retries are gone, and FindMatch and
     LeaveGame answer on the connection instead of through the PlayerConnection stream.
+    Fixed in step 6b for friends and challenges (88-99, 17-25, 161/162): GetPlayerChallenges
+    lists received challenges under received; the retries and the raw exception texts are gone;
+    unknown account ids get "Player not found." (they used to create invitations and challenges
+    for accounts nobody had created); challenging yourself is refused; invitations by email
+    look the address up in lower case like the logins do.
 22. Fixed in step 4: the gateway's default branch handed every message id without a handler to
     the relay, which forwarded it to the other players whenever it had a game target and a
     session. A match participant could therefore send ids up to `HighestInternal`, such as 10

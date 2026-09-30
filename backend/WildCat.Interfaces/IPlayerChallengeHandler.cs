@@ -44,12 +44,18 @@ namespace WildCat.Interfaces
         }
     }
 
+    /// <summary>
+    /// Thrown by <see cref="IPlayerChallengeHandler.AcceptChallenge"/> when the challenge's
+    /// timeout has passed. The gateway answers it with error code 1 and its message.
+    /// </summary>
     [Serializable]
     [GenerateSerializer]
     [Alias("wildcat.ChallengeTimeoutException")]
     public class ChallengeTimeoutException : Exception
     {
-        public ChallengeTimeoutException()
+        public const string DefaultMessage = "The challenge has timed out.";
+
+        public ChallengeTimeoutException() : base(DefaultMessage)
         {
 
         }

@@ -56,9 +56,10 @@ namespace WildCat.Grains
 
         public async Task<string> InvitationAccepted(IPlayer accepter, string accepterName, byte[] data)
         {
-            var setnInv = State.SentInvitations.First(x => x.Receiver.GetPrimaryKeyString() == accepter.GetPrimaryKeyString());
-            if (setnInv.Sender == null)
-                throw new InvalidOperationException("No such friend request is sent");
+            // FirstOrDefault: First threw before the check below could answer a missing invitation.
+            var sentInvitation = State.SentInvitations.FirstOrDefault(x => x.Receiver.GetPrimaryKeyString() == accepter.GetPrimaryKeyString());
+            if (sentInvitation.Sender == null)
+                throw new FriendListException(FriendListException.NoInvitation);
             //Add friends and save for both players
             var othersFriendList = GrainFactory.GetGrain<IPlayerFriendList>(gameKey, accepter.GetPrimaryKeyString(), null);
             await AddFriend(accepter, accepterName);
@@ -124,8 +125,10 @@ namespace WildCat.Grains
 
         public async Task Invite(IPlayer invitee, string name, byte[] data)
         {
-            if (invitee.GetPrimaryKeyString() == player.GetPrimaryKeyString() || !State.CanInvitationHappen(invitee))
-                throw new InvalidOperationException($"The invitee {invitee.GetPrimaryKeyString()} is already a friend of yours");
+            if (invitee.GetPrimaryKeyString() == player.GetPrimaryKeyString())
+                throw new FriendListException(FriendListException.CannotInviteYourself);
+            if (!State.CanInvitationHappen(invitee))
+                throw new FriendListException(FriendListException.AlreadyFriends);
             bool requestResult = await (GrainFactory.GetGrain<IPlayerFriendList>(gameKey, invitee.GetPrimaryKeyString(), null)).ReceiveInviteRequest(player, name, data);
             if (requestResult)
             {
@@ -137,41 +140,35 @@ namespace WildCat.Grains
         public async Task<bool> ReceiveInviteRequest(IPlayer sender, string name, byte[] data)
         {
             if (!State.CanInvitationHappen(sender))
-                throw new InvalidOperationException($"The sender {sender.GetPrimaryKeyString()} is already a friend of yours");
-            bool isValidPlayer = true;
-            if (!isValidPlayer)
+                throw new FriendListException(FriendListException.AlreadyFriends);
+            // This player invited the sender already: the sender's invitation is not recorded
+            // (the sender's Invite records nothing either), and the answer is still a success.
+            var sentInvitation = State.SentInvitations.FirstOrDefault(x => x.Receiver.GetPrimaryKeyString() == sender.GetPrimaryKeyString());
+            if (sentInvitation.Sender != null)
             {
-                throw new InvalidOperationException("Such player does not exist");
+                return false;
             }
             else
             {
-                //if we sent challenge request to the other successfully as well.
-                var sentInvitation = State.SentInvitations.FirstOrDefault(x => x.Receiver.GetPrimaryKeyString() == sender.GetPrimaryKeyString());
-                if (sentInvitation.Sender != null)
+                // A repeated invitation keeps the first one and is pushed again.
+                State.AddReceivedInvitation(player, sender, name, data);
+                await state.WriteStateAsync();
+                FriendListEventData eventData = new FriendListEventData
                 {
-                    return false;
-                }
-                else
-                {
-                    State.AddReceivedInvitation(player, sender, name, data);
-                    await state.WriteStateAsync();
-                    FriendListEventData eventData = new FriendListEventData
-                    {
-                        Friend = sender,
-                        FriendName = name,
-                        GameKey = gameKey,
-                        Data = data,
-                        Type = FriendListEventData.EventType.Invite
-                    };
-                    friendListEvents.OnNextAsync(eventData).Ignore();
-                    return true;
-                }
+                    Friend = sender,
+                    FriendName = name,
+                    GameKey = gameKey,
+                    Data = data,
+                    Type = FriendListEventData.EventType.Invite
+                };
+                friendListEvents.OnNextAsync(eventData).Ignore();
+                return true;
             }
         }
 
         public Task<List<FriendListInvitation>> GetSentInvitations()
         {
-            return Task.FromResult(State.ReceivedInvitations);
+            return Task.FromResult(State.SentInvitations);
         }
 
         public Task<List<FriendListInvitation>> GetReceivedInvitations()
@@ -184,8 +181,9 @@ namespace WildCat.Grains
         public async Task SetFriendStatus(IPlayer friend, OnlineStatus status)
         {
             var foundFriend = State.Friends.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == friend.GetPrimaryKeyString());
+            // A one-sided entry used to throw here, which failed the friend's login or logout.
             if (foundFriend == null)
-                throw new InvalidOperationException("Such Friend does not exist in the list");
+                return;
             foundFriend.SetState(status);
             await friendListEvents.OnNextAsync(new FriendListEventData
             {

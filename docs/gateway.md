@@ -41,6 +41,10 @@ WildCat.Gateway/
                            GetInventoryUnlockTime (121), Inventories.cs (shared)
     Refused/               SetLeaderboard (28), AddItemToInventory (111), SetItemToInventory (113):
                            always error 1, grants and scores come from server scripts
+    Friends/               GetFriends (88), InviteFriend (90), AcceptFriend (93), DenyFriend (96),
+                           Friends.cs (shared, also finds accounts for the challenge handlers)
+    Challenges/            StartChallenge (17), AcceptChallenge (20), DenyChallenge (23),
+                           GetPlayerChallenges (161), Challenges.cs (shared)
   Legacy/                  temporary: FrontEndServer (old code) and LegacyAdapterHandler
 ```
 

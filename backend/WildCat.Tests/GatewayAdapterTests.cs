@@ -84,38 +84,6 @@ namespace WildCat.Tests
         }
 
         [Fact]
-        public async Task FriendsAndChallengesWorkThroughTheAdapterAndPushEvents()
-        {
-            var (host, alice, aliceTicket, aliceId, gameKey) = await StartLoggedIn();
-            await using var _ = host;
-            await using var __ = alice;
-            await using var bob = await host.ConnectAsync();
-            var developerKey = (await GrainFactory.GetGrain<ISession>(Guid.Parse(aliceTicket)).GetDeveloperKey()).DeveloperKey;
-            var bobSession = await bob.InitializeSessionAsync(developerKey, gameKey);
-            var bobLogin = await bob.LoginWithDeviceAsync(bobSession, TestSetup.UniqueId("device"));
-
-            // GetFriends with public data keys used to throw while reading the request.
-            var friends = await alice.CallAsync<FriendlistCollection>(WildCatMsgType.GetFriendsRequest,
-                new GetFriendsRequestMessage { publicKeys = new[] { "level" } }, WildCatMsgType.GetFriendsResponse, aliceTicket);
-            Assert.True(friends.isSuccesful, friends.errorMsg);
-            Assert.Empty(friends.msg.friends);
-
-            var invite = await alice.CallAsync<EmptyMessage>(WildCatMsgType.InviteFriendRequest,
-                new InviteFriendRequest { type = InvitationType.AccountId, value = bobLogin.userId, data = new byte[] { 5 } },
-                WildCatMsgType.InviteFriendResponse, aliceTicket);
-            Assert.True(invite.isSuccesful, invite.errorMsg);
-            var pushed = await bob.WaitForTypeAsync(WildCatMsgType.FriendshipInvitationEvent);
-            var invitation = pushed.GetPayload<OptionalResponse<FriendlistMessage>>();
-            Assert.True(invitation.isSuccesful);
-            Assert.Equal(aliceId, invitation.msg.friend);
-            Assert.Equal(new byte[] { 5 }, invitation.msg.data);
-
-            var challenges = await alice.CallAsync<ChallengeRequestsMessage>(WildCatMsgType.GetPlayerChallengesRequest,
-                new EmptyMessage(), WildCatMsgType.GetPlayerChallengesResponse, aliceTicket);
-            Assert.True(challenges.isSuccesful, challenges.errorMsg);
-        }
-
-        [Fact]
         public async Task ScriptEventsAnswerThroughTheAdapter()
         {
             var (host, client, ticket, _, _) = await StartLoggedIn();

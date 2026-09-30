@@ -15,16 +15,6 @@ namespace WildCat.Gateway
     {
         private static readonly MessageRoute[] LegacyRoutes =
         {
-
-            // Friends and challenges (group 2)
-            Route(WildCatMsgType.GetFriendsRequest, WildCatMsgType.GetFriendsResponse),
-            Route(WildCatMsgType.InviteFriendRequest, WildCatMsgType.InviteFriendResponse),
-            Route(WildCatMsgType.AcceptFriendRequest, WildCatMsgType.AcceptFriendResponse),
-            Route(WildCatMsgType.DenyFriendRequest, WildCatMsgType.DenyFriendResponse),
-            Route(WildCatMsgType.StartChallengeRequest, WildCatMsgType.StartChallengeResponse),
-            Route(WildCatMsgType.AcceptChallengeRequest, WildCatMsgType.AcceptChallengeResponse),
-            Route(WildCatMsgType.DenyChallengeRequest, WildCatMsgType.DenyChallengeResponse),
-            Route(WildCatMsgType.GetPlayerChallengesRequest, WildCatMsgType.GetPlayerChallengesResponse),
         };
 
         private readonly FrontEndServer frontEnd;

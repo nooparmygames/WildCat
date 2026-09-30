@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,6 +10,11 @@ using Orleans.Streams;
 
 namespace WildCat.Grains
 {
+    /// <summary>
+    /// One player's direct 1v1 challenges in one game (key: game key plus player id). The
+    /// challenger's grain keeps the sent requests, the challengee's the received ones; accepting
+    /// creates a RelayServerGame and pushes its id to both players on their ChallengeEvents streams.
+    /// </summary>
     public class PlayerChallengeHandler : Grain, IPlayerChallengeHandler
     {
         private readonly IPersistentState<PlayerChallengesState> state;
@@ -36,59 +41,83 @@ namespace WildCat.Grains
             challengeEvents = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, playerId));
             await base.OnActivateAsync(cancellationToken);
         }
+
+        private static bool IsFrom(ChallengeRequestState request, IPlayer other)
+        {
+            return request.Player.GetPrimaryKeyString() == other.GetPrimaryKeyString();
+        }
+
+        private static bool IsPending(ChallengeRequestState request, IPlayer other)
+        {
+            return request.State == ChallengeRequestState.Status.Pending && IsFrom(request, other);
+        }
+
+        private static bool HasTimedOut(ChallengeRequestState request)
+        {
+            return (DateTime.UtcNow - request.RequestTime).TotalSeconds >= request.Timeout;
+        }
+
         public async Task AcceptChallenge(IPlayer accepter, byte[] data)
         {
-            var req = State.RequestsSent.First(x => x.Player.GetPrimaryKeyString() == accepter.GetPrimaryKeyString());
-            State.RequestsSent.RemoveAll(x => x.Player.GetPrimaryKeyString() == accepter.GetPrimaryKeyString());
+            // Only a pending challenge can be accepted: accepting a started one again used to
+            // start a second match, and a missing one threw from First.
+            int index = State.RequestsSent.FindLastIndex(x => IsPending(x, accepter));
+            if (index < 0)
+                throw new ChallengeNotFoundException();
+            var req = State.RequestsSent[index];
+            State.RequestsSent.RemoveAll(x => IsFrom(x, accepter));
 
-            if ((DateTime.Now - req.RequestTime).TotalSeconds < req.Timeout)
+            if (HasTimedOut(req))
             {
-                var createdGame = await CreateGame(new IPlayer[] { player, accepter }, $"challenge-{DateTime.Now}");
-                string unUsed;
-                Guid gameId = createdGame.GetPrimaryKey(out unUsed);
-                req.Game = gameId;
-                req.State = ChallengeRequestState.Status.Started;
-                State.RequestsSent.Add(req);
-                ChallengeEventData myStreamEventData = new ChallengeEventData
-                {
-                    TitleKey = this.gameKey,
-                    otherPlayer = accepter,
-                    data = data,
-                    Type = ChallengeEventData.EventType.Started,
-                    gameID = gameId
-                };
-
-                ChallengeEventData accepterStreamEventData = new ChallengeEventData
-                {
-                    TitleKey = this.gameKey,
-                    otherPlayer = player,
-                    data = data,
-                    Type = ChallengeEventData.EventType.Started,
-                    gameID = gameId
-                };
-
-                challengeEvents.OnNextAsync(myStreamEventData).Ignore();
-                var otherPlayerStream = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, accepter.GetPrimaryKeyString()));
-                otherPlayerStream.OnNextAsync(accepterStreamEventData).Ignore();
-                GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, accepter.GetPrimaryKeyString(), null).UpdateInReceiveList(player, gameId).Ignore();
-            }
-            else
-            {
+                // The expired challenge goes from both lists, so neither player keeps listing it.
+                await state.WriteStateAsync();
+                GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, accepter.GetPrimaryKeyString(), null).RemovedFromReceivedList(player).Ignore();
                 throw new ChallengeTimeoutException();
             }
 
+            var createdGame = await CreateGame(new IPlayer[] { player, accepter }, $"challenge-{DateTime.UtcNow:O}");
+            string unUsed;
+            Guid gameId = createdGame.GetPrimaryKey(out unUsed);
+            req.Game = gameId;
+            req.State = ChallengeRequestState.Status.Started;
+            State.RequestsSent.Add(req);
+            await state.WriteStateAsync();
+            ChallengeEventData myStreamEventData = new ChallengeEventData
+            {
+                TitleKey = this.gameKey,
+                otherPlayer = accepter,
+                data = data,
+                Type = ChallengeEventData.EventType.Started,
+                gameID = gameId
+            };
+
+            ChallengeEventData accepterStreamEventData = new ChallengeEventData
+            {
+                TitleKey = this.gameKey,
+                otherPlayer = player,
+                data = data,
+                Type = ChallengeEventData.EventType.Started,
+                gameID = gameId
+            };
+
+            challengeEvents.OnNextAsync(myStreamEventData).Ignore();
+            var otherPlayerStream = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, accepter.GetPrimaryKeyString()));
+            otherPlayerStream.OnNextAsync(accepterStreamEventData).Ignore();
+            GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, accepter.GetPrimaryKeyString(), null).UpdateInReceiveList(player, gameId).Ignore();
         }
 
         public async Task RemovedFromReceivedList(IPlayer other)
         {
-            State.RequestsReceived.RemoveAll(x => x.Player.GetPrimaryKeyString() == other.GetPrimaryKeyString());
+            State.RequestsReceived.RemoveAll(x => IsFrom(x, other));
             await state.WriteStateAsync();
         }
 
         public Task UpdateInReceiveList(IPlayer other, Guid gameKey)
         {
-            var req = State.RequestsReceived.First(x => x.Player.GetPrimaryKeyString() == other.GetPrimaryKeyString());
-            State.RequestsReceived.RemoveAll(x => x.Player.GetPrimaryKeyString() == other.GetPrimaryKeyString());
+            // FindLastIndex rather than First, which threw when the entry was missing.
+            int index = State.RequestsReceived.FindLastIndex(x => IsPending(x, other));
+            var req = index < 0 ? new ChallengeRequestState { Player = other } : State.RequestsReceived[index];
+            State.RequestsReceived.RemoveAll(x => IsFrom(x, other));
             req.Game = gameKey;
             req.State = ChallengeRequestState.Status.Started;
             State.RequestsReceived.Add(req);
@@ -108,9 +137,14 @@ namespace WildCat.Grains
             return game;
         }
 
-        public Task DenyChallenge(IPlayer denyer, byte[] data)
+        public async Task DenyChallenge(IPlayer denyer, byte[] data)
         {
-            State.RequestsSent.RemoveAll(x => x.Player.GetPrimaryKeyString() == denyer.GetPrimaryKeyString());
+            // Only a pending challenge to the denying player is denied and reported; before, any
+            // player could push a ChallengeDeniedEvent to any other player of the game.
+            if (!State.RequestsSent.Any(x => IsPending(x, denyer)))
+                return;
+            State.RequestsSent.RemoveAll(x => IsFrom(x, denyer));
+            await state.WriteStateAsync();
             ChallengeEventData myStreamEventData = new ChallengeEventData
             {
                 TitleKey = this.gameKey,
@@ -120,7 +154,6 @@ namespace WildCat.Grains
             };
             challengeEvents.OnNextAsync(myStreamEventData).Ignore();
             GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, denyer.GetPrimaryKeyString(), null).RemovedFromReceivedList(player).Ignore();
-            return state.WriteStateAsync();
         }
 
         //called by other player's PlayerChallengeHandler
@@ -134,9 +167,10 @@ namespace WildCat.Grains
                     return ChallengeAcceptionStatus.Disconnected;
                 }
             }
-            //if we sent challenge request to the other successfully as well.
-            ChallengeRequestState playerWithRequestSent = State.RequestsSent.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == challenger.GetPrimaryKeyString());
-            if (playerWithRequestSent.RequestTime != default(DateTime))
+            // This player challenged the challenger already and that challenge is still open.
+            // (Any earlier entry used to count, so after one challenge between two players the
+            // other one could never challenge back.)
+            if (State.RequestsSent.Any(x => IsPending(x, challenger) && !HasTimedOut(x)))
             {
                 return ChallengeAcceptionStatus.RequestedYouAsWell;
             }
@@ -149,11 +183,14 @@ namespace WildCat.Grains
                     data = data,
                     Type = ChallengeEventData.EventType.Request
                 };
+                // A new challenge from the same player replaces the pending one.
+                State.RequestsReceived.RemoveAll(x => IsPending(x, challenger));
                 State.RequestsReceived.Add(new ChallengeRequestState
                 {
                     Player = challenger,
                     data = data
                 });
+                await state.WriteStateAsync();
                 challengeEvents.OnNextAsync(eventData).Ignore();
                 return ChallengeAcceptionStatus.Received;
             }
@@ -167,12 +204,15 @@ namespace WildCat.Grains
             var requestResult = await (GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, challengee.GetPrimaryKeyString(), null)).ChallengeRequested(player, data, isAcceptedOffline);
             if (requestResult == ChallengeAcceptionStatus.Received)
             {
+                State.RequestsSent.RemoveAll(x => IsPending(x, challengee));
                 State.RequestsSent.Add(new ChallengeRequestState
                 {
                     Player = challengee,
-                    RequestTime = DateTime.Now,
-                    Timeout = timeout
+                    RequestTime = DateTime.UtcNow,
+                    Timeout = timeout,
+                    data = data
                 });
+                await state.WriteStateAsync();
             }
             return requestResult;
         }

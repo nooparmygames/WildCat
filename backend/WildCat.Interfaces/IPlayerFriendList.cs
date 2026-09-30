@@ -90,8 +90,10 @@ namespace WildCat.Interfaces
 
         public bool AddReceivedInvitation(IPlayer self, IPlayer other, string otherName, byte[] data)
         {
-            var invitation = ReceivedInvitations.FirstOrDefault(x => x.Receiver.GetPrimaryKeyString() == other.GetPrimaryKeyString());
-            if (invitation.Receiver == null)
+            // Keyed by the sender: every received invitation has this player as its receiver, so
+            // the old match on Receiver never found one and repeated invitations piled up.
+            var invitation = ReceivedInvitations.FirstOrDefault(x => x.Sender.GetPrimaryKeyString() == other.GetPrimaryKeyString());
+            if (invitation.Sender == null)
             {
                 ReceivedInvitations.Add(new FriendListInvitation
                 {
