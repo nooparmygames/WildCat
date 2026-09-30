@@ -1,0 +1,38 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.swp
+.vs/
+.idea/
+*.log
+TestResults/
+publish/
+*.pubxml
+*.DotSettings.user
+launchSettings.local.json
+appsettings.*.local.json
+
+# Secrets and local config (never commit real values)
+*.secrets.json
+.env
+.env.*
+
+# Node / web panel
+node_modules/
+dist/
+.tmp/
+coverage/
+npm-debug.log*
+
+# Unity (unity-sdk/.gitignore has the full Unity list; these catch stray copies)
+[Ll]ibrary/
+[Tt]emp/
+[Ll]ogs/
+[Uu]serSettings/
+*.csproj.meta
+
+# OS
+.DS_Store
+Thumbs.db
