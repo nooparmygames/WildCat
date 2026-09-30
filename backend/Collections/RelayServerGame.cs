@@ -176,7 +176,7 @@ namespace Collections
             };
             foreach (var kvp in State.PlayerProperties)
             {
-                syncData.playerProperties.Add(kvp.Key.GetPrimaryKeyString(), kvp.Value);
+                syncData.playerProperties.Add(kvp.Key, kvp.Value);
             }
             var syncMsg = ApadanaMessageBase.Create(
                 syncData,

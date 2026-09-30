@@ -36,7 +36,9 @@ namespace Interfaces
     public class RelayServerGameState
     {
         [Id(0)] public Dictionary<string, byte[]> GameProperties { get; set; }
-        [Id(1)] public Dictionary<IPlayer, Dictionary<string, byte[]>> PlayerProperties { get; set; }
+        // Keyed by the player's primary key string, not IPlayer: the JSON grain storage serializer
+        // cannot read a grain reference back as a dictionary key.
+        [Id(1)] public Dictionary<string, Dictionary<string, byte[]>> PlayerProperties { get; set; }
         [Id(2)] public RelayServerGameStatus State { get; set; }
         [Id(3)] public List<RelayServerGamePlayerState> Players { get; set; }
         [Id(4)] public int MaxPlayers { get; set; }
@@ -63,14 +65,15 @@ namespace Interfaces
 
         public bool SetPlayerProperties(IPlayer player, string key, byte[] value)
         {
-            if (!PlayerProperties.ContainsKey(player))
-                PlayerProperties = new Dictionary<IPlayer, Dictionary<string, byte[]>>();
+            string playerKey = player.GetPrimaryKeyString();
+            if (!PlayerProperties.ContainsKey(playerKey))
+                PlayerProperties = new Dictionary<string, Dictionary<string, byte[]>>();
             int afterPotentialRemovalSize = storedDataSize;
-            if (PlayerProperties[player].ContainsKey(key))
-                afterPotentialRemovalSize -= PlayerProperties[player][key].Length;
+            if (PlayerProperties[playerKey].ContainsKey(key))
+                afterPotentialRemovalSize -= PlayerProperties[playerKey][key].Length;
             if (afterPotentialRemovalSize + value.Length < MAX_DATA_SIZE)
             {
-                PlayerProperties[player][key] = value;
+                PlayerProperties[playerKey][key] = value;
                 storedDataSize = afterPotentialRemovalSize + value.Length;
                 return true;
             }
@@ -88,7 +91,7 @@ namespace Interfaces
             Players = new List<RelayServerGamePlayerState>();
             State = RelayServerGameStatus.NotStarted;
             GameProperties = new Dictionary<string, byte[]>();
-            PlayerProperties = new Dictionary<IPlayer, Dictionary<string, byte[]>>();
+            PlayerProperties = new Dictionary<string, Dictionary<string, byte[]>>();
         }
     }
 

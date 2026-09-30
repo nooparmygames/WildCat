@@ -151,8 +151,11 @@ Correctness:
     races on the placeholder task so every call waits the full 3 s, keeps a non-thread-safe
     static per-silo cache (multi-silo clusters get KeyNotFound), ignores compile diagnostics.
     `Apadana.SetPlayerData` and `SetScoreInLeaderBoard` return the inner task without awaiting.
-16. `Player.RejoinMatch` calls `game.PlayerRejoined`, which calls back into the same
-    non-reentrant player: deadlock until timeout. `Disconnected` ignores the login ticket, so a
+16. `Player.RejoinMatch` calls `game.PlayerRejoined`, which calls back into the same player.
+    That worked on 3.4.3 only because call chain reentrancy was on by default there
+    (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the
+    port restores it with `CallChainReentrancyFilter` until the cycles get targeted
+    `RequestContext.AllowCallChainReentrancy()` calls. `Disconnected` ignores the login ticket, so a
     stale connection logs out a newer session. `CalculateELO` treats a draw as a loss.
     `SetEloScore` does not persist. `AddPlayerProvider` allows one account per provider name.
 17. `PlayerInventory`: rollback copies a reference (no-op); `Unlock()` on the main inventory

@@ -1,3 +1,4 @@
+using Collections;
 using Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
@@ -21,8 +22,9 @@ namespace Tests
                 silo.AddMemoryGrainStorageAsDefault();
                 silo.AddMemoryGrainStorage("blob");
                 silo.AddMemoryGrainStorage("PubSubStore");
-                silo.AddMemoryStreams(StreamNames.PROVIDER_NAME);
+                silo.AddGameStreams();
                 silo.UseInMemoryReminderService();
+                silo.AddLegacyCallChainReentrancy();
                 silo.AddStartupTask<TestStartupTasks>();
                 silo.Services.AddSingleton<IBackendStorageServer, Collections.PlayfabManager>();
             });

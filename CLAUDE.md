@@ -83,6 +83,12 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   byte arrays between players; it never simulates the game. Matchmaking is per game mode with a
   time-based relaxation schedule.
 - Developers can attach C# scripts to named events; they run in a Roslyn sandbox on the silo.
+- Orleans 3.x allowed call chain reentrancy by default and the legacy grains depend on it
+  (A calls B calls A). `Collections/CallChainReentrancyFilter.cs`, registered through
+  `AddLegacyCallChainReentrancy()` in `Collections/SiloBuilderExtensions.cs`, restores that for
+  every call. Replace it with targeted `RequestContext.AllowCallChainReentrancy()` calls at the
+  known cycles before removing it. The same extensions class holds the stream setup shared by
+  the host and the test fixture.
 
 ## Decisions (confirmed by the owner on 2026-09-30)
 

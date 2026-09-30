@@ -23,8 +23,9 @@ builder.UseOrleans(silo =>
     silo.AddMemoryGrainStorageAsDefault();
     silo.AddMemoryGrainStorage("blob");
     silo.AddMemoryGrainStorage("PubSubStore");
-    silo.AddMemoryStreams(StreamNames.PROVIDER_NAME);
+    silo.AddGameStreams();
     silo.UseInMemoryReminderService();
+    silo.AddLegacyCallChainReentrancy();
     silo.AddStartupTask<StartupTasks>();
 });
 
