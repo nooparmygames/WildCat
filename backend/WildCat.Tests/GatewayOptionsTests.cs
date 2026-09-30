@@ -72,6 +72,8 @@ namespace WildCat.Tests
             Assert.Empty(options.AllowedOrigins);
             Assert.Equal(5, options.AuthAttemptBurst);
             Assert.Equal(6, options.AuthAttemptsPerMinute);
+            Assert.Equal(1024, options.OutboundQueueCapacity);
+            Assert.Equal(8, options.MaxConcurrentRequests);
         }
 
         [Fact]
@@ -83,6 +85,8 @@ namespace WildCat.Tests
                 ["Gateway:AllowedOrigins:0"] = "https://game.example.com",
                 ["Gateway:AuthAttemptBurst"] = "3",
                 ["Gateway:AuthAttemptsPerMinute"] = "2",
+                ["Gateway:OutboundQueueCapacity"] = "16",
+                ["Gateway:MaxConcurrentRequests"] = "3",
             }).Build();
             var services = new ServiceCollection();
             services.AddGameGateway(configuration.GetSection(GameGatewayOptions.SectionName));
@@ -93,6 +97,8 @@ namespace WildCat.Tests
             Assert.Equal(new[] { "https://game.example.com" }, options.AllowedOrigins);
             Assert.Equal(3, options.AuthAttemptBurst);
             Assert.Equal(2, options.AuthAttemptsPerMinute);
+            Assert.Equal(16, options.OutboundQueueCapacity);
+            Assert.Equal(3, options.MaxConcurrentRequests);
             Assert.Same(TimeProvider.System, provider.GetRequiredService<TimeProvider>());
         }
 
@@ -100,6 +106,8 @@ namespace WildCat.Tests
         [InlineData("Gateway:AuthAttemptBurst", "0")]
         [InlineData("Gateway:AuthAttemptsPerMinute", "0")]
         [InlineData("Gateway:MaxMessageBytes", "0")]
+        [InlineData("Gateway:OutboundQueueCapacity", "0")]
+        [InlineData("Gateway:MaxConcurrentRequests", "-1")]
         public void NonPositiveLimitsFailValidation(string key, string value)
         {
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>

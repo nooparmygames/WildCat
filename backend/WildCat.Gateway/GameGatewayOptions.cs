@@ -29,8 +29,9 @@ namespace WildCat.Gateway
 
         /// <summary>
         /// Sign-in attempts one connection may make back to back: 76 Authenticate,
-        /// 78 CreateNewAccount, 80 EmailActivation and 82 AddAuthMechanismToAccount share the
-        /// allowance. Each attempt checks a password or a code, so this caps guessing per socket.
+        /// 78 CreateNewAccount, 80 EmailActivation, 82 AddAuthMechanismToAccount, 84 RecoverPassword,
+        /// 86 ResendActivation and 163 ResetPasswordWithCode share the allowance. Each attempt checks
+        /// a password or a code or sends an email, so this caps guessing and mail per socket.
         /// Defaults to 5.
         /// </summary>
         public int AuthAttemptBurst { get; set; } = 5;
@@ -41,5 +42,21 @@ namespace WildCat.Gateway
         /// over the limit is answered with error code 1 and nothing else happens.
         /// </summary>
         public double AuthAttemptsPerMinute { get; set; } = 6;
+
+        /// <summary>
+        /// Messages one connection may have waiting to be written to its socket: responses, pushed
+        /// events and relayed game messages. Nothing that produces a message waits for the socket;
+        /// when a client reads so slowly that the queue fills up, the gateway logs a warning and
+        /// closes the connection with PolicyViolation. Defaults to 1024.
+        /// </summary>
+        public int OutboundQueueCapacity { get; set; } = 1024;
+
+        /// <summary>
+        /// Requests of one connection the gateway works on at the same time; the next one is read
+        /// from the socket when one finishes. A slow request (FindMatch waits for opponents) does not
+        /// hold up heartbeats this way. Relayed game messages do not count: they go through their own
+        /// queue, one at a time, so they keep their order. Defaults to 8.
+        /// </summary>
+        public int MaxConcurrentRequests { get; set; } = 8;
     }
 }

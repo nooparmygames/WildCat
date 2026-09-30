@@ -31,6 +31,13 @@ namespace WildCat.Tests
             });
         }
 
+        public static async Task<(Guid DeveloperKey, Guid GameKey)> CreateDeveloperAndGame(IGrainFactory grains)
+        {
+            var developerKey = await CreateDeveloper(grains);
+            var gameKey = await grains.GetGrain<IDeveloper>(developerKey).AddGame(new GameInfo { Name = "game1" });
+            return (developerKey, gameKey);
+        }
+
         public static async Task<(Guid DeveloperKey, Guid GameKey, Guid SessionKey)> CreateDeveloperGameAndSession(IGrainFactory grains)
         {
             var developerKey = await CreateDeveloper(grains);
@@ -52,6 +59,26 @@ namespace WildCat.Tests
             if (login == null)
                 throw new InvalidOperationException("The test player could not log in.");
             return player;
+        }
+
+        /// <summary>
+        /// Checks <paramref name="condition"/> every 50 ms until it holds, for at most
+        /// <see cref="Timeout"/>.
+        /// </summary>
+        public static async Task WaitUntilAsync(Func<Task<bool>> condition, string description)
+        {
+            var deadline = DateTime.UtcNow + Timeout;
+            while (!await condition())
+            {
+                if (DateTime.UtcNow > deadline)
+                    throw new TimeoutException($"Gave up waiting for {description}.");
+                await Task.Delay(50);
+            }
+        }
+
+        public static Task WaitUntilAsync(Func<bool> condition, string description)
+        {
+            return WaitUntilAsync(() => Task.FromResult(condition()), description);
         }
 
         /// <summary>

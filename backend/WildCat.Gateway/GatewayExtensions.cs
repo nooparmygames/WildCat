@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.WebSockets;
 
@@ -19,9 +20,10 @@ namespace WildCat.Gateway
     public static class GatewayExtensions
     {
         /// <summary>
-        /// Registers the gateway services (the singleton <see cref="IFrontEndServer"/> that dispatches
-        /// every message) and binds <see cref="GameGatewayOptions"/> from <paramref name="configuration"/>
-        /// when it is given. Call it on a host that also calls UseOrleans.
+        /// Registers the gateway services (dispatcher, connection registry, logins, push
+        /// subscriptions and every <see cref="IMessageHandler"/> in this assembly) and binds
+        /// <see cref="GameGatewayOptions"/> from <paramref name="configuration"/> when it is given.
+        /// Call it on a host that also calls UseOrleans.
         /// </summary>
         public static IServiceCollection AddGameGateway(this IServiceCollection services, IConfiguration configuration = null)
         {
@@ -32,48 +34,66 @@ namespace WildCat.Gateway
                 .Validate(o => o.MaxMessageBytes > 0, "Gateway:MaxMessageBytes must be greater than zero.")
                 .Validate(o => o.AuthAttemptBurst > 0, "Gateway:AuthAttemptBurst must be greater than zero.")
                 .Validate(o => o.AuthAttemptsPerMinute > 0, "Gateway:AuthAttemptsPerMinute must be greater than zero.")
+                .Validate(o => o.OutboundQueueCapacity > 0, "Gateway:OutboundQueueCapacity must be greater than zero.")
+                .Validate(o => o.MaxConcurrentRequests > 0, "Gateway:MaxConcurrentRequests must be greater than zero.")
                 .ValidateOnStart();
             services.TryAddSingleton(TimeProvider.System);
-            services.AddSingleton<IFrontEndServer, FrontEndServer>();
+            services.TryAddSingleton<ConnectionRegistry>();
+            services.TryAddSingleton<PushSubscriptions>();
+            services.TryAddSingleton<LoginManager>();
+            services.TryAddSingleton<FrontEndServer>();
+            services.TryAddSingleton<LegacyAdapterHandler>();
+            foreach (Type handler in HandlerTypes())
+                services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IMessageHandler), handler));
+            services.TryAddSingleton<HandlerRegistry>();
+            services.TryAddSingleton<MessageDispatcher>();
             return services;
         }
 
         /// <summary>
+        /// Every concrete <see cref="IMessageHandler"/> in the gateway assembly except the legacy
+        /// adapter, which the <see cref="HandlerRegistry"/> takes separately as the fallback.
+        /// </summary>
+        internal static IEnumerable<Type> HandlerTypes()
+        {
+            return typeof(GatewayExtensions).Assembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition
+                            && typeof(IMessageHandler).IsAssignableFrom(t)
+                            && t != typeof(LegacyAdapterHandler))
+                .OrderBy(t => t.FullName, StringComparer.Ordinal);
+        }
+
+        /// <summary>
         /// Accepts WebSocket connections at <paramref name="pattern"/> and hands each one to the
-        /// gateway. A request to the same path that is not a WebSocket upgrade gets 400, and a
-        /// WebSocket request from an origin missing from <see cref="GameGatewayOptions.AllowedOrigins"/>
-        /// gets 403. Call app.UseWebSockets() before this.
+        /// <see cref="MessageDispatcher"/>. A request to the same path that is not a WebSocket
+        /// upgrade gets 400, and a WebSocket request from an origin missing from
+        /// <see cref="GameGatewayOptions.AllowedOrigins"/> gets 403. Call app.UseWebSockets() before this.
         /// </summary>
         public static IEndpointConventionBuilder MapGameGateway(this IEndpointRouteBuilder endpoints, string pattern = "/ws")
         {
             return endpoints.Map(pattern, async context =>
             {
-                if (context.WebSockets.IsWebSocketRequest)
+                if (!context.WebSockets.IsWebSocketRequest)
                 {
-                    var options = context.RequestServices.GetRequiredService<IOptions<GameGatewayOptions>>().Value;
-                    var logger = context.RequestServices.GetRequiredService<ILogger<ConnectionProcessor>>();
-                    if (!IsOriginAllowed(context.Request.Headers.Origin.ToString(), options.AllowedOrigins))
-                    {
-                        logger.LogInformation("Refused a WebSocket from origin {Origin}, which is not in Gateway:AllowedOrigins",
-                            context.Request.Headers.Origin.ToString());
-                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        return;
-                    }
+                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    return;
+                }
 
-                    // Resolved per connection rather than at startup so the silo (and its stream
-                    // providers) is running before the gateway singleton is created.
-                    var frontEndServer = context.RequestServices.GetRequiredService<IFrontEndServer>();
-                    WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                    ConnectionProcessor c = new ConnectionProcessor(webSocket, ConnectionProcessor.GetNextId(),
-                        options.MaxMessageBytes, logger);
-                    c.OnConnected += frontEndServer.PlayerConnected;
-                    c.OnDisConnected += frontEndServer.PlayerDisconnected;
-                    await c.Process(context, webSocket);
-                }
-                else
+                var options = context.RequestServices.GetRequiredService<IOptions<GameGatewayOptions>>().Value;
+                if (!IsOriginAllowed(context.Request.Headers.Origin.ToString(), options.AllowedOrigins))
                 {
-                    context.Response.StatusCode = 400;
+                    var logger = context.RequestServices.GetRequiredService<ILogger<MessageDispatcher>>();
+                    logger.LogInformation("Refused a WebSocket from origin {Origin}, which is not in Gateway:AllowedOrigins",
+                        context.Request.Headers.Origin.ToString());
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return;
                 }
+
+                // Resolved per connection rather than at startup so the silo (and its stream
+                // providers) is running before the gateway singletons are created.
+                var dispatcher = context.RequestServices.GetRequiredService<MessageDispatcher>();
+                WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                await dispatcher.RunAsync(webSocket, context.RequestAborted);
             }).WithDisplayName("Game gateway WebSocket");
         }
 

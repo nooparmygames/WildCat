@@ -89,7 +89,7 @@ namespace WildCat.Tests
                     WildCatMsgHeader.normal, matchId.ToString(), aliceSession.ToString());
                 frame.SetRequestID(alice.NextRequestId());
                 var reply = await alice.RequestAsync(frame);
-                AssertError(reply, WildCatMsgType.ErrorMsg, frame.requestID, 1, FrontEndServer.UnsupportedMessageTypeMessage);
+                AssertError(reply, WildCatMsgType.ErrorMsg, frame.requestID, 1, GatewayErrors.UnsupportedMessageType);
             }
 
             // A real user message still reaches Bob, without Alice's ticket.
@@ -110,14 +110,14 @@ namespace WildCat.Tests
             await using var host = await GatewayTestHost.StartAsync(cluster.Client);
             await using var client = await host.ConnectAsync();
 
-            // 84 RecoverPassword has grain logic but no handler, and 44 CreateEnvironment lost its
+            // 107 GetDefinedItems has grain logic but no handler, and 44 CreateEnvironment lost its
             // handler in step 4. Neither needs a session.
-            foreach (var type in new[] { WildCatMsgType.RecoverPasswordRequest, WildCatMsgType.CreateEnvironmentRequest })
+            foreach (var type in new[] { WildCatMsgType.GetDefinedItemsRequest, WildCatMsgType.CreateEnvironmentRequest })
             {
                 var request = WildCatMessageBase.CreateWithRequestID(new StringMessage { value = "x" }, type,
                     WildCatMsgHeader.normal, client.NextRequestId());
                 AssertError(await client.RequestAsync(request), WildCatMsgType.ErrorMsg, request.requestID, 1,
-                    FrontEndServer.UnsupportedMessageTypeMessage);
+                    GatewayErrors.UnsupportedMessageType);
             }
         }
 
@@ -132,10 +132,10 @@ namespace WildCat.Tests
             var noTicket = WildCatMessageBase.CreateWithRequestID(new EmptyMessage(), WildCatMsgType.GetNameRequest,
                 WildCatMsgHeader.normal, client.NextRequestId());
             AssertError(await client.RequestAsync(noTicket), WildCatMsgType.ErrorMsg, noTicket.requestID, 1,
-                FrontEndServer.SessionRequiredMessage);
+                GatewayErrors.SessionRequired);
 
             var reply = await client.GetNameAsync("not-a-guid");
-            AssertError(reply, WildCatMsgType.ErrorMsg, reply.requestID, 1, FrontEndServer.InvalidTicketMessage);
+            AssertError(reply, WildCatMsgType.ErrorMsg, reply.requestID, 1, GatewayErrors.InvalidTicket);
 
             reply = await client.GetNameAsync(Guid.NewGuid().ToString());
             AssertError(reply, WildCatMsgType.ErrorMsg, reply.requestID, 1, SessionNotInitializedException.DefaultMessage);
@@ -147,7 +147,7 @@ namespace WildCat.Tests
 
             var notLoggedIn = await client.InitializeSessionAsync(developerKey, gameKey);
             reply = await client.GetNameAsync(notLoggedIn.ToString());
-            AssertError(reply, WildCatMsgType.ErrorMsg, reply.requestID, 1, FrontEndServer.NotLoggedInMessage);
+            AssertError(reply, WildCatMsgType.ErrorMsg, reply.requestID, 1, GatewayErrors.NotLoggedIn);
 
             var expired = await client.InitializeSessionAsync(developerKey, gameKey);
             await BackdateSession(expired, TimeSpan.FromMinutes(61));
@@ -218,34 +218,34 @@ namespace WildCat.Tests
                 var response = reply.GetPayload<OptionalResponse<EmptyMessage>>();
                 Assert.False(response.isSuccesful);
                 if (i < 3)
-                    Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, response.errorMsg);
+                    Assert.NotEqual(GatewayErrors.TooManyAuthAttempts, response.errorMsg);
                 else
-                    AssertError(reply, requests[i].msgType + 1, requests[i].requestID, 1, FrontEndServer.TooManyAuthAttemptsMessage);
+                    AssertError(reply, requests[i].msgType + 1, requests[i].requestID, 1, GatewayErrors.TooManyAuthAttempts);
             }
 
             // Another connection has its own allowance.
             await using (var other = await host.ConnectAsync())
             {
                 var reply = await other.RequestAsync(other.AuthenticateRequest(Guid.NewGuid(), "d"));
-                Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage,
+                Assert.NotEqual(GatewayErrors.TooManyAuthAttempts,
                     reply.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             }
 
             // One attempt comes back every 10 seconds.
             time.Advance(TimeSpan.FromSeconds(9));
             var early = await client.RequestAsync(client.AuthenticateRequest(Guid.NewGuid(), "d"));
-            AssertError(early, WildCatMsgType.AuthenticateResponse, early.requestID, 1, FrontEndServer.TooManyAuthAttemptsMessage);
+            AssertError(early, WildCatMsgType.AuthenticateResponse, early.requestID, 1, GatewayErrors.TooManyAuthAttempts);
             time.Advance(TimeSpan.FromSeconds(10));
             var allowed = await client.RequestAsync(client.AuthenticateRequest(Guid.NewGuid(), "d"));
-            Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, allowed.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
+            Assert.NotEqual(GatewayErrors.TooManyAuthAttempts, allowed.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             var limited = await client.RequestAsync(client.AuthenticateRequest(Guid.NewGuid(), "d"));
-            AssertError(limited, WildCatMsgType.AuthenticateResponse, limited.requestID, 1, FrontEndServer.TooManyAuthAttemptsMessage);
+            AssertError(limited, WildCatMsgType.AuthenticateResponse, limited.requestID, 1, GatewayErrors.TooManyAuthAttempts);
 
             // Other messages are not limited.
-            var other2 = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.RecoverPasswordRequest,
+            var other2 = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.GetDefinedItemsRequest,
                 WildCatMsgHeader.normal, client.NextRequestId());
             AssertError(await client.RequestAsync(other2), WildCatMsgType.ErrorMsg, other2.requestID, 1,
-                FrontEndServer.UnsupportedMessageTypeMessage);
+                GatewayErrors.UnsupportedMessageType);
         }
 
         [Fact]
@@ -264,8 +264,8 @@ namespace WildCat.Tests
                 errors.Add(reply.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             }
 
-            Assert.All(errors.Take(5), e => Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, e));
-            Assert.Equal(FrontEndServer.TooManyAuthAttemptsMessage, errors[5]);
+            Assert.All(errors.Take(5), e => Assert.NotEqual(GatewayErrors.TooManyAuthAttempts, e));
+            Assert.Equal(GatewayErrors.TooManyAuthAttempts, errors[5]);
         }
 
         [Fact]
@@ -298,9 +298,9 @@ namespace WildCat.Tests
                 return state.LoginTicket != Guid.Empty && !state.IsLoggedIn ? "done" : null;
             }, "the login to be released");
             await Poll(() => Task.FromResult(
-                host.FrontEnd.playerConnectionMapper.Keys.Any(k => k.GetPrimaryKeyString() == playerId) ? null : "done"),
+                host.Connections.PlayerIds.Contains(playerId) ? null : "done"),
                 "the gateway to drop the player mapping");
-            Assert.Empty(host.FrontEnd.clientConnections);
+            Assert.Equal(0, host.Connections.Count);
         }
 
         [Fact]
@@ -319,8 +319,8 @@ namespace WildCat.Tests
 
             Assert.False(await firstPlayer.IsLoggedIn());
             Assert.True(await secondPlayer.IsLoggedIn());
-            Assert.DoesNotContain(host.FrontEnd.playerConnectionMapper.Keys, k => k.GetPrimaryKeyString() == first.userId);
-            Assert.Contains(host.FrontEnd.playerConnectionMapper.Keys, k => k.GetPrimaryKeyString() == second.userId);
+            Assert.DoesNotContain(first.userId, host.Connections.PlayerIds);
+            Assert.Contains(second.userId, host.Connections.PlayerIds);
 
             // Logging the first player out left the session alone: the second player is using it.
             var reply = await client.GetNameAsync(session.ToString());
@@ -378,7 +378,7 @@ namespace WildCat.Tests
 
             await using (var listed = await host.ConnectAsync("https://GAME.example.com/"))
             {
-                var request = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.RecoverPasswordRequest,
+                var request = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.GetDefinedItemsRequest,
                     WildCatMsgHeader.normal, listed.NextRequestId());
                 Assert.Equal(WildCatMsgType.ErrorMsg, (await listed.RequestAsync(request)).msgType);
             }
@@ -386,7 +386,7 @@ namespace WildCat.Tests
             // Native clients send no Origin header at all.
             await using (var native = await host.ConnectAsync())
             {
-                var request = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.RecoverPasswordRequest,
+                var request = WildCatMessageBase.CreateWithRequestID(new StringMessage(), WildCatMsgType.GetDefinedItemsRequest,
                     WildCatMsgHeader.normal, native.NextRequestId());
                 Assert.Equal(WildCatMsgType.ErrorMsg, (await native.RequestAsync(request)).msgType);
             }

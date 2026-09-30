@@ -12,6 +12,13 @@ namespace WildCat.Interfaces
         Task<PlayerState> GetState();
         Task<bool> ChangePasswordForEmail(string email, string newPassword);
         Task<string> SendPasswordChangeCodeToEmail(string email);
+
+        /// <summary>
+        /// Sends a new activation code to <paramref name="email"/> when it is one of this
+        /// player's email logins and is not activated yet. The new code replaces the outstanding
+        /// one. Returns false, and sends nothing, for any other address.
+        /// </summary>
+        Task<bool> ResendActivationCode(string email);
         Task<string> Activate(string code);
         Task<bool> ChangePasswordForEmailByCode(string code, string newPassword);
         Task<bool> ChangePasswordForUserId(string user, string newPassword);

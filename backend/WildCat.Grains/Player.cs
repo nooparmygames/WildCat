@@ -549,6 +549,19 @@ namespace WildCat.Grains
             return code;
         }
 
+        public async Task<bool> ResendActivationCode(string email)
+        {
+            email = (email ?? "").ToLowerInvariant();
+            if (!State.Emails.TryGetValue(email, out var account) || account[STATUS_KEY] == STATUS_ACTIVE)
+                return false;
+            string code = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
+            State.ActivationCodes[email] = NewEmailCode(code);
+            await WriteStateAsync();
+            // Like a reset code, the caller asked for this email, so a failed send fails the call.
+            await emailSender.SendAsync(email, EmailTexts.ActivationSubject, EmailTexts.ActivationBody(code));
+            return true;
+        }
+
         /// <summary>
         /// Activates the email whose activation code matches. The code is used up, so it cannot be
         /// used again, and it was never valid as a password reset code. A wrong code counts
