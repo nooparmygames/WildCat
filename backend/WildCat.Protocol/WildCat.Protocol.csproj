@@ -2,7 +2,8 @@
 
   <!--
     The wire protocol shared with the Unity SDK. tools/sync-protocol.sh copies every .cs file here
-    except ServerOnly/ into unity-sdk/Assets/Backend/Plugins/Protocol, so the source has to compile
+    except ServerOnly/ into the Unity package's Runtime/Protocol
+    (unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol), so the source has to compile
     in Unity 6: netstandard2.1, C# 9 at most, no nullable annotations, no Orleans, ASP.NET or
     Newtonsoft references, and no assembly attributes in .cs files (put them here instead).
   -->

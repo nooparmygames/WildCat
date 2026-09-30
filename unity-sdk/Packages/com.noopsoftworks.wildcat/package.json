@@ -1,0 +1,30 @@
+{
+  "name": "com.noopsoftworks.wildcat",
+  "version": "0.1.0",
+  "displayName": "WildCat",
+  "description": "Client SDK for the WildCat game backend: sessions, accounts, friends, challenges, matchmaking, relay matches, leaderboards, inventory, cloud data and server script events over one WebSocket. Task-based API with request timeouts, heartbeats and automatic reconnection.",
+  "unity": "6000.0",
+  "documentationUrl": "https://github.com/nooparmygames/wildcat/blob/main/unity-sdk/Packages/com.noopsoftworks.wildcat/Documentation~/index.md",
+  "changelogUrl": "https://github.com/nooparmygames/wildcat/blob/main/unity-sdk/Packages/com.noopsoftworks.wildcat/CHANGELOG.md",
+  "licensesUrl": "https://github.com/nooparmygames/wildcat/blob/main/LICENSE",
+  "license": "MIT",
+  "keywords": [
+    "backend",
+    "multiplayer",
+    "matchmaking",
+    "relay",
+    "leaderboard",
+    "websocket"
+  ],
+  "author": {
+    "name": "NoOpArmy Softworks",
+    "url": "https://github.com/nooparmygames/wildcat"
+  },
+  "samples": [
+    {
+      "displayName": "Basic",
+      "description": "Connect, log in with a device id, find a match, relay positions between two clients, submit a score through a script event, read a leaderboard and handle friend invitations.",
+      "path": "Samples~/Basic"
+    }
+  ]
+}

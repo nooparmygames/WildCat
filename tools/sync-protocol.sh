@@ -3,8 +3,10 @@
 #
 # Source: backend/WildCat.Protocol/**/*.cs, except ServerOnly/ (messages that carry a developer
 # secret and must never ship in a game client) and the obj/ and bin/ build folders.
-# Target: unity-sdk/Assets/Backend/Plugins/Protocol/, which is deleted and written again, so files
-# removed from the source disappear from the copy too.
+# Target: unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol/ in the Unity package,
+# which is deleted and written again, so files removed from the source disappear from the copy too.
+# The copy also gets its assembly definition (WildCat.Protocol.asmdef, from
+# tools/protocol-copy-asmdef.json) and a README saying it is generated.
 #
 # Unity needs a .meta file with a GUID next to every file and folder. The GUIDs are the MD5 of
 # "wildcat-protocol:" plus the path relative to the target folder ("" for the folder itself), so
@@ -17,8 +19,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_dir="$repo_root/backend/WildCat.Protocol"
-target_dir="$repo_root/unity-sdk/Assets/Backend/Plugins/Protocol"
+target_dir="$repo_root/unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol"
 readme="$repo_root/tools/protocol-copy-readme.md"
+asmdef="$repo_root/tools/protocol-copy-asmdef.json"
 
 if command -v md5sum >/dev/null 2>&1; then
     md5_hex() { printf '%s' "$1" | md5sum | cut -c1-32; }
@@ -40,6 +43,11 @@ write_script_meta() { # path-of-meta relative-path
 
 write_text_meta() { # path-of-meta relative-path
     printf 'fileFormatVersion: 2\nguid: %s\nTextScriptImporter:\n  externalObjects: {}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n' \
+        "$(guid_for "$2")" > "$1"
+}
+
+write_asmdef_meta() { # path-of-meta relative-path
+    printf 'fileFormatVersion: 2\nguid: %s\nAssemblyDefinitionImporter:\n  externalObjects: {}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n' \
         "$(guid_for "$2")" > "$1"
 }
 
@@ -78,5 +86,7 @@ done < <(find "$source_dir" -type f -name '*.cs' -print0 | LC_ALL=C sort -z)
 
 cp "$readme" "$target_dir/README.md"
 write_text_meta "$target_dir/README.md.meta" "README.md"
+cp "$asmdef" "$target_dir/WildCat.Protocol.asmdef"
+write_asmdef_meta "$target_dir/WildCat.Protocol.asmdef.meta" "WildCat.Protocol.asmdef"
 
 echo "sync-protocol: copied $count files to ${target_dir#"$repo_root"/}"

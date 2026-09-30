@@ -3,8 +3,10 @@
 #
 # Source: backend/WildCat.Protocol/**/*.cs, except ServerOnly/ (messages that carry a developer
 # secret and must never ship in a game client) and the obj/ and bin/ build folders.
-# Target: unity-sdk/Assets/Backend/Plugins/Protocol/, which is deleted and written again, so files
-# removed from the source disappear from the copy too.
+# Target: unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol/ in the Unity package,
+# which is deleted and written again, so files removed from the source disappear from the copy too.
+# The copy also gets its assembly definition (WildCat.Protocol.asmdef, from
+# tools/protocol-copy-asmdef.json) and a README saying it is generated.
 #
 # Unity needs a .meta file with a GUID next to every file and folder. The GUIDs are the MD5 of
 # "wildcat-protocol:" plus the path relative to the target folder ("" for the folder itself), so
@@ -17,8 +19,9 @@ Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourceDir = Join-Path $repoRoot 'backend/WildCat.Protocol'
-$targetDir = Join-Path $repoRoot 'unity-sdk/Assets/Backend/Plugins/Protocol'
+$targetDir = Join-Path $repoRoot 'unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol'
 $readme = Join-Path $repoRoot 'tools/protocol-copy-readme.md'
+$asmdef = Join-Path $repoRoot 'tools/protocol-copy-asmdef.json'
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $md5 = [System.Security.Cryptography.MD5]::Create()
 
@@ -38,6 +41,10 @@ function Write-Meta([string] $path, [string] $relativePath, [string] $importer) 
         }
         'text' {
             $lines = @('fileFormatVersion: 2', "guid: $guid", 'TextScriptImporter:', '  externalObjects: {}',
+                '  userData: ', '  assetBundleName: ', '  assetBundleVariant: ')
+        }
+        'asmdef' {
+            $lines = @('fileFormatVersion: 2', "guid: $guid", 'AssemblyDefinitionImporter:', '  externalObjects: {}',
                 '  userData: ', '  assetBundleName: ', '  assetBundleVariant: ')
         }
         'folder' {
@@ -79,5 +86,7 @@ foreach ($rel in $files) {
 
 Copy-Item -LiteralPath $readme -Destination (Join-Path $targetDir 'README.md')
 Write-Meta (Join-Path $targetDir 'README.md.meta') 'README.md' 'text'
+Copy-Item -LiteralPath $asmdef -Destination (Join-Path $targetDir 'WildCat.Protocol.asmdef')
+Write-Meta (Join-Path $targetDir 'WildCat.Protocol.asmdef.meta') 'WildCat.Protocol.asmdef' 'asmdef'
 
-Write-Host "sync-protocol: copied $count files to unity-sdk/Assets/Backend/Plugins/Protocol"
+Write-Host "sync-protocol: copied $count files to unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol"
