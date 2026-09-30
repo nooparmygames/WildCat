@@ -420,7 +420,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.LeaveGameResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     finishGameSentResults[x.requestID].Succeed();
@@ -435,7 +435,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.SetMatchPropertyResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     setMatchPropertyResults[x.requestID].Succeed();
@@ -450,7 +450,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.RejoinMatchResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
 
@@ -466,7 +466,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPlayerMatchesResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<PendingMatchesCollectionData>>();
+                var data = x.GetPayload<OptionalResponse<PendingMatchesCollectionData>>();
                 if (data.isSuccesful)
                 {
 
@@ -482,7 +482,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.SetNameResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     nameSetResults[x.requestID].Succeed();
@@ -496,7 +496,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPlayerChallengesResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<ChallengeRequestsMessage>>();
+                var data = x.GetPayload<OptionalResponse<ChallengeRequestsMessage>>();
                 if (data.isSuccesful)
                 {
                     getChallengesResults[x.requestID].Succeed(data.msg);
@@ -510,11 +510,11 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetServerTimeResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<DateTimeMessage>>();
                 if (data.isSuccesful)
                 {
-                    var dt = DateTime.Parse(data.msg.value);
-                    timeReceivedResults[x.requestID].Succeed(dt);
+                    // UTC, sent as ticks, so no parsing and no culture involved.
+                    timeReceivedResults[x.requestID].Succeed(data.msg.value);
                 }
                 else
                 {
@@ -525,7 +525,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetNameResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
                 {
                     nameReceivedResults[x.requestID].Succeed(data.msg.value);
@@ -539,7 +539,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetInventoryResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<GetInventoryResponseMessage>>();
+                var data = x.GetPayload<OptionalResponse<GetInventoryResponseMessage>>();
                 if (data.isSuccesful)
                 {
                     inventoryReceivedResults[x.requestID].Succeed(data.msg);
@@ -553,7 +553,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.AddItemToInventoryResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<BuyItemInventoryRequestMessage>>();
+                var data = x.GetPayload<OptionalResponse<BuyItemInventoryRequestMessage>>();
                 if (data.isSuccesful)
                 {
                     inventoryAddedResults[x.requestID].Succeed(data.msg);
@@ -567,7 +567,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.RemoveInventoryItemResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<RemoveItemInventoryRequestMessage>>();
+                var data = x.GetPayload<OptionalResponse<RemoveItemInventoryRequestMessage>>();
                 if (data.isSuccesful)
                 {
                     inventoryRemovedResults[x.requestID].Succeed(data.msg);
@@ -581,7 +581,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPlayerNameResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
                 {
                     playerNameReceivedResults[x.requestID].Succeed(data.msg.value);
@@ -595,7 +595,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.SetCloudDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     cloudDataSavedResults[x.requestID].Succeed();
@@ -609,7 +609,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.SetPublicCloudDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     cloudPublicDataSavedResults[x.requestID].Succeed();
@@ -623,7 +623,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetCloudDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
                 {
                     cloudDataReceivedResults[x.requestID].Succeed(data.msg.value);
@@ -637,7 +637,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPublicCloudDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<GetPublicCloudDataResponse>>();
+                var data = x.GetPayload<OptionalResponse<GetPublicCloudDataResponse>>();
                 if (data.isSuccesful)
                 {
                     cloudPublicDataReceivedResults[x.requestID].Succeed(data.msg);
@@ -651,7 +651,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPlayerPublicCloudDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<GetPublicCloudDataResponse>>();
+                var data = x.GetPayload<OptionalResponse<GetPublicCloudDataResponse>>();
                 if (data.isSuccesful)
                 {
                     cloudPlayerPublicDataReceivedResults[x.requestID].Succeed(data.msg);
@@ -665,7 +665,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.ExecuteScriptEventResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<ScriptEventExecutionResponseMessage>>();
+                var data = x.GetPayload<OptionalResponse<ScriptEventExecutionResponseMessage>>();
                 if (data.isSuccesful)
                 {
                     scriptEventExecutedResults[x.requestID].Succeed(data.msg.returnValue);
@@ -679,7 +679,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetPublisherDataResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
                 {
                     print("Publisher data received " + data.msg.value);
@@ -694,7 +694,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetLeaderboardResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<GetLeaderBoardResponse>>();
+                var data = x.GetPayload<OptionalResponse<GetLeaderBoardResponse>>();
                 if (data.isSuccesful)
                 {
                     if (data.msg.IsPlayerRank)
@@ -727,7 +727,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.SetLeaderboardResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     scoreSetInLeaderBoardResults[x.requestID].Succeed();
@@ -741,7 +741,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GetFriendsResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<FriendlistCollection>>();
+                var data = x.GetPayload<OptionalResponse<FriendlistCollection>>();
                 if (data.isSuccesful)
                 {
                     getFriendsResults[x.requestID].Succeed(data.msg);
@@ -757,7 +757,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.InviteFriendResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     inviteFriendsResults[x.requestID].Succeed();
@@ -772,7 +772,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.AcceptFriendResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     acceptFriendsResults[x.requestID].Succeed();
@@ -787,7 +787,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.DenyFriendResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     denyFriendsResults[x.requestID].Succeed();
@@ -802,7 +802,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.StartChallengeResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     challengeSentResults[x.requestID].Succeed();
@@ -816,7 +816,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.AcceptChallengeResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     acceptChallengeSentResults[x.requestID].Succeed();
@@ -830,7 +830,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.DenyChallengeRequest, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 if (data.isSuccesful)
                 {
                     denyChallengeSentResults[x.requestID].Succeed();
@@ -844,7 +844,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.FriendshipInvitationEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<FriendlistMessage>>();
+                var data = x.GetPayload<OptionalResponse<FriendlistMessage>>();
                 print("received friendship invitation from " + data.msg.friend + data.msg.friendName);
                 if (OnFriendshipInvitation != null)
                     OnFriendshipInvitation(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
@@ -852,7 +852,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.FriendshipAcceptedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<FriendlistMessage>>();
+                var data = x.GetPayload<OptionalResponse<FriendlistMessage>>();
                 print("Friendship accepted from " + data.msg.friend + data.msg.friendName);
                 if (OnFriendshipAccepted != null)
                     OnFriendshipAccepted(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
@@ -860,7 +860,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.FriendshipDeniedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<FriendlistMessage>>();
+                var data = x.GetPayload<OptionalResponse<FriendlistMessage>>();
                 print("Friendship denied from " + data.msg.friend + data.msg.friendName);
                 if (OnFriendshipDenied != null)
                     OnFriendshipDenied(new FriendData { playerId = data.msg.friend, playerName = data.msg.friendName, data = data.msg.data });
@@ -868,7 +868,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.FriendStatusChangedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<FriendlistMessage>>();
+                var data = x.GetPayload<OptionalResponse<FriendlistMessage>>();
                 print("Friend status changed " + data.msg.friend + data.msg.status);
                 if (OnFriendStatusChanged != null)
                     OnFriendStatusChanged(data.msg.friend, data.msg.status);
@@ -876,7 +876,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.StartChallengeRequestedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<ChallengeMessage>>();
+                var data = x.GetPayload<OptionalResponse<ChallengeMessage>>();
                 print("received challenge request from " + data.isSuccesful + data.msg.Player);
                 if (OnchallengeRequestReceived != null)
                     OnchallengeRequestReceived(data.msg.Player, data.msg.PlayerName, data.msg.TimeOut, data.msg.data);
@@ -884,21 +884,21 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.ChallengeDeniedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<ChallengeMessage>>().msg;
+                var data = x.GetPayload<OptionalResponse<ChallengeMessage>>().msg;
                 if (OnchallengeDenied != null)
                     OnchallengeDenied(data.Player, data.PlayerName, data.data);
             });
 
             client.RegisterHandler(WildCatMsgType.ChallengeAcceptedEvent, x =>
             {
-                var data = x.GetData<OptionalResponse<ChallengeMessage>>().msg;
+                var data = x.GetPayload<OptionalResponse<ChallengeMessage>>().msg;
                 if (OnchallengeStarted != null)
                     OnchallengeStarted(data.Player, data.PlayerName, data.GameKey, data.data);
             });
 
             client.RegisterHandler(WildCatMsgType.MatchPropertyChangedEvent, x =>
             {
-                var data = x.GetData<MatchPropertyChangeData>();
+                var data = x.GetPayload<MatchPropertyChangeData>();
                 print("match property changed IsGameProp" + data.isGameProperty);
                 if (data.isGameProperty)
                 {
@@ -914,21 +914,21 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.GamePlayerRejoinedEvent, x =>
             {
-                var data = x.GetData<MatchPlayerEventData>();
+                var data = x.GetPayload<MatchPlayerEventData>();
                 if (OnMatchPlayerRejoined != null)
                     OnMatchPlayerRejoined(data);
             });
 
             client.RegisterHandler(WildCatMsgType.GamePlayerRemovedEvent, x =>
             {
-                var data = x.GetData<MatchPlayerEventData>();
+                var data = x.GetPayload<MatchPlayerEventData>();
                 if (OnMatchPlayerRemoved != null)
                     OnMatchPlayerRemoved(data);
             });
 
             client.RegisterHandler(WildCatMsgType.MatchRejoinSyncEvent, x =>
             {
-                var data = x.GetData<MatchSyncEventData>();
+                var data = x.GetPayload<MatchSyncEventData>();
                 if (OnMatchRejoinSyncDataReceived != null)
                     OnMatchRejoinSyncDataReceived(data);
             });
@@ -936,7 +936,7 @@ namespace WildCat
             client.RegisterHandler(WildCatMsgType.GameFinishedEvent, x =>
             {
                 print("Received GameFinish Event");
-                var data = x.GetData<GameFinishedEvent>();
+                var data = x.GetPayload<GameFinishedEvent>();
                 if (!data.FinishedWithDisconnect)
                 {
                     if (OnGameFinished != null)
@@ -951,7 +951,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.InitializeSessionResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<GuidMessage>>();
+                var data = x.GetPayload<OptionalResponse<GuidMessage>>();
                 if (data.isSuccesful)
                 {
                     sessionKey = data.msg.value;
@@ -966,7 +966,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.FindMatchResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<FindMatchResponse>>();
+                var data = x.GetPayload<OptionalResponse<FindMatchResponse>>();
                 print("Received FindMatchResponse success: " + data.isSuccesful);
                 if (data.isSuccesful)
                 {
@@ -995,7 +995,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.AuthenticateResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<AuthenticationResponse>>();
+                var data = x.GetPayload<OptionalResponse<AuthenticationResponse>>();
                 if (data.isSuccesful)
                 {
                     userID = data.msg.userId;
@@ -1013,7 +1013,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.CreateNewAccountResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<StringMessage>>();
+                var data = x.GetPayload<OptionalResponse<StringMessage>>();
                 if (data.isSuccesful)
                 {
                     createAccountResults[x.requestID].Succeed(data.msg.value);
@@ -1027,7 +1027,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.AddAuthMechanismToAccountResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 print("Received add authentication response " + data.isSuccesful);
                 if (data.isSuccesful)
                 {
@@ -1042,7 +1042,7 @@ namespace WildCat
 
             client.RegisterHandler(WildCatMsgType.EmailActivationResponse, x =>
             {
-                var data = x.GetData<OptionalResponse<EmptyMessage>>();
+                var data = x.GetPayload<OptionalResponse<EmptyMessage>>();
                 print("Activation response received " + data.isSuccesful);
                 if (data.isSuccesful)
                 {
@@ -1646,14 +1646,8 @@ namespace WildCat
 
         public Result SetPlayerMatchProperty(Guid game, string key, MessageBase value, Action OnSuccess = null, Action<int, string> OnFailure = null)
         {
-            using (MemoryStream str = new MemoryStream())
-            {
-                using (BinaryWriter nw = new BinaryWriter(str))
-                {
-                    value.Serialize(nw);
-                }
-            }
-            return SetPlayerMatchProperty(game, key, value, OnSuccess, OnFailure);
+            // Encoded through the protocol codec (this overload used to call itself forever).
+            return SetPlayerMatchProperty(game, key, WireCodec.EncodePayload(value));
         }
 
         /// <summary>
@@ -1678,17 +1672,7 @@ namespace WildCat
 
         public Result SetGlobalMatchProperty(Guid game, string key, MessageBase value, Action OnSuccess = null, Action<int, string> OnFailure = null)
         {
-            byte[] data;
-            using (MemoryStream str = new MemoryStream())
-            {
-                using (BinaryWriter nw = new BinaryWriter(str))
-                {
-                    value.Serialize(nw);
-                }
-                data = str.ToArray();
-            }
-
-            return SetGlobalMatchProperty(game, key, data);
+            return SetGlobalMatchProperty(game, key, WireCodec.EncodePayload(value));
         }
 
         /// <summary>

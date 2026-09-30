@@ -113,7 +113,7 @@ namespace WildCat.Tests
         public async Task SendAsync(WildCatMessageBase message)
         {
             using var timeout = new CancellationTokenSource(TestSetup.Timeout);
-            await socket.SendAsync(message.ToByteArray(), WebSocketMessageType.Binary, true, timeout.Token);
+            await socket.SendAsync(WireCodec.Encode(message), WebSocketMessageType.Binary, true, timeout.Token);
         }
 
         /// <summary>Sends a request that carries a request id and waits for the frame echoing it.</summary>
@@ -164,7 +164,7 @@ namespace WildCat.Tests
                 new InitializeSessionRequest { DeveloperKey = developerKey, GameKey = gameKey },
                 WildCatMsgType.InitializeSessionRequest, WildCatMsgHeader.normal, NextRequestId()));
             Assert.Equal(WildCatMsgType.InitializeSessionResponse, reply.msgType);
-            var response = reply.GetData<OptionalResponse<GuidMessage>>();
+            var response = reply.GetPayload<OptionalResponse<GuidMessage>>();
             Assert.True(response.isSuccesful, response.errorMsg);
             return response.msg.value;
         }
@@ -184,7 +184,7 @@ namespace WildCat.Tests
         {
             var reply = await RequestAsync(AuthenticateRequest(session, deviceId));
             Assert.Equal(WildCatMsgType.AuthenticateResponse, reply.msgType);
-            var response = reply.GetData<OptionalResponse<AuthenticationResponse>>();
+            var response = reply.GetPayload<OptionalResponse<AuthenticationResponse>>();
             Assert.True(response.isSuccesful, response.errorMsg);
             return response.msg;
         }
@@ -219,7 +219,7 @@ namespace WildCat.Tests
                         frame.Write(buffer, 0, result.Count);
                     } while (!result.EndOfMessage);
 
-                    var message = new WildCatMessageBase(frame.ToArray());
+                    var message = WireCodec.Decode(frame.ToArray());
                     lock (received)
                         received.Add(message);
                     incoming.Writer.TryWrite(message);

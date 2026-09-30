@@ -121,16 +121,11 @@ namespace WildCat.Scripting
         }
 
         /// <summary>
-        /// Gets server time
+        /// The server's time, in UTC.
         /// </summary>
         public Task<DateTime> GetTime()
         {
-            return CallAsync(async _ =>
-            {
-                var time = await grainFactory.GetGrain<ITimeService>(Guid.Empty).GetServerTime();
-                //TODO fix the interface to return date and time
-                return DateTime.Parse(time);
-            });
+            return CallAsync(_ => grainFactory.GetGrain<ITimeService>(Guid.Empty).GetServerTime());
         }
 
         /// <summary>

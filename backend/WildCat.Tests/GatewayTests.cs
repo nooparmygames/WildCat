@@ -51,7 +51,7 @@ namespace WildCat.Tests
             Assert.Equal(expectedType, reply.msgType);
             Assert.True(reply.hasRequestID);
             Assert.Equal(requestId, reply.requestID);
-            var response = reply.GetData<OptionalResponse<EmptyMessage>>();
+            var response = reply.GetPayload<OptionalResponse<EmptyMessage>>();
             Assert.False(response.isSuccesful);
             Assert.Equal(errorCode, response.errorCode);
             Assert.Equal(errorMessage, response.errorMsg);
@@ -98,7 +98,7 @@ namespace WildCat.Tests
             await alice.SendAsync(userMessage);
             var relayed = await bob.WaitForAsync(m => m.msgType == UserMessageType, "the relayed user message");
             Assert.False(relayed.hasAuthData);
-            Assert.Equal("move 3 4", relayed.GetData<StringMessage>().value);
+            Assert.Equal("move 3 4", relayed.GetPayload<StringMessage>().value);
 
             // Relays reach Bob in order, so anything forged would have arrived before the user message.
             Assert.DoesNotContain(bob.Received, m => forged.Contains(m.msgType));
@@ -159,7 +159,7 @@ namespace WildCat.Tests
             var login = await client.LoginWithDeviceAsync(session, TestSetup.UniqueId("device"));
             reply = await client.GetNameAsync(session.ToString());
             Assert.Equal(WildCatMsgType.GetNameResponse, reply.msgType);
-            Assert.True(reply.GetData<OptionalResponse<StringMessage>>().isSuccesful);
+            Assert.True(reply.GetPayload<OptionalResponse<StringMessage>>().isSuccesful);
             Assert.False(string.IsNullOrEmpty(login.userId));
         }
 
@@ -215,7 +215,7 @@ namespace WildCat.Tests
                 var reply = await client.WaitForAsync(m => m.hasRequestID && m.requestID == requests[i].requestID,
                     $"the reply to request {i}");
                 Assert.Equal(requests[i].msgType + 1, reply.msgType);
-                var response = reply.GetData<OptionalResponse<EmptyMessage>>();
+                var response = reply.GetPayload<OptionalResponse<EmptyMessage>>();
                 Assert.False(response.isSuccesful);
                 if (i < 3)
                     Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, response.errorMsg);
@@ -228,7 +228,7 @@ namespace WildCat.Tests
             {
                 var reply = await other.RequestAsync(other.AuthenticateRequest(Guid.NewGuid(), "d"));
                 Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage,
-                    reply.GetData<OptionalResponse<EmptyMessage>>().errorMsg);
+                    reply.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             }
 
             // One attempt comes back every 10 seconds.
@@ -237,7 +237,7 @@ namespace WildCat.Tests
             AssertError(early, WildCatMsgType.AuthenticateResponse, early.requestID, 1, FrontEndServer.TooManyAuthAttemptsMessage);
             time.Advance(TimeSpan.FromSeconds(10));
             var allowed = await client.RequestAsync(client.AuthenticateRequest(Guid.NewGuid(), "d"));
-            Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, allowed.GetData<OptionalResponse<EmptyMessage>>().errorMsg);
+            Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, allowed.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             var limited = await client.RequestAsync(client.AuthenticateRequest(Guid.NewGuid(), "d"));
             AssertError(limited, WildCatMsgType.AuthenticateResponse, limited.requestID, 1, FrontEndServer.TooManyAuthAttemptsMessage);
 
@@ -261,7 +261,7 @@ namespace WildCat.Tests
             foreach (var request in requests)
             {
                 var reply = await client.WaitForAsync(m => m.hasRequestID && m.requestID == request.requestID, "a reply");
-                errors.Add(reply.GetData<OptionalResponse<EmptyMessage>>().errorMsg);
+                errors.Add(reply.GetPayload<OptionalResponse<EmptyMessage>>().errorMsg);
             }
 
             Assert.All(errors.Take(5), e => Assert.NotEqual(FrontEndServer.TooManyAuthAttemptsMessage, e));
@@ -325,7 +325,7 @@ namespace WildCat.Tests
             // Logging the first player out left the session alone: the second player is using it.
             var reply = await client.GetNameAsync(session.ToString());
             Assert.Equal(WildCatMsgType.GetNameResponse, reply.msgType);
-            var name = reply.GetData<OptionalResponse<StringMessage>>();
+            var name = reply.GetPayload<OptionalResponse<StringMessage>>();
             Assert.True(name.isSuccesful, name.errorMsg);
             Assert.Equal("Second", name.msg.value);
         }
@@ -351,12 +351,12 @@ namespace WildCat.Tests
             var tooMany = Remove(5);
             var reply = await client.RequestAsync(tooMany);
             Assert.Equal(WildCatMsgType.RemoveInventoryItemResponse, reply.msgType);
-            var failed = reply.GetData<OptionalResponse<GetInventoryResponseMessage>>();
+            var failed = reply.GetPayload<OptionalResponse<GetInventoryResponseMessage>>();
             Assert.False(failed.isSuccesful);
             Assert.Equal(1, failed.errorCode);
 
             reply = await client.RequestAsync(Remove(2));
-            var removed = reply.GetData<OptionalResponse<GetInventoryResponseMessage>>();
+            var removed = reply.GetPayload<OptionalResponse<GetInventoryResponseMessage>>();
             Assert.True(removed.isSuccesful, removed.errorMsg);
             Assert.Equal(new[] { ("gem", 1) }, removed.msg.items);
         }

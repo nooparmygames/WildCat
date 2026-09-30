@@ -8,24 +8,29 @@ namespace WildCat.Gateway
     public static class RelayFrame
     {
         /// <summary>
-        /// Returns a copy of a client frame that is safe to pass on to the other players: the same
-        /// message type, request id (flag and value), game target and payload bytes, but without
-        /// the sender's session ticket. Relaying the ticket let any player in the match act as the
-        /// sender.
+        /// Encodes a copy of a client's game message that is safe to pass on to the other players:
+        /// the same message type, request id (flag and value), game target and payload bytes, but
+        /// without the sender's session ticket. Relaying the ticket let any player in the match act
+        /// as the sender.
         /// </summary>
         /// <remarks>
-        /// The player target is dropped as well. The relay always goes to every other player in
-        /// the match, and the player target count is written as int32 but read as int16 (a known
-        /// protocol bug), so passing it on would only hand the receiver a frame it cannot parse.
+        /// The player target is dropped as well: the relay always goes to every other player in the
+        /// match.
         /// </remarks>
-        /// <param name="frame">The frame exactly as the client sent it.</param>
+        public static byte[] WithoutTicket(WildCatMessageBase message)
+        {
+            var relayed = WildCatMessageBase.Create(new EmptyMessage(), message.msgType,
+                message.header & ~(WildCatMsgHeader.HasAuthData | WildCatMsgHeader.HasPlayerTarget));
+            relayed.requestID = message.requestID;
+            relayed.game = message.game;
+            relayed.RawData = message.RawData;
+            return WireCodec.Encode(relayed);
+        }
+
+        /// <summary>The same for a frame still in its encoded form.</summary>
         public static byte[] WithoutTicket(byte[] frame)
         {
-            var relayed = new WildCatMessageBase(frame);
-            relayed.header &= ~(WildCatMsgHeader.HasAuthData | WildCatMsgHeader.HasPlayerTarget);
-            relayed.ticket = "";
-            relayed.players = null;
-            return relayed.ToByteArray();
+            return WithoutTicket(WireCodec.Decode(frame));
         }
     }
 }

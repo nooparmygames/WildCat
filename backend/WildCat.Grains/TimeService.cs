@@ -10,9 +10,9 @@ namespace WildCat.Grains
     [Reentrant]
     public class TimeService : Grain, ITimeService
     {
-        public Task<string> GetServerTime()
+        public Task<DateTime> GetServerTime()
         {
-            return Task.FromResult(DateTime.Now.ToUniversalTime().ToString());
+            return Task.FromResult(DateTime.UtcNow);
         }
     }
 }

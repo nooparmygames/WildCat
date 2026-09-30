@@ -24,10 +24,11 @@ namespace WildCat.Tests
         public async Task GetServerTime()
         {
             var ts = GrainFactory.GetGrain<ITimeService>(Guid.Empty);
+            var before = DateTime.UtcNow;
             var result = await ts.GetServerTime();
-            Assert.NotNull(result);
-            var dt = DateTime.Parse(result);
-            Assert.Equal(dt.Year, DateTime.Now.Year);
+            var after = DateTime.UtcNow;
+            Assert.Equal(DateTimeKind.Utc, result.Kind);
+            Assert.InRange(result, before, after);
         }
     }
 }

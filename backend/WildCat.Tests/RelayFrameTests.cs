@@ -24,13 +24,13 @@ namespace WildCat.Tests
             var original = WildCatMessageBase.CreateWithGameTarget(
                 new StringMessage { value = "move 3 4" }, UserMessageType, WildCatMsgHeader.normal, GameId, Ticket);
             original.SetRequestID(42);
-            byte[] frame = original.ToByteArray();
+            byte[] frame = WireCodec.Encode(original);
             Assert.True(ContainsSequence(frame, Encoding.UTF8.GetBytes(Ticket)));
 
             byte[] relayed = RelayFrame.WithoutTicket(frame);
 
             Assert.False(ContainsSequence(relayed, Encoding.UTF8.GetBytes(Ticket)));
-            var parsed = new WildCatMessageBase(relayed);
+            var parsed = WireCodec.Decode(relayed);
             Assert.Equal(UserMessageType, parsed.msgType);
             Assert.False(parsed.hasAuthData);
             Assert.Equal("", parsed.ticket);
@@ -39,7 +39,7 @@ namespace WildCat.Tests
             Assert.True(parsed.HasGameTarget);
             Assert.Equal(GameId, parsed.game);
             Assert.Equal(original.RawData, parsed.RawData);
-            Assert.Equal("move 3 4", parsed.GetData<StringMessage>().value);
+            Assert.Equal("move 3 4", parsed.GetPayload<StringMessage>().value);
 
             // Byte for byte: the original layout minus the ticket string and its flag.
             byte[] expected = Frame(UserMessageType, WildCatMsgHeader.HasGameTarget | WildCatMsgHeader.HasRequestID,
@@ -55,10 +55,10 @@ namespace WildCat.Tests
                 new EmptyMessage(), UserMessageType, WildCatMsgHeader.normal, GameId, Ticket);
             original.RawData = payload;
 
-            byte[] relayed = RelayFrame.WithoutTicket(original.ToByteArray());
+            byte[] relayed = RelayFrame.WithoutTicket(WireCodec.Encode(original));
 
             Assert.Equal(Frame(UserMessageType, WildCatMsgHeader.HasGameTarget, null, GameId, payload), relayed);
-            var parsed = new WildCatMessageBase(relayed);
+            var parsed = WireCodec.Decode(relayed);
             Assert.False(parsed.hasRequestID);
             Assert.False(parsed.hasAuthData);
             Assert.Equal(payload, parsed.RawData);

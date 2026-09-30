@@ -16,12 +16,14 @@ namespace WildCat.Tests
     [Collection(ClusterCollection.Name)]
     public class MessageSerializationTests
     {
+        private static readonly Guid GameOneId = new Guid("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+
         [Fact]
         public void FindMatchRequestSerialization()
         {
             FindMatchRequest req = new FindMatchRequest("game1", 200, 3);
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.FindMatchRequest, WildCatMsgHeader.normal);
-            var data = msg.GetData<FindMatchRequest>();
+            var data = msg.GetPayload<FindMatchRequest>();
             Assert.Equal(data.matchType, req.matchType);
             Assert.Equal(data.skill, req.skill);
             Assert.Equal(data.waitTime, req.waitTime);
@@ -32,16 +34,16 @@ namespace WildCat.Tests
         {
             FindMatchRequest req = new FindMatchRequest("game1", 200, 3);
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.FindMatchRequest, WildCatMsgHeader.buffered);
-            var bytes = msg.ToByteArray();
-            WildCatMessageBase deserializedMessage = new WildCatMessageBase(bytes);
+            var bytes = WireCodec.Encode(msg);
+            WildCatMessageBase deserializedMessage = WireCodec.Decode(bytes);
             Assert.Equal(msg.msgType, deserializedMessage.msgType);
             Assert.Equal(msg.header, deserializedMessage.header);
             Assert.Equal(msg.hasAuthData, deserializedMessage.hasAuthData);
             Assert.Equal(msg.ticket, deserializedMessage.ticket);
             Assert.True(string.IsNullOrEmpty(deserializedMessage.ticket));
             Assert.False(deserializedMessage.hasAuthData);
-            var d1 = msg.GetData<FindMatchRequest>();
-            var d2 = deserializedMessage.GetData<FindMatchRequest>();
+            var d1 = msg.GetPayload<FindMatchRequest>();
+            var d2 = deserializedMessage.GetPayload<FindMatchRequest>();
             Assert.Equal(d1.matchType, d2.matchType);
             Assert.Equal(d1.skill, d2.skill);
             Assert.Equal(d1.waitTime, d2.waitTime);
@@ -52,16 +54,16 @@ namespace WildCat.Tests
         {
             FindMatchRequest req = new FindMatchRequest("game1", 200, 3);
             WildCatMessageBase msg = WildCatMessageBase.CreateWithAuthData(req, WildCatMsgType.FindMatchRequest, WildCatMsgHeader.buffered, "random ticket");
-            var bytes = msg.ToByteArray();
-            WildCatMessageBase deserializedMessage = new WildCatMessageBase(bytes);
+            var bytes = WireCodec.Encode(msg);
+            WildCatMessageBase deserializedMessage = WireCodec.Decode(bytes);
             Assert.Equal(msg.msgType, deserializedMessage.msgType);
             Assert.Equal(msg.header, deserializedMessage.header);
             Assert.Equal(msg.hasAuthData, deserializedMessage.hasAuthData);
             Assert.Equal(msg.ticket, deserializedMessage.ticket);
             Assert.True(deserializedMessage.hasAuthData);
             Assert.False(string.IsNullOrEmpty(deserializedMessage.ticket));
-            var d1 = msg.GetData<FindMatchRequest>();
-            var d2 = deserializedMessage.GetData<FindMatchRequest>();
+            var d1 = msg.GetPayload<FindMatchRequest>();
+            var d2 = deserializedMessage.GetPayload<FindMatchRequest>();
             Assert.Equal(d1.matchType, d2.matchType);
             Assert.Equal(d1.skill, d2.skill);
             Assert.Equal(d1.waitTime, d2.waitTime);
@@ -74,8 +76,8 @@ namespace WildCat.Tests
         {
             FindMatchRequest req = new FindMatchRequest("game1", 200, 3);
             WildCatMessageBase msg = WildCatMessageBase.CreateWithGameTarget(req, WildCatMsgType.FindMatchRequest, WildCatMsgHeader.buffered, "game1", "random ticket");
-            var bytes = msg.ToByteArray();
-            WildCatMessageBase deserializedMessage = new WildCatMessageBase(bytes);
+            var bytes = WireCodec.Encode(msg);
+            WildCatMessageBase deserializedMessage = WireCodec.Decode(bytes);
             Assert.Equal(msg.msgType, deserializedMessage.msgType);
             Assert.Equal(msg.header, deserializedMessage.header);
             Assert.Equal(msg.hasAuthData, deserializedMessage.hasAuthData);
@@ -84,8 +86,8 @@ namespace WildCat.Tests
             Assert.False(string.IsNullOrEmpty(msg.game));
             Assert.True(deserializedMessage.hasAuthData);
             Assert.False(string.IsNullOrEmpty(deserializedMessage.ticket));
-            var d1 = msg.GetData<FindMatchRequest>();
-            var d2 = deserializedMessage.GetData<FindMatchRequest>();
+            var d1 = msg.GetPayload<FindMatchRequest>();
+            var d2 = deserializedMessage.GetPayload<FindMatchRequest>();
             Assert.Equal(d1.matchType, d2.matchType);
             Assert.Equal(d1.skill, d2.skill);
             Assert.Equal(d1.waitTime, d2.waitTime);
@@ -112,7 +114,7 @@ namespace WildCat.Tests
                     Description = "should i? really?!?"
                 };
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.FindMatchResponse, WildCatMsgHeader.normal);
-            var data = msg.GetData<CreateEnvironmentRequest>();
+            var data = msg.GetPayload<CreateEnvironmentRequest>();
             Assert.Equal(data.FirstName, resp.FirstName);
             Assert.Equal(data.LastName, resp.LastName);
             Assert.Equal(data.PasswordHash, resp.PasswordHash);
@@ -135,7 +137,7 @@ namespace WildCat.Tests
 
 
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.FindMatchResponse, WildCatMsgHeader.normal);
-            var data = msg.GetData<CreateEnvironmentResponse>();
+            var data = msg.GetPayload<CreateEnvironmentResponse>();
             Assert.Equal(data.GameKey, gk);
             Assert.Equal(data.DeveloperKey, dk);
         }
@@ -144,9 +146,9 @@ namespace WildCat.Tests
         public void FindMatchResponseSerialization()
         {
             FindMatchResponse resp =
-                new FindMatchResponse("game1", "nothing", new string[] { "first", "second" });
+                new FindMatchResponse(GameOneId, "nothing", new string[] { "first", "second" });
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.FindMatchResponse, WildCatMsgHeader.normal);
-            var data = msg.GetData<FindMatchResponse>();
+            var data = msg.GetPayload<FindMatchResponse>();
             Assert.Equal(data.gameId, resp.gameId);
             Assert.Equal(data.data, resp.data);
             Assert.Equal(data.players, resp.players);
@@ -181,7 +183,7 @@ namespace WildCat.Tests
                 new SetCloudDataRequest { key = "k", value = "v" };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<SetCloudDataRequest>();
+            var data = msg.GetPayload<SetCloudDataRequest>();
             Assert.Equal(data.key, req.key);
             Assert.Equal(data.value, req.value);
         }
@@ -195,7 +197,7 @@ namespace WildCat.Tests
                 new LeaderBoardEntry { playerId = "p", userName = "n", score = 13, entryTime = DateTime.Now };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<LeaderBoardEntry>();
+            var data = msg.GetPayload<LeaderBoardEntry>();
             Assert.Equal(data.playerId, req.playerId);
             Assert.Equal(data.userName, req.userName);
             Assert.Equal(data.entryTime.Second, req.entryTime.Second);
@@ -215,7 +217,7 @@ namespace WildCat.Tests
             req.playerProperties.Add("p2", new Dictionary<string, byte[]> { { "pl", new byte[] { 1, 2 } } });
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.MatchRejoinSyncEvent, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<MatchSyncEventData>();
+            var data = msg.GetPayload<MatchSyncEventData>();
             Assert.Equal(data.Game, req.Game);
             Assert.Equal(data.playerProperties.Count, req.playerProperties.Count);
             Assert.Equal(data.playerProperties["p2"]["pl"][1], req.playerProperties["p2"]["pl"][1]);
@@ -230,7 +232,7 @@ namespace WildCat.Tests
                 new FriendlistEntry { userId = "u1", name = "king", status = OnlineStatus.Online, data = new Dictionary<string, string> { { "k", "v" } } };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<FriendlistEntry>();
+            var data = msg.GetPayload<FriendlistEntry>();
             Assert.Equal(data.userId, req.userId);
             Assert.Equal(data.name, req.name);
             Assert.Equal(data.status, req.status);
@@ -246,7 +248,7 @@ namespace WildCat.Tests
                 new FriendInvitation { OtherPlayerId = "u1", otherPlayerName = "king", creationTime = DateTime.Now, data = new byte[] { 1, 2, 3 } };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<FriendInvitation>();
+            var data = msg.GetPayload<FriendInvitation>();
             Assert.Equal(data.OtherPlayerId, req.OtherPlayerId);
             Assert.Equal(data.otherPlayerName, req.otherPlayerName);
             Assert.Equal(data.creationTime.Second, req.creationTime.Second);
@@ -265,7 +267,7 @@ namespace WildCat.Tests
             req.invitations.Add(inv);
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<FriendInvitationCollection>();
+            var data = msg.GetPayload<FriendInvitationCollection>();
             Assert.Equal(data.invitations[0].OtherPlayerId, req.invitations[0].OtherPlayerId);
             Assert.Equal(data.invitations[0].otherPlayerName, req.invitations[0].otherPlayerName);
             Assert.Equal(data.invitations[0].creationTime.Second, req.invitations[0].creationTime.Second);
@@ -283,7 +285,7 @@ namespace WildCat.Tests
             list.receivedInvitations.invitations.Add(new FriendInvitation());
             WildCatMessageBase msg = WildCatMessageBase.Create(list, WildCatMsgType.SetCloudDataRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<FriendlistCollection>();
+            var data = msg.GetPayload<FriendlistCollection>();
             Assert.Equal(2, data.friends.Count);
             Assert.True(data.sentInvitation.invitations.Count == 0 && data.receivedInvitations.invitations.Count == 1);
 
@@ -305,7 +307,7 @@ namespace WildCat.Tests
                 new SetLeaderBoardRequest { leaderBoardName = "global", score = 13 };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetLeaderboardRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<SetLeaderBoardRequest>();
+            var data = msg.GetPayload<SetLeaderBoardRequest>();
             Assert.Equal(data.leaderBoardName, req.leaderBoardName);
             Assert.Equal(data.score, req.score);
         }
@@ -317,7 +319,7 @@ namespace WildCat.Tests
                 new GetLeaderBoardRequest { leaderBoardName = "l1", type = GetLeaderBoardRequest.RequestType.Top, count = 10, offset = 2 };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.SetLeaderboardRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<GetLeaderBoardRequest>();
+            var data = msg.GetPayload<GetLeaderBoardRequest>();
             Assert.Equal(data.leaderBoardName, req.leaderBoardName);
             Assert.Equal(data.count, req.count);
             Assert.Equal(data.offset, req.offset);
@@ -332,7 +334,7 @@ namespace WildCat.Tests
                 { LoginType = LoginType.Device, Id = "AshkanDevice", AutoCreate = true, PasswordHash = "pass", data = new Dictionary<string, string>() };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.AuthenticateRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<AuthenticationRequest>();
+            var data = msg.GetPayload<AuthenticationRequest>();
             Assert.Equal(data.Id, req.Id);
             Assert.Equal(data.LoginType, req.LoginType);
             Assert.Equal(data.PasswordHash, req.PasswordHash);
@@ -347,7 +349,7 @@ namespace WildCat.Tests
                 { LoginType = LoginType.Device, Id = "AshkanDevice", PasswordHash = "pass", data = new Dictionary<string, string>() };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.AuthenticateRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<AddAuthenticationToAccountRequest>();
+            var data = msg.GetPayload<AddAuthenticationToAccountRequest>();
             Assert.Equal(data.Id, req.Id);
             Assert.Equal(data.LoginType, req.LoginType);
             Assert.Equal(data.PasswordHash, req.PasswordHash);
@@ -361,7 +363,7 @@ namespace WildCat.Tests
                 { email = "ac", ticket = "ticket", code = "1234" };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.EmailActivationRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<EmailActivationRequest>();
+            var data = msg.GetPayload<EmailActivationRequest>();
             Assert.Equal(data.email, req.email);
             Assert.Equal(data.code, req.code);
             Assert.Equal(data.ticket, req.ticket);
@@ -379,7 +381,7 @@ namespace WildCat.Tests
                 };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.ExecuteScriptEventResponse, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<ScriptEventExecutionResponseMessage>();
+            var data = msg.GetPayload<ScriptEventExecutionResponseMessage>();
             Assert.True(data.hasReturnValue);
             Assert.Equal(ParamType.IntParam, data.returnType);
             Assert.Equal(12, data.returnValue);
@@ -398,7 +400,7 @@ namespace WildCat.Tests
                 };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.ExecuteScriptEventRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<ScriptEventExecutionRequestMessage>();
+            var data = msg.GetPayload<ScriptEventExecutionRequestMessage>();
             Assert.Equal("s1", data.eventName);
             Assert.Equal(4, data.parameters.Length);
             Assert.Equal(12, data.parameters[0]);
@@ -421,7 +423,7 @@ namespace WildCat.Tests
                 };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.StartChallengeRequest, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<ChallengeMessage>();
+            var data = msg.GetPayload<ChallengeMessage>();
             Assert.Equal("u1", data.Player);
             Assert.Equal("u2",
                          data.PlayerName);
@@ -438,7 +440,7 @@ namespace WildCat.Tests
                 new AuthenticationResponse { name = "name", userId = "id", ticket = "ticket", isNewlyCreated = true };
             WildCatMessageBase msg = WildCatMessageBase.Create(req, WildCatMsgType.AuthenticateResponse, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<AuthenticationResponse>();
+            var data = msg.GetPayload<AuthenticationResponse>();
             Assert.Equal(data.userId, req.userId);
             Assert.Equal(data.ticket, req.ticket);
             Assert.Equal(data.name, req.name);
@@ -449,13 +451,13 @@ namespace WildCat.Tests
         public void SuccessfulResponseSerialization()
         {
             FindMatchResponse resp =
-                new FindMatchResponse("game1", "nothing", new string[] { "first", "second" });
+                new FindMatchResponse(GameOneId, "nothing", new string[] { "first", "second" });
             OptionalResponse<FindMatchResponse> option = new OptionalResponse<FindMatchResponse>();
             option.isSuccesful = true;
             option.msg = resp;
             WildCatMessageBase msg = WildCatMessageBase.Create(option, WildCatMsgType.FindMatchResponse, WildCatMsgHeader.normal);
-            msg.SetData(option);
-            var data = msg.GetData<OptionalResponse<FindMatchResponse>>();
+            msg.SetPayload(option);
+            var data = msg.GetPayload<OptionalResponse<FindMatchResponse>>();
             Assert.True(data.isSuccesful);
             Assert.Equal(data.msg.gameId, resp.gameId);
             Assert.Equal(data.msg.data, resp.data);
@@ -466,15 +468,15 @@ namespace WildCat.Tests
         public void FailedResponseSerialization()
         {
             FindMatchResponse resp =
-                new FindMatchResponse("game1", "nothing", new string[] { "first", "second" });
+                new FindMatchResponse(GameOneId, "nothing", new string[] { "first", "second" });
             OptionalResponse<FindMatchResponse> option = new OptionalResponse<FindMatchResponse>();
             option.isSuccesful = false;
             option.errorCode = 12;
             option.errorMsg = "something went wrong";
             option.msg = resp;
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.FindMatchResponse, WildCatMsgHeader.normal);
-            msg.SetData(option);
-            var data = msg.GetData<OptionalResponse<FindMatchResponse>>();
+            msg.SetPayload(option);
+            var data = msg.GetPayload<OptionalResponse<FindMatchResponse>>();
             Assert.False(data.isSuccesful);
             Assert.Null(data.msg);
             Assert.Equal(data.errorCode, option.errorCode);
@@ -492,7 +494,7 @@ namespace WildCat.Tests
 
             WildCatMessageBase msg = WildCatMessageBase.CreateWithGameTarget(resp, WildCatMsgType.HighestInternal + 1, WildCatMsgHeader.normal, "g1", "t1");
 
-            var data = msg.GetData<EmptyMessage>();
+            var data = msg.GetPayload<EmptyMessage>();
             Assert.Equal("g1", msg.game);
             Assert.Equal("t1", msg.ticket);
         }
@@ -505,7 +507,7 @@ namespace WildCat.Tests
 
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.HighestInternal + 1, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<StringMessage>();
+            var data = msg.GetPayload<StringMessage>();
             Assert.Equal("hi", data.value);
         }
 
@@ -517,7 +519,7 @@ namespace WildCat.Tests
 
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.HighestInternal + 1, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<GuidMessage>();
+            var data = msg.GetPayload<GuidMessage>();
             Assert.Equal(data.value, g);
         }
 
@@ -529,7 +531,7 @@ namespace WildCat.Tests
 
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.HighestInternal + 1, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<IntegerMessage>();
+            var data = msg.GetPayload<IntegerMessage>();
             Assert.Equal(13, data.value);
         }
 
@@ -541,7 +543,7 @@ namespace WildCat.Tests
 
             WildCatMessageBase msg = WildCatMessageBase.Create(resp, WildCatMsgType.HighestInternal + 1, WildCatMsgHeader.normal);
 
-            var data = msg.GetData<RawMessage>();
+            var data = msg.GetPayload<RawMessage>();
             Assert.Equal(data.value, new byte[] { 13, 13, 15 });
         }
 

@@ -9,6 +9,7 @@ namespace WildCat.Interfaces
 {
     public interface ITimeService : IGrainWithGuidKey
     {
-        Task<string> GetServerTime();
+        /// <summary>The server's clock, in UTC.</summary>
+        Task<DateTime> GetServerTime();
     }
 }

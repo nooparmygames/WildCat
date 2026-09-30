@@ -1,9 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    The wire protocol shared with the Unity SDK. tools/sync-protocol.sh copies every .cs file here
+    except ServerOnly/ into unity-sdk/Assets/Backend/Plugins/Protocol, so the source has to compile
+    in Unity 6: netstandard2.1, C# 9 at most, no nullable annotations, no Orleans, ASP.NET or
+    Newtonsoft references, and no assembly attributes in .cs files (put them here instead).
+  -->
   <PropertyGroup>
-    <!-- Kept on netstandard2.0 with no Orleans references so the Unity SDK can share the protocol. -->
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WildCat.Tests" />
+  </ItemGroup>
 
 </Project>

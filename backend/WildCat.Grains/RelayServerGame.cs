@@ -61,7 +61,7 @@ namespace WildCat.Grains
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
                     new GameFinishedEvent { Game = primary, FinishedWithDisconnect = true }, WildCatMsgType.GameFinishedEvent, WildCatMsgHeader.normal);
-                await SendFinishDataToAllPlayers(EVENT_CHANNEL, msg.ToByteArray());
+                await SendFinishDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
                 return true;
             }
             else
@@ -76,7 +76,7 @@ namespace WildCat.Grains
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
                     new MatchPlayerEventData { Game = primary, Player = player.GetPrimaryKeyString() }, WildCatMsgType.GamePlayerRemovedEvent, WildCatMsgHeader.normal);
-                await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, msg.ToByteArray());
+                await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, WireCodec.Encode(msg));
                 return false;
             }
         }
@@ -93,7 +93,7 @@ namespace WildCat.Grains
                 var primary = this.GetPrimaryKey(out extended);
                 var msg = WildCatMessageBase.Create(
                     new GameFinishedEvent { Game = primary, FinishedWithDisconnect = false }, WildCatMsgType.GameFinishedEvent, WildCatMsgHeader.normal);
-                await SendFinishDataToAllPlayers(EVENT_CHANNEL, msg.ToByteArray());
+                await SendFinishDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
             }
             await player.GameFinished(this.AsReference<IRelayServerGame>());
         }
@@ -153,7 +153,7 @@ namespace WildCat.Grains
             var msg = WildCatMessageBase.Create(
                 new PlayerAddedToGameEvent { Game = primary, Player = playerName },
                 WildCatMsgType.GamePlayerAddedEvent, WildCatMsgHeader.normal);
-            await SendPlayerAddedDataToAllPlayers(EVENT_CHANNEL, msg.ToByteArray());
+            await SendPlayerAddedDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
         }
 
         //Called by player
@@ -191,8 +191,8 @@ namespace WildCat.Grains
             var syncMsg = WildCatMessageBase.Create(
                 syncData,
                 WildCatMsgType.MatchRejoinSyncEvent, WildCatMsgHeader.normal);
-            await SendPlayerAddedDataToAllPlayers(EVENT_CHANNEL, msg.ToByteArray());
-            await SendDataToPlayers(EVENT_CHANNEL, syncMsg.ToByteArray(), new RelayServerGamePlayerState[] { playerState }, false);
+            await SendPlayerAddedDataToAllPlayers(EVENT_CHANNEL, WireCodec.Encode(msg));
+            await SendDataToPlayers(EVENT_CHANNEL, WireCodec.Encode(syncMsg), new RelayServerGamePlayerState[] { playerState }, false);
         }
 
         public Task SendToAllBut(IPlayer player, int channelId, byte[] data)
@@ -264,7 +264,7 @@ namespace WildCat.Grains
                     value = value
                 },
                 WildCatMsgType.MatchPropertyChangedEvent, WildCatMsgHeader.normal);
-                await SendDataToPlayers(EVENT_CHANNEL, propertyChangeMsg.ToByteArray(), State.Players, false);
+                await SendDataToPlayers(EVENT_CHANNEL, WireCodec.Encode(propertyChangeMsg), State.Players, false);
             }
         }
 
@@ -283,7 +283,7 @@ namespace WildCat.Grains
                     value = value
                 },
                 WildCatMsgType.MatchPropertyChangedEvent, WildCatMsgHeader.normal);
-                await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, msg.ToByteArray());
+                await SendDataToAllPlayersExceptOne(player, EVENT_CHANNEL, WireCodec.Encode(msg));
             }
         }
 

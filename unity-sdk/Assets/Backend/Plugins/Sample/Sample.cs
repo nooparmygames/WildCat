@@ -67,24 +67,18 @@ public class Sample : MonoBehaviour
     {
         public Vector3 msg;
         
-        public override void Serialize(BinaryWriter writer)
+        public override void Serialize(WireWriter writer)
         {
-            var xByte = BitConverter.GetBytes(msg[0]);
-            var yByte = BitConverter.GetBytes(msg[1]);
-            var zByte = BitConverter.GetBytes(msg[2]);
-            var data = new Byte[12];
-            xByte.CopyTo(data, 0);
-            yByte.CopyTo(data, 4);
-            zByte.CopyTo(data, 8);
-            writer.WriteBytesFull(data);
+            writer.WriteSingle(msg.x);
+            writer.WriteSingle(msg.y);
+            writer.WriteSingle(msg.z);
         }
 
-        public override void Deserialize(BinaryReader reader)
+        public override void Deserialize(WireReader reader)
         {
-            var data = reader.ReadBytesAndSize();
-            msg.x = BitConverter.ToSingle(data, 0);
-            msg.y = BitConverter.ToSingle(data, 4);
-            msg.z = BitConverter.ToSingle(data, 8);
+            msg.x = reader.ReadSingle();
+            msg.y = reader.ReadSingle();
+            msg.z = reader.ReadSingle();
         }
     }
 
@@ -448,15 +442,8 @@ public class Sample : MonoBehaviour
         };
         BackendPlatform.Instance.OnMatchPropertyChanged += (gm, key, val) =>
         {
-            using (System.IO.MemoryStream str = new System.IO.MemoryStream(val))
-            {
-                using (System.IO.BinaryReader nr = new System.IO.BinaryReader(str))
-                {
-                    IntegerMessage intmsg = new IntegerMessage();
-                    intmsg.Deserialize(nr);
-                    Debug.Log("received game prop " + intmsg.value.ToString());
-                }
-            }
+            IntegerMessage intmsg = WireCodec.DecodePayload<IntegerMessage>(val);
+            Debug.Log("received game prop " + intmsg.value.ToString());
         };
 
         BackendPlatform.Instance.OnFriendshipAccepted += friend => StartCoroutine(UpdateFriends());
@@ -580,7 +567,7 @@ public class Sample : MonoBehaviour
 
     private void UpdateOtherPlayer(WildCatMessageBase x)
     {
-        var data = x.GetData<Vector3Message>();
+        var data = x.GetPayload<Vector3Message>();
         if (other == null)
         {
             other = Instantiate(prefab) as GameObject;

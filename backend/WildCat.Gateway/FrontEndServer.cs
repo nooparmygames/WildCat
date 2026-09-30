@@ -231,7 +231,7 @@ namespace WildCat.Gateway
             var isReliable = true;
             var channelId = 0;
 
-            WildCatMessageBase msg = new WildCatMessageBase(message);
+            WildCatMessageBase msg = WireCodec.Decode(message);
 
             // Sign-in requests check a password or a code, so each connection gets a small
             // allowance of them. The check runs before any grain call.
@@ -470,10 +470,8 @@ namespace WildCat.Gateway
         {
             var response = new OptionalResponse<EmptyMessage>();
             response.Fail(errorMessage, errorCode);
-            var returning = WildCatMessageBase.Create(response, WildCatMsgType.ErrorMsg, WildCatMsgHeader.normal);
-            if (request.hasRequestID)
-                returning.SetRequestID(request.requestID);
-            return Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.ErrorMsg, request);
+            return Send(connectionId, WireCodec.Encode(returning));
         }
 
         /// <summary>
@@ -486,8 +484,8 @@ namespace WildCat.Gateway
             // A failed response carries no payload, so the payload type does not matter on the wire.
             var response = new OptionalResponse<EmptyMessage>();
             response.Fail(errorMessage, errorCode);
-            var returning = WildCatMessageBase.CreateWithRequestID(response, responseType, request.header, request.requestID);
-            return Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, responseType, request);
+            return Send(connectionId, WireCodec.Encode(returning));
         }
 
         #region Proccessors
@@ -495,7 +493,7 @@ namespace WildCat.Gateway
         private async Task ProcessSetPublisherDataByDeveloperMessage(SessionGameInfo session, IPlayer player,
             int connectionId, int channelId, WildCatMessageBase msg)
         {
-            var request = msg.GetData<SetPublisherDataRequest>();
+            var request = msg.GetPayload<SetPublisherDataRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -514,12 +512,8 @@ namespace WildCat.Gateway
                 response.Fail(x.Message, -1);
             }
 
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.SetPublisherDataResponse_S,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetPublisherDataResponse_S, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetInventoryRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -528,7 +522,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var name = msg.GetData<StringMessage>();
+            var name = msg.GetPayload<StringMessage>();
             OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
             try
             {
@@ -547,12 +541,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetInventory Error: {x.ToString()}", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetInventoryResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetInventoryResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetInventoryUnlockTimeRequest(SessionGameInfo session, IPlayer player,
@@ -561,7 +551,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var name = msg.GetData<StringMessage>();
+            var name = msg.GetPayload<StringMessage>();
             OptionalResponse<GetInventoryUnlockTimeResponseMessage> response =
                 new OptionalResponse<GetInventoryUnlockTimeResponseMessage>();
             try
@@ -580,12 +570,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetInventoryUnlockTime Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetInventoryUnlockTimeResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetInventoryUnlockTimeResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessUnlockInventoryRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -594,7 +580,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var name = msg.GetData<StringMessage>();
+            var name = msg.GetPayload<StringMessage>();
             OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
             try
             {
@@ -613,12 +599,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"UnlockInventory Error: {x.ToString()}", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.UnlockInventoryResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.UnlockInventoryResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         /// <summary>
@@ -634,12 +616,8 @@ namespace WildCat.Gateway
             // A failed response carries no payload, so the payload type does not matter on the wire.
             var response = new OptionalResponse<EmptyMessage>();
             response.Fail(ClientGrantRejectedMessage, 1);
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                responseType,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, responseType, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessRemoveInventoryRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -648,7 +626,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var req = msg.GetData<RemoveItemInventoryRequestMessage>();
+            var req = msg.GetPayload<RemoveItemInventoryRequestMessage>();
             OptionalResponse<GetInventoryResponseMessage> response = new OptionalResponse<GetInventoryResponseMessage>();
             try
             {
@@ -684,12 +662,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"RemoveInventoryRequest Error: {x.ToString()}", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.RemoveInventoryItemResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.RemoveInventoryItemResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task<(string, int)[]> GetInventoryItems(IPlayerInventory inv)
@@ -719,7 +693,7 @@ namespace WildCat.Gateway
         private async Task ProcessGetPublisherDataByDeveloperMessage(SessionGameInfo session, IPlayer player,
             int connectionId, int channelId, WildCatMessageBase msg)
         {
-            var request = msg.GetData<GetPublisherDataRequest>();
+            var request = msg.GetPayload<GetPublisherDataRequest>();
             OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
             try
             {
@@ -737,19 +711,15 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, "GetPublisherData Error:", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPublisherDataResponse_S,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublisherDataResponse_S, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
 
         private async Task ProcessInitializeSessionMessage(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg)
         {
-            var request = msg.GetData<InitializeSessionRequest>();
+            var request = msg.GetPayload<InitializeSessionRequest>();
             OptionalResponse<GuidMessage> response = new OptionalResponse<GuidMessage>();
             try
             {
@@ -769,12 +739,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, "InitializeSession Error:", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.InitializeSessionResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.InitializeSessionResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         //Only game messages are supported for now
@@ -853,12 +819,10 @@ namespace WildCat.Gateway
                     }
                 }
 
-                WildCatMessageBase returning = WildCatMessageBase.CreateWithGameTarget(response,
-                    WildCatMsgType.LeaveGameResponse, WildCatMsgHeader.normal, msg.game, "");
-                returning.SetRequestID(msg.requestID);
+                WildCatMessageBase returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.LeaveGameResponse, msg);
                 await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
                 {
-                    player = player, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
+                    player = player, connectionId = connectionId, channelId = channelId, data = WireCodec.Encode(returning),
                     eventType = PlayerConnectionMessage.EventType.DataTransfer
                 });
             }
@@ -867,7 +831,7 @@ namespace WildCat.Gateway
         private async Task ProcessStartChallengeMessage(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket, bool reliable, int count)
         {
-            ChallengeMessage challengeData = msg.GetData<ChallengeMessage>();
+            ChallengeMessage challengeData = msg.GetPayload<ChallengeMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -900,18 +864,14 @@ namespace WildCat.Gateway
                     response.Fail(x.Message, -1);
                 }
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.StartChallengeResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.StartChallengeResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessAcceptChallengeMessage(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket, bool reliable, int count)
         {
-            ChallengeMessage challengeData = msg.GetData<ChallengeMessage>();
+            ChallengeMessage challengeData = msg.GetPayload<ChallengeMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -942,18 +902,14 @@ namespace WildCat.Gateway
                     response.Fail(x.Message, -1);
                 }
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.AcceptChallengeResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.AcceptChallengeResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessDenyChallengeMessage(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket, bool reliable, int count)
         {
-            ChallengeMessage challengeData = msg.GetData<ChallengeMessage>();
+            ChallengeMessage challengeData = msg.GetPayload<ChallengeMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -979,18 +935,14 @@ namespace WildCat.Gateway
                     response.Fail(x.Message, -1);
                 }
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.DenyChallengeResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.DenyChallengeResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessCreateNewAccountRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg)
         {
-            var request = msg.GetData<CreateAccountRequest>();
+            var request = msg.GetPayload<CreateAccountRequest>();
             OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
             try
             {
@@ -1034,18 +986,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"Login Error: {x}", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.CreateNewAccountResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.CreateNewAccountResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessEmailActivationRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg)
         {
-            var request = msg.GetData<EmailActivationRequest>();
+            var request = msg.GetPayload<EmailActivationRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1068,18 +1016,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"Login Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.EmailActivationResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.EmailActivationResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessSetMatchPropertyRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<SetMatchPropertyData>();
+            var request = msg.GetPayload<SetMatchPropertyData>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1095,18 +1039,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetMatchProperty Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.SetMatchPropertyResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetMatchPropertyResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessRejoinMatchRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<GuidMessage>();
+            var request = msg.GetPayload<GuidMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1120,18 +1060,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"RejoinMatch Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.RejoinMatchResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.RejoinMatchResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPlayerPendingMatchesRequest(SessionGameInfo session, IPlayer player,
             int connectionId, int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<EmptyMessage>();
+            var request = msg.GetPayload<EmptyMessage>();
             OptionalResponse<PendingMatchesCollectionData> response = new OptionalResponse<PendingMatchesCollectionData>();
             try
             {
@@ -1152,18 +1088,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetPendingMatches Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPlayerMatchesResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerMatchesResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPlayerChallengesRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<EmptyMessage>();
+            var request = msg.GetPayload<EmptyMessage>();
             OptionalResponse<ChallengeRequestsMessage> response = new OptionalResponse<ChallengeRequestsMessage>();
             try
             {
@@ -1197,12 +1129,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetChalenges Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPlayerChallengesResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerChallengesResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessFindMatchRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -1211,7 +1139,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var request = msg.GetData<FindMatchRequest>();
+            var request = msg.GetPayload<FindMatchRequest>();
 
             var mm = orleansClient.GetGrain<ICustomMatchMaker>(session.GameKey, request.matchType, null);
             string gk = "";
@@ -1241,8 +1169,7 @@ namespace WildCat.Gateway
             }
 
             var returningMsg =
-                WildCatMessageBase.CreateWithRequestID(response, WildCatMsgType.FindMatchResponse, msg.header,
-                    msg.requestID);
+                WildCatMessageBase.CreateResponse(response, WildCatMsgType.FindMatchResponse, msg);
             if (response.isSuccesful)
             {
                 //TODO remove this and make it none automatic
@@ -1252,7 +1179,7 @@ namespace WildCat.Gateway
 
             await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
-                player = player, connectionId = connectionId, channelId = channelId, data = returningMsg.ToByteArray(),
+                player = player, connectionId = connectionId, channelId = channelId, data = WireCodec.Encode(returningMsg),
                 eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
         }
@@ -1260,7 +1187,7 @@ namespace WildCat.Gateway
         private async Task ProcessSetNameRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringMessage>();
+            var request = msg.GetPayload<StringMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1272,18 +1199,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetName Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.SetNameResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetNameResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessHeartBeatRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<EmptyMessage>();
+            var request = msg.GetPayload<EmptyMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1295,18 +1218,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetName Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.HeartBeatResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.HeartBeatResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetFriendsRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<GetFriendsRequestMessage>();
+            var request = msg.GetPayload<GetFriendsRequestMessage>();
             OptionalResponse<FriendlistCollection> response = new OptionalResponse<FriendlistCollection>();
             try
             {
@@ -1358,12 +1277,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetFriends Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetFriendsResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetFriendsResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessInviteFriendsRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -1372,7 +1287,7 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(connectionId);
             if(playerInfo == null)
                 return;
-            var request = msg.GetData<InviteFriendRequest>();
+            var request = msg.GetPayload<InviteFriendRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1428,18 +1343,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"Invite friend Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.InviteFriendResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.InviteFriendResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessAcceptFriendsRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringAndByteArrayMessage>();
+            var request = msg.GetPayload<StringAndByteArrayMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1453,18 +1364,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"Accept friendship Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.AcceptFriendResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.AcceptFriendResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessDenyFriendsRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringAndByteArrayMessage>();
+            var request = msg.GetPayload<StringAndByteArrayMessage>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1478,18 +1385,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"Deny friendship Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.DenyFriendResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.DenyFriendResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessAddAuthMechanismToAccountRequest(SessionGameInfo session, IPlayer player,
             int connectionId, int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<AddAuthenticationToAccountRequest>();
+            var request = msg.GetPayload<AddAuthenticationToAccountRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1519,18 +1422,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetName Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.AddAuthMechanismToAccountResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.AddAuthMechanismToAccountResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetCloudDataRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringMessage>();
+            var request = msg.GetPayload<StringMessage>();
             OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
             try
             {
@@ -1545,18 +1444,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetCloudDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetCloudDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPublicCloudDataRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringMessage>();
+            var request = msg.GetPayload<StringMessage>();
             OptionalResponse<GetPublicCloudDataResponse> response = new OptionalResponse<GetPublicCloudDataResponse>();
             try
             {
@@ -1572,18 +1467,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetPublicCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPublicCloudDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublicCloudDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPlayerPublicCloudDataRequest(SessionGameInfo session, IPlayer player,
             int connectionId, int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<GetPlayerPublicCloudDataRequest>();
+            var request = msg.GetPayload<GetPlayerPublicCloudDataRequest>();
             OptionalResponse<GetPlayerPublicCloudDataResponse> response =
                 new OptionalResponse<GetPlayerPublicCloudDataResponse>();
             try
@@ -1600,18 +1491,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetPlayerPublicCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPlayerPublicCloudDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerPublicCloudDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPublisherDataRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringMessage>();
+            var request = msg.GetPayload<StringMessage>();
             OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
             try
             {
@@ -1627,18 +1514,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPublisherDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPublisherDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetLeaderBoardRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<GetLeaderBoardRequest>();
+            var request = msg.GetPayload<GetLeaderBoardRequest>();
             OptionalResponse<GetLeaderBoardResponse> response = new OptionalResponse<GetLeaderBoardResponse>();
             try
             {
@@ -1670,12 +1553,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetLeaderBoardRequest Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetLeaderboardResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetLeaderboardResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private static void FillReturningLeaderBoardEntries(GetLeaderBoardResponse responseToSend,
@@ -1696,7 +1575,7 @@ namespace WildCat.Gateway
         private async Task ProcessSetCloudDataRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<SetCloudDataRequest>();
+            var request = msg.GetPayload<SetCloudDataRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1708,18 +1587,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.SetCloudDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetCloudDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessSetPublicCloudDataRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<SetCloudDataRequest>();
+            var request = msg.GetPayload<SetCloudDataRequest>();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1731,18 +1606,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetPublicCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.SetPublicCloudDataResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.SetPublicCloudDataResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessExecuteScriptEventRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<ScriptEventExecutionRequestMessage>();
+            var request = msg.GetPayload<ScriptEventExecutionRequestMessage>();
             OptionalResponse<ScriptEventExecutionResponseMessage> response =
                 new OptionalResponse<ScriptEventExecutionResponseMessage>();
             try
@@ -1768,22 +1639,18 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"SetCloudData Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.ExecuteScriptEventResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.ExecuteScriptEventResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetServerTimeRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
+            OptionalResponse<DateTimeMessage> response = new OptionalResponse<DateTimeMessage>();
             try
             {
                 var time = await orleansClient.GetGrain<ITimeService>(Guid.Empty).GetServerTime();
-                response.Succeed(new StringMessage
+                response.Succeed(new DateTimeMessage
                 {
                     value = time
                 });
@@ -1793,12 +1660,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetServerTimeRequest Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetServerTimeResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetServerTimeResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetNameRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -1818,18 +1681,14 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetNameRequest Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetNameResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetNameResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         private async Task ProcessGetPlayerNameRequest(SessionGameInfo session, IPlayer player, int connectionId,
             int channelId, WildCatMessageBase msg, Guid ticket)
         {
-            var request = msg.GetData<StringMessage>();
+            var request = msg.GetPayload<StringMessage>();
             OptionalResponse<StringMessage> response = new OptionalResponse<StringMessage>();
             try
             {
@@ -1844,12 +1703,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"GetPlayerNameRequest Error: ", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.GetPlayerNameResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.GetPlayerNameResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         #endregion
@@ -1872,7 +1727,7 @@ namespace WildCat.Gateway
                 return;
             bool tryLoggingIn = false;
             bool isNewlyCreated = false;
-            var request = msg.GetData<AuthenticationRequest>();
+            var request = msg.GetPayload<AuthenticationRequest>();
             string account = null;
             OptionalResponse<AuthenticationResponse> response = new OptionalResponse<AuthenticationResponse>();
             try
@@ -1975,12 +1830,8 @@ namespace WildCat.Gateway
                 _Logger.LogError((int) msg.msgType, $"*Login Error: {x.ToString()}", x);
                 response.Fail(x.Message, -1);
             }
-            var returning = WildCatMessageBase.CreateWithRequestID
-            (response,
-                WildCatMsgType.AuthenticateResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
+            var returning = WildCatMessageBase.CreateResponse(response, WildCatMsgType.AuthenticateResponse, msg);
+            await Send(connectionId, WireCodec.Encode(returning));
         }
 
         /// <summary>
@@ -2189,7 +2040,7 @@ namespace WildCat.Gateway
         //    {
         //        await playerInfo.connectionStream.OnNextAsync(new PlayerConnectionMessage
         //        {
-        //            player = player, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
+        //            player = player, connectionId = connectionId, channelId = channelId, data = WireCodec.Encode(returning),
         //            eventType = PlayerConnectionMessage.EventType.DataTransfer
         //        });
         //    }
@@ -2341,7 +2192,7 @@ namespace WildCat.Gateway
             await connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
                 player = Player, connectionId = ConnectionId, channelId = 0,
-                data = returning.ToByteArray(), eventType = PlayerConnectionMessage.EventType.DataTransfer
+                data = WireCodec.Encode(returning), eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
         }
 
@@ -2384,7 +2235,7 @@ namespace WildCat.Gateway
             WildCatMessageBase returning = WildCatMessageBase.Create(response, msgType, WildCatMsgHeader.normal);
             connectionStream.OnNextAsync(new PlayerConnectionMessage
             {
-                player = Player, connectionId = ConnectionId, channelId = 0, data = returning.ToByteArray(),
+                player = Player, connectionId = ConnectionId, channelId = 0, data = WireCodec.Encode(returning),
                 eventType = PlayerConnectionMessage.EventType.DataTransfer
             });
             return Task.CompletedTask;
