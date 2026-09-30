@@ -13,9 +13,5 @@
       ]
     }
   ],
-  "isPlayfab": false,
-  "dbAddress": "localhost",
-  "dbName": "Apadana",
-  "dbUser": "admin",
-  "dbPassword": ""
+  "isPlayfab": false
 }

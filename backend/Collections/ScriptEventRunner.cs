@@ -16,11 +16,11 @@ namespace ScriptingAPI
         private string player;
         private string gameKey;
 
-        public override Task OnActivateAsync()
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             var gameKeyGuid = this.GetPrimaryKey(out player);
             gameKey = gameKeyGuid.ToString();
-            return base.OnActivateAsync();
+            return base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<object> Run(ISession session, string eventName, params object[] args)

@@ -1,21 +1,28 @@
-FROM mcr.microsoft.com/dotnet/core/runtime:2.2-stretch-slim AS base
-WORKDIR /app
+# Build context is the backend/ directory (see backend/docker-compose.yml):
+#   docker build -f Silo/Dockerfile -t silo .
+# The image runs the silo with the co-hosted WebSocket gateway on port 5000 (/ws).
 
-FROM mcr.microsoft.com/dotnet/core/sdk:2.2-stretch AS build
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:5000
+EXPOSE 5000
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+COPY ["Directory.Build.props", "Directory.Packages.props", "./"]
 COPY ["Silo/Silo.csproj", "Silo/"]
+COPY ["Collections/Collections.csproj", "Collections/"]
 COPY ["Interfaces/Interfaces.csproj", "Interfaces/"]
 COPY ["Messages/Messages.csproj", "Messages/"]
-COPY ["Collections/Collections.csproj", "Collections/"]
+COPY ["FrontEnd/FrontEnd.csproj", "FrontEnd/"]
 RUN dotnet restore "Silo/Silo.csproj"
 COPY . .
-WORKDIR "/src/Silo"
-RUN dotnet build "Silo.csproj" -c Release -o /app/build
-
-FROM build AS publish
-RUN dotnet publish "Silo.csproj" -c Release -o /app/publish
+WORKDIR /src/Silo
+RUN dotnet publish "Silo.csproj" -c $BUILD_CONFIGURATION -o /app/publish --no-restore /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
+USER $APP_UID
 ENTRYPOINT ["dotnet", "Silo.dll"]

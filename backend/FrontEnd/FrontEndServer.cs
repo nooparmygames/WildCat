@@ -33,7 +33,7 @@ namespace FrontEnd
             playerConnectionMapper = new Dictionary<IPlayer, int>();
             gameServerConnections = new Dictionary<int, GameServerInfo>();
             orleansClient = clusterClient;
-            streamProvider = orleansClient.GetStreamProvider("SMS");
+            streamProvider = orleansClient.GetStreamProvider(StreamNames.PROVIDER_NAME);
             this._Logger = logger;
         }
 
@@ -137,8 +137,8 @@ namespace FrontEnd
             var isReliable = true;
             var channelId = 0;
             var connectionStream =
-                streamProvider.GetStream<UNetConnectionDataTransferMessage>(Guid.Empty,
-                    GetConnectionGrainId(connectionId));
+                streamProvider.GetStream<UNetConnectionDataTransferMessage>(
+                    StreamNames.PlayerConnection(GetConnectionGrainId(connectionId)));
 
             ApadanaMessageBase msg = new ApadanaMessageBase(message);
             try
@@ -599,8 +599,7 @@ namespace FrontEnd
             if (readItems != null && readItems.items != null)
             {
                 var tasks = readItems.items.Select(async x => ((await x.Item.GetName()), x.Count)).ToArray();
-                await Task.WhenAll(tasks);
-                (string, int)[] stuff = tasks.Select(x => x.Result).ToArray();
+                (string, int)[] stuff = await Task.WhenAll(tasks);
                 return stuff;
             }
             else
@@ -613,8 +612,7 @@ namespace FrontEnd
         {
             var readItems = await inv.Unlock();
             var tasks = readItems.Select(async x => ((await x.Item.GetName()), x.Count)).ToArray();
-            await Task.WhenAll(tasks);
-            (string, int)[] stuff = tasks.Select(x => x.Result).ToArray();
+            (string, int)[] stuff = await Task.WhenAll(tasks);
             return stuff;
         }
 
@@ -2110,7 +2108,8 @@ namespace FrontEnd
             playerInfo.ConnectionId = connectionId;
             playerInfo.GameKey = gameKey;
             playerInfo.connectionStream =
-                streamProvider.GetStream<UNetConnectionDataTransferMessage>(Guid.Empty, p.GetPrimaryKeyString());
+                streamProvider.GetStream<UNetConnectionDataTransferMessage>(
+                    StreamNames.PlayerConnection(p.GetPrimaryKeyString()));
             await UnRegisterConnectionStream(playerInfo.connectionStream, playerInfo.ConnectionId);
             await RegisterConnectionStream(playerInfo.connectionStream);
             await SubscribeForStreams(playerInfo);
@@ -2138,10 +2137,10 @@ namespace FrontEnd
 
         private async Task SubscribeForStreams(PlayerInfo playerInfo)
         {
-            playerInfo.ChallengesStream = streamProvider.GetStream<ChallengeEventData>(playerInfo.GameKey,
-                StreamNames.CHALLENGE_EVENTS_STREAM_NAME + playerInfo.Player.GetPrimaryKeyString());
-            playerInfo.friendListStream = streamProvider.GetStream<FriendListEventData>(playerInfo.GameKey,
-                StreamNames.FRIEND_EVENTS_STREAM_NAME + playerInfo.Player.GetPrimaryKeyString());
+            playerInfo.ChallengesStream = streamProvider.GetStream<ChallengeEventData>(
+                StreamNames.ChallengeEvents(playerInfo.GameKey, playerInfo.Player.GetPrimaryKeyString()));
+            playerInfo.friendListStream = streamProvider.GetStream<FriendListEventData>(
+                StreamNames.FriendEvents(playerInfo.GameKey, playerInfo.Player.GetPrimaryKeyString()));
             try
             {
                 var handles = await playerInfo.ChallengesStream.GetAllSubscriptionHandles();

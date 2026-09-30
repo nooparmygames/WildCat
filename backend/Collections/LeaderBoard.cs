@@ -12,11 +12,11 @@ namespace Collections
     public class LeaderBoard : Grain<LeaderBoardState>, ILeaderBoard
     {
         private List<LeaderBoardEntry> _leaderBoardData;
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             _leaderBoardData = await CreateList();
             //_IsCreated = State.IsCreated;
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         private async Task<List<LeaderBoardEntry>> CreateList()

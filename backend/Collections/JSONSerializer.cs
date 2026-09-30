@@ -151,35 +151,20 @@ namespace Collections
         }
     }
 
+    /// <summary>
+    /// Newtonsoft converter for grain references. Orleans 3.x wrote them through GrainReference's
+    /// ISerializable implementation and re-bound them with IGrainFactory.BindGrainReference; neither
+    /// exists in Orleans 7+, so a reference is now written as its grain id and interface type and
+    /// recreated through the grain factory when read.
+    /// </summary>
     public class GrainReferenceConverter : JsonConverter
     {
         private static readonly Type AddressableType = typeof(IAddressable);
         private readonly IGrainFactory grainFactory;
-        private readonly JsonSerializer internalSerializer;
 
         public GrainReferenceConverter(IGrainFactory grainFactory)
         {
             this.grainFactory = grainFactory;
-
-            // Create a serializer for internal serialization which does not have a specified GrainReference serializer.
-            // This internal serializer will use GrainReference's ISerializable implementation for serialization and deserialization.
-            this.internalSerializer = JsonSerializer.Create(new JsonSerializerSettings
-            {
-                TypeNameHandling = TypeNameHandling.All,
-                PreserveReferencesHandling = PreserveReferencesHandling.None,
-                DateFormatHandling = DateFormatHandling.IsoDateFormat,
-                DefaultValueHandling = DefaultValueHandling.Ignore,
-                MissingMemberHandling = MissingMemberHandling.Ignore,
-                NullValueHandling = NullValueHandling.Ignore,
-                ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
-                Formatting = Formatting.None,
-                Converters =
-                {
-                    new IPAddressConverter(),
-                    new IPEndPointConverter(),
-                    new SiloAddressConverter(),
-                }
-            });
         }
 
         public override bool CanConvert(Type objectType)
@@ -189,21 +174,24 @@ namespace Collections
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            // Serialize the grain reference using the internal serializer.
-            this.internalSerializer.Serialize(writer, value);
+            if (value is not GrainReference reference)
+                throw new JsonSerializationException($"Only grain references can be written, not {value.GetType()}");
+            writer.WriteStartObject();
+            writer.WritePropertyName("Id");
+            writer.WriteValue(reference.GrainId.ToString());
+            writer.WritePropertyName("Interface");
+            writer.WriteValue(reference.InterfaceType.ToString());
+            writer.WriteEndObject();
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
-            // Deserialize using the internal serializer which will use the concrete GrainReference implementation's
-            // ISerializable constructor.
-            var result = this.internalSerializer.Deserialize(reader, objectType);
-            var grainRef = result as IAddressable;
-            if (grainRef == null) return result;
-
-            // Bind the deserialized grain reference to the runtime.
-            this.grainFactory.BindGrainReference(grainRef);
-            return grainRef;
+            if (reader.TokenType == JsonToken.Null)
+                return null;
+            JObject jo = JObject.Load(reader);
+            var grainId = GrainId.Parse(jo["Id"].Value<string>());
+            var interfaceType = GrainInterfaceType.Create(jo["Interface"].Value<string>());
+            return this.grainFactory.GetGrain(grainId, interfaceType);
         }
     }
 }

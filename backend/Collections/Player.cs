@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Interfaces;
 using Orleans;
 using Orleans.Concurrency;
+using Orleans.Runtime;
 using Orleans.Streams;
 
 namespace Collections
@@ -19,7 +20,7 @@ namespace Collections
         private const string STATUS_ACTIVE = "active";
 
 
-        private IDisposable timer;
+        private IGrainTimer timer;
         private IBackendStorageServer storageManager;
         private string entityType;
         private string entityId;
@@ -35,7 +36,7 @@ namespace Collections
             storageManager = storage;
         }
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             isPlayfabRun = await storageManager.IsPlayfabRun();
             if (isPlayfabRun && entityId == null)
@@ -50,9 +51,9 @@ namespace Collections
                 entityId = entityRes.entityId;
                 entityType = entityRes.entityType;
             }
-            streamProvider = GetStreamProvider("SMS");
-            connectionStream = streamProvider.GetStream<UNetConnectionDataTransferMessage>(Guid.Empty, this.GetPrimaryKeyString());
-            await base.OnActivateAsync();
+            streamProvider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            connectionStream = streamProvider.GetStream<UNetConnectionDataTransferMessage>(StreamNames.PlayerConnection(this.GetPrimaryKeyString()));
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public Task SendDataToConnection(IPlayer player, int channel, byte[] data)
@@ -72,10 +73,10 @@ namespace Collections
             }
         }
 
-        public override Task OnDeactivateAsync()
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
             timer?.Dispose();
-            return base.OnDeactivateAsync();
+            return base.OnDeactivateAsync(reason, cancellationToken);
         }
 
         #region MATCH
@@ -216,7 +217,12 @@ namespace Collections
             }
 
             timer?.Dispose();
-            timer = RegisterTimer(OnTimer, null, TimeSpan.FromSeconds(0), TimeSpan.FromSeconds(10));
+            timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
+            {
+                DueTime = TimeSpan.FromSeconds(0),
+                Period = TimeSpan.FromSeconds(10),
+                Interleave = true
+            });
             await WriteStateAsync();
         }
 

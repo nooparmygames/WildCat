@@ -21,8 +21,8 @@ namespace Collections
         public async Task<List<string>> GetPlayerNames()
         {
             var nameTasks = State.Players.Select(x => x.player.GetPlayerName()).ToList();
-            await Task.WhenAll(nameTasks);
-            return nameTasks.Select(x => x.Result).ToList();
+            var names = await Task.WhenAll(nameTasks);
+            return names.ToList();
         }
 
         public Task<RelayServerPlayerGameStatus> GetPlayerStatus(IPlayer player)

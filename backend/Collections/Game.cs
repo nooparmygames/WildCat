@@ -12,11 +12,11 @@ namespace Collections
     {
         
         
-        public override Task OnActivateAsync()
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             State.maxPlayers = 2; //TODO make it flexible 
             //subsManager = new ObserverSubscriptionManager<IGameObserver>();
-            return base.OnActivateAsync();
+            return base.OnActivateAsync(cancellationToken);
         }
 
         public Task<PlayerStateInGame> GetPlayerState(IPlayer player)
@@ -87,15 +87,15 @@ namespace Collections
                 List<Task<float>> promises = new List<Task<float>>();
                 for (int i = 0; i < State.Players.Count; ++i)
                     promises.Add(GetPlayerValue(State.Players[i].player));
-                await Task.WhenAll(promises);
+                var values = await Task.WhenAll(promises);
                 
                 //check for draw draw
-                if (promises[0].Result == promises[1].Result)
+                if (values[0] == values[1])
                 {
                     result = GameFinalState.FinishedInDraw;
                 }
                 //First plaeyr won
-                else if (promises[0].Result > promises[1].Result)
+                else if (values[0] > values[1])
                 {
                     result = GameFinalState.FinishedWithWinner;
                     winner = State.Players[0].player;

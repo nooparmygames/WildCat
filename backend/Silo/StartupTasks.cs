@@ -23,9 +23,10 @@ namespace SiloHost
 
         public async Task Execute(CancellationToken cancellationToken)
         {
-            if (System.IO.File.Exists(CONFIG_PATH))
+            var configPath = FindConfigFile();
+            if (configPath != null)
             {
-                string json = System.IO.File.ReadAllText(CONFIG_PATH);
+                string json = System.IO.File.ReadAllText(configPath);
                 var devs = Newtonsoft.Json.JsonConvert.DeserializeObject<DeveloperConfigCollection>(json);
                 if (devs.developers.Count>1)
                 {
@@ -46,10 +47,6 @@ namespace SiloHost
                     key = Guid.NewGuid(),
                     games = new List<DeveloperConfig.GameInfo> { new DeveloperConfig.GameInfo { name = "g1", key = Guid.NewGuid() } }
                 });
-                ccc.dbAddress = "mongodb://localhost";
-                ccc.dbName = "Apadana";
-                ccc.dbPassword = "";
-                ccc.dbUser = "admin";
                 try
                 {
                     string json = Newtonsoft.Json.JsonConvert.SerializeObject(ccc);
@@ -62,6 +59,18 @@ namespace SiloHost
                 }
             }
             await grainFactory.GetGrain<ITimedExecutionManager>("main").StartRunningTasks();
+        }
+
+        /// <summary>
+        /// Looks for the seed file in the working directory first, then next to the binaries
+        /// (the project copies it to the output directory). Returns null when neither exists.
+        /// </summary>
+        private static string FindConfigFile()
+        {
+            if (System.IO.File.Exists(CONFIG_PATH))
+                return CONFIG_PATH;
+            var besideBinaries = System.IO.Path.Combine(AppContext.BaseDirectory, CONFIG_PATH);
+            return System.IO.File.Exists(besideBinaries) ? besideBinaries : null;
         }
 
         private async Task CreateDeveloperAndGame(DeveloperConfig config)
@@ -128,10 +137,6 @@ namespace SiloHost
     {
         public List<DeveloperConfig> developers;
         public bool isPlayfab;
-        public string dbAddress;
-        public string dbName;
-        public string dbUser;
-        public string dbPassword;
     }
 
     public class DeveloperConfig

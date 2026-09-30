@@ -1,89 +1,11 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.HttpsPolicy;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace FrontEnd
 {
-    public class Startup
-    {
-        public Startup(IConfiguration configuration)
-        {
-            Configuration = configuration;
-        }
-
-        public IConfiguration Configuration { get; }
-
-        // This method gets called by the runtime. Use this method to add services to the container.
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddSingleton<IFrontEndServer, FrontEndServer>();
-            services.AddRazorPages();
-        }
-
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IFrontEndServer frontEndServer)
-        {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
-            else
-            {
-                app.UseExceptionHandler("/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-                app.UseHsts();
-            }
-            app.UseWebSockets();
-            app.Use(async (context, next) =>
-            {
-                Console.WriteLine("$$$$$$$$$$$$" + context.Request.Path + " " + context.WebSockets.IsWebSocketRequest);
-                if (context.Request.Path == "/ws")
-                {
-                    if (context.WebSockets.IsWebSocketRequest)
-                    {
-                        WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                        ConnectionProcessor c = new ConnectionProcessor(webSocket, ConnectionProcessor.GetNextId());
-                        c.OnConnected += frontEndServer.PlayerConnected;
-                        c.OnDisConnected += frontEndServer.PlayerDisconnected;
-                        await c.Process(context, webSocket);
-                    }
-                    else
-                    {
-                        context.Response.StatusCode = 400;
-                    }
-                }
-                else
-                {
-                    await next();
-                }
-
-            });
-            //app.UseHttpsRedirection();
-            app.UseStaticFiles();
-            
-
-            //app.UseRouting();
-
-            //app.UseAuthorization();
-
-            //app.UseEndpoints(endpoints =>
-            //{
-            //    endpoints.MapRazorPages();
-            //});
-            
-        }
-    }
-
     /// <summary>
     /// Processes our websocket connections and sends and receives data for them.
     /// This is only the low level processing and parsing of messages and executing logic happens in the FrontEnd class
@@ -117,9 +39,9 @@ namespace FrontEnd
 
         public async Task Process(HttpContext context, WebSocket webSocket)
         {
-            OnConnected?.Invoke(this, ID).Wait();
+            await (OnConnected?.Invoke(this, ID) ?? Task.CompletedTask);
             await ReceiveMessages(webSocket);
-            OnDisConnected?.Invoke(this, ID).Wait();
+            await (OnDisConnected?.Invoke(this, ID) ?? Task.CompletedTask);
         }
 
         private async Task ReceiveMessages(WebSocket webSocket)

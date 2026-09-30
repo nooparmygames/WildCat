@@ -11,9 +11,9 @@ namespace Collections
     public class DeveloperManager : Grain<DeveloperManagerState>, IDeveloperManager
     {
 
-        public override Task OnActivateAsync()
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            return base.OnActivateAsync();
+            return base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<Guid> AddDeveloper(DeveloperState data)

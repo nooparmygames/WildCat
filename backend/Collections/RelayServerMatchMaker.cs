@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Interfaces;
 using Orleans;
 using Orleans.Concurrency;
+using Orleans.Runtime;
 
 namespace Collections
 {
@@ -16,12 +17,12 @@ namespace Collections
         private HashSet<IPlayer> pendingPlayers;
         private Dictionary<string, TaskCompletionSource<FoundRelayMatchResult>> PlayerTasks;
 
-        private IDisposable timer;
+        private IGrainTimer timer;
 
         private string gameKey;
         private GameMode gameMode;
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             string type;
             var gk = this.GetPrimaryKey(out type);
@@ -38,13 +39,18 @@ namespace Collections
             pendingPlayers = new HashSet<IPlayer>();
             PlayerTasks = new Dictionary<string, TaskCompletionSource<FoundRelayMatchResult>>();
             TryRegisterTimer();
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         private void TryRegisterTimer()
         {
             if (timer == null)
-                timer = RegisterTimer(OnTimer, null, TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(CHECK_PERIOD));
+                timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
+                {
+                    DueTime = TimeSpan.FromSeconds(0.1),
+                    Period = TimeSpan.FromSeconds(CHECK_PERIOD),
+                    Interleave = true
+                });
         }
 
         public Task<int> GetOnlinePlayersCount()

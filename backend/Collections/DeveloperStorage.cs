@@ -10,12 +10,12 @@ namespace Collections
     {
         private Guid developerSecret;
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             var developer = GrainFactory.GetGrain<IDeveloper>(this.GetPrimaryKey());
             var developerData = await developer.GetDeveloperData();
             developerSecret = developerData.DeveloperSecret;
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         private void AssertIsSecretCorrect(Guid secret)

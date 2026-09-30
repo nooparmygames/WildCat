@@ -13,14 +13,14 @@ namespace Collections
         private bool isCreated;
 
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             isCreated = State.IsCreated;
             if (isCreated && State.DeveloperSecret == Guid.Empty)
             {
                 await GenerateSecret();
             }
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<Guid> AddGame(GameInfo game)

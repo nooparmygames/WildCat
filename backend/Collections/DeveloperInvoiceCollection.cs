@@ -11,7 +11,7 @@ namespace Collections
     {
 
 #if !MASTER
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             State.Invoices.Add(new InvoiceData
             {
@@ -31,7 +31,7 @@ namespace Collections
                 InvoiceDate = DateTime.Now.AddDays(-7),
                 DueDate = DateTime.Now.AddDays(-4)
             });
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 #endif
 

@@ -1,121 +1,48 @@
-﻿using Collections;
+using Collections;
+using FrontEnd;
 using Interfaces;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Orleans;
 using Orleans.Configuration;
-using Orleans.Hosting;
-using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Hosting;
-using Newtonsoft.Json;
-using Orleans.Providers.MongoDB.Configuration;
+using SiloHost;
 
+// One process hosts the Orleans silo and the WebSocket gateway. UseOrleans is called before the
+// web host is built so the silo starts before Kestrel accepts connections, and the gateway uses the
+// silo's own IClusterClient.
+var builder = WebApplication.CreateBuilder(args);
 
-namespace SiloHost
+builder.UseOrleans(silo =>
 {
-    class Program
+    silo.Configure<ClusterOptions>(o =>
     {
-        private static readonly ManualResetEvent _siloStopped = new ManualResetEvent(false);
-        private static object syncLock;
-        private static bool siloStopping;
-        private static ISiloHost silo;
-        private const string CONFIG_PATH = "devsconfig.json";
+        o.ClusterId = "apadana";
+        o.ServiceId = "apadana";
+    });
 
-        public static Task Main(string[] args)
-        {
-#if !DEBUG
-            var serverAddress = "localhost";
-            var dbName = "Apadana";
-            var userName = "admin";
-            var password = "";
-            var createShardKey = false;   
-            if (System.IO.File.Exists(CONFIG_PATH))
-            {
-                string json = System.IO.File.ReadAllText(CONFIG_PATH);
-                var devs = Newtonsoft.Json.JsonConvert.DeserializeObject<DeveloperConfigCollection>(json);
-                serverAddress = devs.dbAddress;
-                dbName = devs.dbName;
-                userName = devs.dbUser;
-                password = devs.dbPassword;
-            }
-            var connectionString = $"mongodb://{userName}:{password}@{serverAddress}";
-#endif
-            
-            return new HostBuilder()
-                .UseOrleans((ctx, builder) =>
-                {
-                    builder
-                        .AddSimpleMessageStreamProvider("SMS", x => x.Configure(y => y.FireAndForgetDelivery = true))
-                        .Configure<ClusterOptions>(o =>
-                        {
-                            o.ClusterId = "apadana";
-                            o.ServiceId = "apadana";
-                        })
+    // Memory providers and localhost clustering in every environment until the PostgreSQL
+    // providers land (roadmap step 5).
+    silo.UseLocalhostClustering();
+    silo.AddMemoryGrainStorageAsDefault();
+    silo.AddMemoryGrainStorage("blob");
+    silo.AddMemoryGrainStorage("PubSubStore");
+    silo.AddMemoryStreams(StreamNames.PROVIDER_NAME);
+    silo.UseInMemoryReminderService();
+    silo.AddStartupTask<StartupTasks>();
+});
 
-                        .AddMemoryGrainStorage("PubSubStore")
-                        .AddStartupTask<StartupTasks>()
-                        .UseTransactions()
-#if DEBUG
-                        .UseInMemoryReminderService()
-                        .UseLocalhostClustering()
-                        .AddMemoryGrainStorageAsDefault()
-                        .AddMemoryGrainStorage("blob");
+builder.Services.AddSingleton<IBackendStorageServer, PlayfabManager>();
+builder.Services.Configure<ConsoleLifetimeOptions>(options => { options.SuppressStatusMessages = true; });
+builder.Services.AddGameGateway();
 
-#else
-                        .UseMongoDBClient(connectionString)
-                        .UseMongoDBClustering(options =>
-                        {
-                            options.DatabaseName = dbName;
-                            options.Strategy = MongoDBMembershipStrategy.SingleDocument;
-                        })
-                        .UseMongoDBReminders(options =>
-                        {
-                            options.DatabaseName = dbName;
-                            options.CreateShardKeyForCosmos = createShardKey;
-                        })
-                        .AddMongoDBGrainStorage("Default",
-                            options =>
-                            {
-                                options.DatabaseName = dbName;
-                                options.CreateShardKeyForCosmos = createShardKey;
+var app = builder.Build();
 
-                                options.ConfigureJsonSerializerSettings = settings =>
-                                {
-                                    settings.NullValueHandling = NullValueHandling.Include;
-                                    settings.ObjectCreationHandling = ObjectCreationHandling.Replace;
-                                    settings.DefaultValueHandling = DefaultValueHandling.Populate;
-                                };
-                            })
-                        .AddMongoDBGrainStorage("blob",
-                            options =>
-                            {
-                                options.DatabaseName = dbName;
-                                options.CreateShardKeyForCosmos = createShardKey;
-
-                                options.ConfigureJsonSerializerSettings = settings =>
-                                {
-                                    settings.NullValueHandling = NullValueHandling.Include;
-                                    settings.ObjectCreationHandling = ObjectCreationHandling.Replace;
-                                    settings.DefaultValueHandling = DefaultValueHandling.Populate;
-                                };
-                            })
-                        .ConfigureEndpoints(IPAddress.Loopback, 11111, 30000);
-#endif
-                }).ConfigureServices(services =>
-                {
-                    services.AddSingleton<IBackendStorageServer, PlayfabManager>();
-                    services.Configure<ConsoleLifetimeOptions>(options => { options.SuppressStatusMessages = true; });
-                }).ConfigureLogging(logging =>
-                {
-#if DEBUG
-                    logging.AddConsole();
-#else
-                    logging.AddConsole(); logging.AddFilter((s1, s2, level) => level >= LogLevel.Warning);
-#endif
-                }).RunConsoleAsync();
-        }
-        
-    }
+if (!app.Environment.IsDevelopment())
+{
+    app.Logger.LogWarning(
+        "Running in the {Environment} environment with in-memory clustering, grain storage, streams and reminders. " +
+        "All state is lost when the process stops until the PostgreSQL providers are added.",
+        app.Environment.EnvironmentName);
 }
+
+app.UseWebSockets();
+app.MapGameGateway("/ws");
+
+app.Run();

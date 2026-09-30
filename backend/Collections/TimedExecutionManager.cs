@@ -26,10 +26,10 @@ namespace Collections
             return Task.CompletedTask;
         }
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            await RegisterOrUpdateReminder("StartTasks", TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-            await base.OnActivateAsync();
+            await this.RegisterOrUpdateReminder("StartTasks", TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public Task ReceiveReminder(string reminderName, TickStatus status)

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Orleans;
 using Orleans.Concurrency;
 using Interfaces;
+using Orleans.Runtime;
 
 namespace Collections
 {
@@ -12,17 +13,22 @@ namespace Collections
         private ushort receivedAccountingInfoCount = 0;
         private ulong lastStoredMessageCount;
         private ulong lastStoredCallCount;
-        private IDisposable timer;
+        private IGrainTimer timer;
 
-        public override Task OnActivateAsync()
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             string monthString;
             Guid gameKey = this.GetPrimaryKey(out monthString);
 
             State.GameKey = gameKey;
             State.Month = monthString;
-            timer = RegisterTimer(OnTimer, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
-            return base.OnActivateAsync();
+            timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
+            {
+                DueTime = TimeSpan.FromMinutes(10),
+                Period = TimeSpan.FromMinutes(10),
+                Interleave = true
+            });
+            return base.OnActivateAsync(cancellationToken);
         }
 
         private async Task OnTimer(object arg)
@@ -30,7 +36,7 @@ namespace Collections
             await SaveData();
         }
 
-        public override Task OnDeactivateAsync()
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
             if (timer != null)
             {
@@ -39,7 +45,7 @@ namespace Collections
             }
             if (State.MessageCount > 0 || State.CallCount > 0)
                 return WriteStateAsync();
-            return base.OnDeactivateAsync();
+            return base.OnDeactivateAsync(reason, cancellationToken);
         }
 
         public async Task AddAccountingData(ulong callCount, ulong messageCount)

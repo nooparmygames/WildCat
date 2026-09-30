@@ -25,7 +25,7 @@ namespace Collections
             this.storage = storage;
         }
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             string playerId;
             gameKey = this.GetPrimaryKey(out playerId);
@@ -35,10 +35,10 @@ namespace Collections
             {
                  
             }
-            var provider = GetStreamProvider("SMS");
-            friendListEvents = provider.GetStream<FriendListEventData>(gameKey, StreamNames.FRIEND_EVENTS_STREAM_NAME + playerId);
+            var provider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            friendListEvents = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(gameKey, playerId));
             State.Friends.RemoveAll(x => x.Player.GetPrimaryKeyString() == player.GetPrimaryKeyString());
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public Task AddFriend(IPlayer player, string name)
@@ -118,8 +118,9 @@ namespace Collections
             await Task.WhenAll(tasks.Values);
             foreach (var t in tasks)
             {
-                result.publicData.Add(t.Key, t.Value.Result.Item2);
-                result.Friends.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == t.Key).SetState(t.Value.Result.Item1);
+                var publicStrings = await t.Value;
+                result.publicData.Add(t.Key, publicStrings.Item2);
+                result.Friends.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == t.Key).SetState(publicStrings.Item1);
             }
             return result;
         }
@@ -181,7 +182,8 @@ namespace Collections
             return Task.FromResult(State.ReceivedInvitations);
         }
 
-        [AlwaysInterleave]
+        // [AlwaysInterleave] used to sit on this class method. Orleans only honors it on the grain
+        // interface method (3.x ignored it here, 10 rejects it with ORLEANS0001), so it was removed.
         public async Task SetFriendStatus(IPlayer friend, OnlineStatus status)
         {
             var foundFriend = State.Friends.FirstOrDefault(x => x.Player.GetPrimaryKeyString() == friend.GetPrimaryKeyString());
@@ -197,7 +199,7 @@ namespace Collections
             });
         }
 
-        [AlwaysInterleave]
+        // See SetFriendStatus about the removed [AlwaysInterleave].
         public async Task SetStatus(string name,OnlineStatus status)
         {
             this.name = name;

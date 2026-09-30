@@ -14,7 +14,7 @@ namespace ScriptingAPI
         private bool _isCreated;
         private Script<object> _script;
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             _isCreated = State.IsCreated;
             if (_isCreated)
@@ -27,7 +27,7 @@ namespace ScriptingAPI
                 await WriteStateAsync();
             }
 
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         private void AssertIsCreated()

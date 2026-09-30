@@ -6,6 +6,7 @@ using Interfaces;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Concurrency;
+using Orleans.Runtime;
 
 namespace Collections
 {
@@ -21,14 +22,14 @@ namespace Collections
         }
         
         private DateTime startTime;
-        private IDisposable timer;
+        private IGrainTimer timer;
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             startTime = DateTime.Parse(this.GetPrimaryKeyString());
             if (State.state != TimedExecuterState.State.Finished)
                 await GrainFactory.GetGrain<ITimedExecutionManager>("main").AddGroup(startTime);
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public async Task Finish()
@@ -70,7 +71,12 @@ namespace Collections
                 }
                 catch (Exception exception)
                 {
-                    timer = RegisterTimer(OnExecutionTimer, 10, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+                    timer = this.RegisterGrainTimer<object>(OnExecutionTimer, 10, new GrainTimerCreationOptions
+                    {
+                        DueTime = TimeSpan.FromSeconds(10),
+                        Period = TimeSpan.FromSeconds(10),
+                        Interleave = true
+                    });
                 }
             }
             else
@@ -80,11 +86,11 @@ namespace Collections
             isExecuting = false;
         }
 
-        public override Task OnDeactivateAsync()
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
             timer?.Dispose();
             timer = null;
-            return base.OnDeactivateAsync();
+            return base.OnDeactivateAsync(reason, cancellationToken);
         }
 
         private async Task OnExecutionTimer(object obj)

@@ -14,12 +14,12 @@ namespace Collections
         private IAPState state;
         private Guid gameKey;
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             string player;
             gameKey = this.GetPrimaryKey(out player);
             state = await GrainFactory.GetGrain<IIAPVerificationManager>(gameKey).GetInfo();
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<Tuple<VerificationStatus, string>> VerifyCafeBazaar(string product, string Receipt, bool isFirstAtempt = true)

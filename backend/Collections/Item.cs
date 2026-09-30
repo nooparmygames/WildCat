@@ -12,10 +12,10 @@ namespace Collections
     {
         private bool _IsCreated;
 
-        public override Task OnActivateAsync()
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             _IsCreated = State.IsCreated;
-            return base.OnActivateAsync();
+            return base.OnActivateAsync(cancellationToken);
         }
 
         private void AssertIsCreated()

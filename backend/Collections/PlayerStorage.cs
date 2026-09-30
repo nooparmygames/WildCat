@@ -21,7 +21,7 @@ namespace Collections
             this.storage = storage;
         }
 
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             var jsonSettings = OrleansJsonSerializer.GetDefaultSerializerSettings(this.GrainFactory);
             JsonConvert.DefaultSettings = () => jsonSettings;
@@ -43,7 +43,7 @@ namespace Collections
                 (entityId, entityType, gameKey) = await GrainFactory.GetGrain<IPlayer>(playerId).GetPlayfabEntityAndGame();
                 await Load();
             }
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         private async Task Save()

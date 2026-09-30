@@ -1,15 +1,8 @@
-version: '3.4'
-
 services:
   silo:
     image: ${DOCKER_REGISTRY-}silo
     build:
       context: .
       dockerfile: Silo/Dockerfile
-
-  websocketserver:
-    image: ${DOCKER_REGISTRY-}websocketserver
-    build:
-      context: .
-      dockerfile: WebSocketServer/Dockerfile
-
+    ports:
+      - "5000:5000"

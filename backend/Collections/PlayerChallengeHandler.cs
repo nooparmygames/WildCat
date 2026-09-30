@@ -24,20 +24,20 @@ namespace Collections
             this.storage = storage;
         }
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             isPlayfabRun = await storage.IsPlayfabRun();
             string playerId;
             gameKey = this.GetPrimaryKey(out playerId);
 
             player = GrainFactory.GetGrain<IPlayer>(playerId);
-            provider = GetStreamProvider("SMS");
-            challengeEvents = provider.GetStream<ChallengeEventData>(gameKey, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + playerId);
+            provider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            challengeEvents = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, playerId));
             if (isPlayfabRun)
             {
                 
             }
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
         public async Task AcceptChallenge(IPlayer accepter, byte[] data)
         {
@@ -71,7 +71,7 @@ namespace Collections
                 };
 
                 challengeEvents.OnNextAsync(myStreamEventData).Ignore();
-                var otherPlayerStream = provider.GetStream<ChallengeEventData>(gameKey, StreamNames.CHALLENGE_EVENTS_STREAM_NAME + accepter.GetPrimaryKeyString());
+                var otherPlayerStream = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, accepter.GetPrimaryKeyString()));
                 otherPlayerStream.OnNextAsync(accepterStreamEventData).Ignore();
                 GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, accepter.GetPrimaryKeyString(), null).UpdateInReceiveList(player, gameId).Ignore();
             }

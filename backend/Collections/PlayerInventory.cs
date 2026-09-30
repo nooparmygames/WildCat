@@ -19,7 +19,7 @@ namespace Collections
             this.logger = logger;
         }
 
-        public async override Task OnActivateAsync()
+        public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
             if (State.items == null)
             {
@@ -31,7 +31,7 @@ namespace Collections
             {
                 State = Newtonsoft.Json.JsonConvert.DeserializeObject<PlayerInventoryState>(data.Item2);
             }
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public async Task<bool> AddItem(IInventoryItem[] items, int[] counts)

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Interfaces;
 using Orleans;
 using Orleans.Concurrency;
+using Orleans.Runtime;
 
 namespace Collections
 {
@@ -17,11 +18,11 @@ namespace Collections
         private Dictionary<IPlayer, string> opponentNames;
         private Dictionary<string,Tuple<TaskCompletionSource<FoundMatchResult>,DateTime,int>> PlayerTasks;
 
-        private IDisposable timer;
+        private IGrainTimer timer;
         private Random rand;
         private bool isThereAnyNewPlayer = false;
         
-        public override async Task OnActivateAsync()
+        public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             rand = new Random();
             onlinePlayers = new List<PlayerData>();
@@ -30,7 +31,7 @@ namespace Collections
             pendingPlayers = new HashSet<IPlayer>();
             PlayerTasks = new Dictionary<string, Tuple<TaskCompletionSource<FoundMatchResult>, DateTime, int>>();
             TryRegisterTimer();
-            await base.OnActivateAsync();
+            await base.OnActivateAsync(cancellationToken);
         }
 
         public Task<int> GetOnlinePlayersCount()
@@ -41,7 +42,12 @@ namespace Collections
         private void TryRegisterTimer()
         {
             if (timer == null)
-                timer = RegisterTimer(OnTimer, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3));
+                timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
+                {
+                    DueTime = TimeSpan.FromSeconds(1),
+                    Period = TimeSpan.FromSeconds(3),
+                    Interleave = true
+                });
         }
 
         
@@ -81,8 +87,10 @@ namespace Collections
                     try
                     {
                         int opponentELO = await opponent.GetEloScore();
-                        string ext;
-                        var game = await CreateGame(player.Player, opponent, (int)this.GetPrimaryKeyLong(out ext), ext, elo, opponentELO);
+                        // IMatchMaker has a string key. Orleans 3.x GetPrimaryKeyLong(out ext) returned 0 with
+                        // the whole key as ext for such grains; Orleans 10 throws, so pass the 3.x values.
+                        string ext = this.GetPrimaryKeyString();
+                        var game = await CreateGame(player.Player, opponent, 0, ext, elo, opponentELO);
                         var opponentName = opponentNames[player.Player];
                         var playerName = opponentNames[opponent];
                         opponentNames.Remove(player.Player);

@@ -25,7 +25,7 @@ namespace Collections
             throw new SessionExpiredException();
         }
 
-        public async override Task OnDeactivateAsync()
+        public async override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
             try
             {
