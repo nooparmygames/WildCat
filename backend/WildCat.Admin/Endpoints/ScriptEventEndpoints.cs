@@ -10,13 +10,9 @@ namespace WildCat.Admin.Endpoints;
 /// <summary>
 /// A game's server-side script events. The game's event resource manager lists them; each one is a
 /// ScriptEventCompiler grain keyed "{gameKey}_G_{name}" that validates and compiles the C# method.
+/// DELETE takes the event off the list and deletes the grain's state, so game clients that still
+/// call it get an error, as for an event that never existed.
 /// </summary>
-/// <remarks>
-/// IScriptEventCompiler has no way to clear an event, so DELETE takes the event off the game's list
-/// and replaces its script with an empty method without parameters. Game clients that still call it
-/// get a result without a value and none of the old code runs. Clearing the grain for real comes
-/// with the script sandbox work (roadmap step 9).
-/// </remarks>
 internal static class ScriptEventEndpoints
 {
     public const int MaxScriptLength = 100_000;
@@ -34,8 +30,9 @@ internal static class ScriptEventEndpoints
             .Produces<ScriptEventResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
         events.MapDelete("/{name}", Delete)
-            .WithSummary("Takes a script event off the game and replaces its script with an empty method.")
-            .Produces(StatusCodes.Status204NoContent);
+            .WithSummary("Deletes a script event. Game clients that still run it get an error.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
     private static IResourceManager Manager(IGrainFactory grains, GameScope scope) =>
@@ -86,8 +83,10 @@ internal static class ScriptEventEndpoints
         {
             if (exists)
             {
-                // Validate first so a rejected script never replaces the stored one.
-                var validation = await compiler.Validate(request.Script!);
+                // Validate against the new parameter list first, so a rejected script never
+                // replaces the stored one. (Validate would check against the stored parameters and
+                // reject every change to the list.)
+                var validation = await compiler.ValidateWith(parameters, request.Script!);
                 if (!validation.IsValid)
                     return ScriptRejected(validation);
                 await compiler.Edit(parameters, request.Script!);
@@ -100,29 +99,20 @@ internal static class ScriptEventEndpoints
         }
         catch (InvalidOperationException)
         {
-            // Initialize and Edit only say that the script is not valid. The compiler knows the event
-            // name by now, so ask it again for the reason.
-            return ScriptRejected(await compiler.Validate(request.Script!));
+            // Initialize and Edit only say that the script is not valid, so ask the compiler for
+            // the reasons.
+            return ScriptRejected(await compiler.ValidateWith(parameters, request.Script!));
         }
         return TypedResults.Ok(ToResponse(await compiler.GetInfo()));
     }
 
-    private static async Task<IResult> Delete(string name, HttpContext context, IGrainFactory grains, ILoggerFactory loggers)
+    private static async Task<IResult> Delete(string name, HttpContext context, IGrainFactory grains)
     {
         var scope = GameScope.From(context);
         string key = ResourcesUtility.GetEventScriptKey(scope.GameKeyText, name);
         if (!await Manager(grains, scope).RemoveResourceByKey(key))
             return Problems.NotFound("The game has no script event with this name.");
-        try
-        {
-            await grains.GetGrain<IScriptEventCompiler>(key).Edit(new List<EventParameter>(), $"async Task {name}() {{ }}");
-        }
-        catch (InvalidOperationException ex)
-        {
-            // A compiler whose stored script no longer validates cannot activate, so it cannot run
-            // the old code either.
-            loggers.CreateLogger(typeof(ScriptEventEndpoints)).LogWarning(ex, "Script event {Key} could not be emptied", key);
-        }
+        await grains.GetGrain<IScriptEventCompiler>(key).Delete();
         return TypedResults.NoContent();
     }
 

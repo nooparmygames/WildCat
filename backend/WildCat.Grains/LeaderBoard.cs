@@ -2,15 +2,23 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 using System.Linq;
-using Orleans.Providers;
 
 namespace WildCat.Grains
 {
-    [StorageProvider(ProviderName = "blob")]
-    public class LeaderBoard : Grain<LeaderBoardState>, ILeaderBoard
+    public class LeaderBoard : Grain, ILeaderBoard
     {
+        private readonly IPersistentState<LeaderBoardState> state;
+
+        public LeaderBoard([PersistentState(GrainStateNames.LeaderBoard, GrainStorageNames.Blob)] IPersistentState<LeaderBoardState> state)
+        {
+            this.state = state;
+        }
+
+        private LeaderBoardState State => state.State;
+
         private List<LeaderBoardEntry> _leaderBoardData;
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
@@ -25,7 +33,7 @@ namespace WildCat.Grains
             var tasks = new List<Task<List<LeaderBoardEntry>>>();
             for (int i = 0; i < State.NumberOfLists; i++)
             {
-                tasks[i] =  GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
+                tasks[i] =  GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i)).GetEntries();
             }
             var lists = await Task.WhenAll(tasks);
             for (int i = 0; i < lists.Length; i++)
@@ -58,14 +66,14 @@ namespace WildCat.Grains
                 _leaderBoardData.Sort((x, y) => y.Score - x.Score);
                 for (int i = 0; i < _leaderBoardData.Count / State.MaxListLength; i++)
                 {
-                    await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}")
+                    await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i))
                         .WriteEntries(_leaderBoardData.GetRange(i*State.MaxListLength, State.MaxListLength));
                 }
 
                 var lastChunkIndex = ((_leaderBoardData.Count / State.MaxListLength) + 1);
                 if (lastChunkIndex * State.MaxListLength < _leaderBoardData.Count)
                 {
-                    await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{lastChunkIndex}")
+                    await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), lastChunkIndex))
                         .WriteEntries(_leaderBoardData.GetRange(lastChunkIndex*State.MaxListLength, _leaderBoardData.Count - (lastChunkIndex*State.MaxListLength)));
                     State.NumberOfLists = _leaderBoardData.Count / State.MaxListLength + 1;
                 }
@@ -73,7 +81,7 @@ namespace WildCat.Grains
                 {
                     State.NumberOfLists = _leaderBoardData.Count / State.MaxListLength;
                 }
-                await WriteStateAsync();
+                await state.WriteStateAsync();
             }
         }
 
@@ -91,7 +99,7 @@ namespace WildCat.Grains
             List<LeaderBoardEntry> data = new List<LeaderBoardEntry>();
             for (int i = 0; i < State.NumberOfLists; i++)
             {
-                data = await GrainFactory.GetGrain<ILeaderBoardStorage>($"{this.GetPrimaryKeyString()}{i}").GetEntries();
+                data = await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i)).GetEntries();
                 var index = data.FindIndex(x => x.PlayerID == player.GetPrimaryKeyString());
                 if (index >= 0)
                 {
@@ -107,7 +115,7 @@ namespace WildCat.Grains
         public Task FinishLeaderBoard()
         {
             AssertIsCreated();
-            return ClearStateAsync();
+            return state.ClearStateAsync();
         }
 
         public Task<Tuple<int, List<LeaderBoardEntry>>> GetAroundMe(IPlayer player, int count)
@@ -159,7 +167,7 @@ namespace WildCat.Grains
             //State.IsCreated = true;
             State.Name = name;
             //_IsCreated = true;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<string> GetKey()
@@ -186,7 +194,7 @@ namespace WildCat.Grains
                 rewards.Add(new LeaderBoardReward { Item = items[i], Count = itemCounts[i] });
             }
             State.rewards = rewards;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
 
         }
 

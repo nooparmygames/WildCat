@@ -4,12 +4,22 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class ResourceManager : Grain<ResourceManagerState>, IResourceManager
+    public class ResourceManager : Grain, IResourceManager
     {
+        private readonly IPersistentState<ResourceManagerState> state;
+
+        public ResourceManager([PersistentState(GrainStateNames.ResourceManager, GrainStorageNames.Default)] IPersistentState<ResourceManagerState> state)
+        {
+            this.state = state;
+        }
+
+        private ResourceManagerState State => state.State;
+
         public async Task<bool> AddResource(IManagedResource resource)
         {
             string key = await resource.GetKey();
@@ -17,7 +27,7 @@ namespace WildCat.Grains
                 return false;
             string resourceName = await resource.GetName();
             State.resources.Add(key,resourceName);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return true;
         }
 
@@ -57,7 +67,7 @@ namespace WildCat.Grains
             if(State.resources.ContainsKey(key))
             {
                 State.resources.Remove(key);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 return true;
             }
             return false;
@@ -68,7 +78,7 @@ namespace WildCat.Grains
         {
             if (key == null || !State.resources.Remove(key))
                 return false;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return true;
         }
     }

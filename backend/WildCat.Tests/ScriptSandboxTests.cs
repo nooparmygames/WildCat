@@ -102,6 +102,22 @@ async Task<int> run()
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics));
         }
 
+        [Fact]
+        public void AllowsMethodGroupsThatDoNotReadASequence()
+        {
+            // Library method groups without a sequence parameter, and the script's own methods
+            // (whose bodies are guarded), can still be passed as delegates.
+            var result = Validate(@"
+int Total(IEnumerable<int> items) { int t = 0; foreach (var i in items) t += i; return t; }
+int run()
+{
+    Func<int, int> abs = Math.Abs;
+    Func<IEnumerable<int>, int> total = Total;
+    return new List<int> { -1, 2 }.Select(Math.Abs).Sum() + abs(-2) + total(new[] { 1, 2 });
+}");
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics));
+        }
+
         // Validator: rejected escapes, one per test case.
 
         [Theory]
@@ -139,6 +155,11 @@ async Task<int> run()
         [InlineData("int run() { System.GC.Collect(); return 0; }", "System.GC")]
         [InlineData("int run() { var x = new System.Threading.Tasks.Task(() => { }); return 0; }", "Task..ctor")]
         [InlineData("int run() { return ScriptGuard.Probe() ? 1 : 0; }", "WildCat.Scripting.ScriptGuard")]
+        [InlineData("int run() { return ScriptGuard.Enumerate(Enumerable.Range(0, 3)).Count(); }", "WildCat.Scripting.ScriptGuard")]
+        [InlineData("int run() { Func<IEnumerable<int>, int> sum = Enumerable.Sum; return sum(Enumerable.Repeat(1, int.MaxValue)); }", "method group")]
+        [InlineData("int run() { var lists = new List<IEnumerable<int>>(); return lists.Select(Enumerable.Count).Sum(); }", "method group")]
+        [InlineData("int run() { Func<int> count = Enumerable.Repeat(1, int.MaxValue).Count; return count(); }", "method group")]
+        [InlineData("int run() { var f = new Func<IEnumerable<string>, string>(string.Concat); return f(new[] { \"a\" }); }", "method group")]
         public void RejectsEscapes(string code, string expected)
         {
             AssertRejected(Validate(code), expected);

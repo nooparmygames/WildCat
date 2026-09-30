@@ -3,14 +3,24 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using Orleans.Concurrency;
 using WildCat.Interfaces;
 using Orleans.Streams;
 
 namespace WildCat.Grains
 {
-    public class PlayerChallengeHandler : Grain<PlayerChallengesState>, IPlayerChallengeHandler
+    public class PlayerChallengeHandler : Grain, IPlayerChallengeHandler
     {
+        private readonly IPersistentState<PlayerChallengesState> state;
+
+        public PlayerChallengeHandler([PersistentState(GrainStateNames.PlayerChallengeHandler, GrainStorageNames.Default)] IPersistentState<PlayerChallengesState> state)
+        {
+            this.state = state;
+        }
+
+        private PlayerChallengesState State => state.State;
+
         private IPlayer player;
         private Guid gameKey;
         private IAsyncStream<ChallengeEventData> challengeEvents;
@@ -72,7 +82,7 @@ namespace WildCat.Grains
         public async Task RemovedFromReceivedList(IPlayer other)
         {
             State.RequestsReceived.RemoveAll(x => x.Player.GetPrimaryKeyString() == other.GetPrimaryKeyString());
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public Task UpdateInReceiveList(IPlayer other, Guid gameKey)
@@ -82,7 +92,7 @@ namespace WildCat.Grains
             req.Game = gameKey;
             req.State = ChallengeRequestState.Status.Started;
             State.RequestsReceived.Add(req);
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public async Task<IRelayServerGame> CreateGame(IPlayer[] players, string gameName)
@@ -110,7 +120,7 @@ namespace WildCat.Grains
             };
             challengeEvents.OnNextAsync(myStreamEventData).Ignore();
             GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, denyer.GetPrimaryKeyString(), null).RemovedFromReceivedList(player).Ignore();
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         //called by other player's PlayerChallengeHandler

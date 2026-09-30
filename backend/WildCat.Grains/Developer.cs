@@ -4,13 +4,23 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 using Newtonsoft.Json.Linq;
 
 namespace WildCat.Grains
 {
-    public class Developer : Grain<DeveloperState>, IDeveloper
+    public class Developer : Grain, IDeveloper
     {
+        private readonly IPersistentState<DeveloperState> state;
+
+        public Developer([PersistentState(GrainStateNames.Developer, GrainStorageNames.Default)] IPersistentState<DeveloperState> state)
+        {
+            this.state = state;
+        }
+
+        private DeveloperState State => state.State;
+
         private bool isCreated;
 
 
@@ -33,7 +43,7 @@ namespace WildCat.Grains
                 throw new InvalidOperationException("A game with the same name already exists");
             game.Key = Guid.NewGuid();
             State.GameInfos.Add(game);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return game.Key;
         }
 
@@ -46,7 +56,7 @@ namespace WildCat.Grains
                 throw new InvalidOperationException("A game with the same name already exists");
             game.Key = id;
             State.GameInfos.Add(game);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return game.Key;
         }
 
@@ -54,7 +64,7 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             State.DeveloperSecret = Guid.NewGuid();
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return State.DeveloperSecret;
         }
 
@@ -65,7 +75,7 @@ namespace WildCat.Grains
             game.Key = foundGame.Key;
             State.GameInfos.Remove(foundGame);
             State.GameInfos.Add(game);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public async Task<Guid> InitializeSession(Guid gameKey)
@@ -85,7 +95,7 @@ namespace WildCat.Grains
             AssertIsCreated();
             State.FirstName = first;
             State.LastName = last;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         /// <summary>
@@ -99,10 +109,10 @@ namespace WildCat.Grains
                 throw new ArgumentException();
             data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : await PasswordHasher.HashAsync(data.PasswordHash);
             data.DeveloperSecret = Guid.NewGuid();
-            State = data;
+            state.State = data;
             State.IsCreated = true;
             isCreated = true;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public Task<DeveloperState> GetDeveloperData()
@@ -120,7 +130,7 @@ namespace WildCat.Grains
             State.Description = data.Description;
             State.PhoneNumber = data.PhoneNumber;
             State.AdditionalData = data.AdditionalData;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public Task<IEnumerable<GameInfo>> GetGames()
@@ -150,7 +160,7 @@ namespace WildCat.Grains
             if (gameToRemove != null)
             {
                 State.GameInfos.Remove(gameToRemove);
-                return WriteStateAsync();
+                return state.WriteStateAsync();
             }
             else
                 throw new InvalidOperationException("The game " + game + " doesn't exist in the game list");
@@ -172,7 +182,7 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             State.PasswordHash = await PasswordHasher.HashAsync(newPassword);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public Task<bool> IsSecretValid(Guid secret)
@@ -187,27 +197,35 @@ namespace WildCat.Grains
                 return null;
             string code = NewCode();
             State.ActivationCode = NewCodeState(code, ActivationCodeLifetime);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return code;
         }
 
         public async Task<bool> Activate(string code)
         {
             AssertIsCreated();
-            if (State.Status != DeveloperState.DeveloperStatus.NotActivated)
-                return State.Status != DeveloperState.DeveloperStatus.Banned;
+            if (State.Status == DeveloperState.DeveloperStatus.Banned)
+                return false;
 
-            bool valid = CheckCode(State.ActivationCode, code);
-            if (valid)
+            // The code is checked whatever the status, so the answer does not tell a caller without
+            // the code whether the account is active. The code that activated the account stays
+            // until it expires, so opening the activation link again still succeeds.
+            var stored = State.ActivationCode;
+            int failedAttempts = stored?.FailedAttempts ?? 0;
+            bool valid = CheckCode(stored, code);
+            bool changed = stored != null && stored.FailedAttempts != failedAttempts;
+            if (valid && State.Status == DeveloperState.DeveloperStatus.NotActivated)
             {
                 State.Status = DeveloperState.DeveloperStatus.Normal;
-                State.ActivationCode = null;
+                changed = true;
             }
-            else if (State.ActivationCode != null && State.ActivationCode.FailedAttempts >= MaxCodeAttempts)
+            else if (!valid && stored != null && stored.FailedAttempts >= MaxCodeAttempts)
             {
                 State.ActivationCode = null;
+                changed = true;
             }
-            await WriteStateAsync();
+            if (changed)
+                await state.WriteStateAsync();
             return valid;
         }
 
@@ -216,7 +234,7 @@ namespace WildCat.Grains
             AssertIsCreated();
             string code = NewCode();
             State.PasswordResetCode = NewCodeState(code, PasswordResetCodeLifetime);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return code;
         }
 
@@ -226,7 +244,7 @@ namespace WildCat.Grains
             bool valid = CheckCode(State.PasswordResetCode, code);
             if (valid || (State.PasswordResetCode != null && State.PasswordResetCode.FailedAttempts >= MaxCodeAttempts))
                 State.PasswordResetCode = null;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return valid;
         }
 

@@ -98,6 +98,113 @@ namespace WildCat.Tests
             Assert.Equal("l1", await leaderBoard.GetName().WaitAsync(TestSetup.Timeout));
         }
 
+        // The ADO.NET provider keys a row by service id, grain key and state name; the grain class is
+        // not part of the key. The next three tests put two grain classes with the same key side by
+        // side, which only works when every class stores its state under a name of its own.
+
+        [PostgreSqlFact]
+        public async Task DeveloperAndDeveloperStorageWithTheSameKeyKeepTheirOwnState()
+        {
+            var developerKey = await TestSetup.CreateDeveloper(GrainFactory).WaitAsync(TestSetup.Timeout);
+            var developer = GrainFactory.GetGrain<IDeveloper>(developerKey);
+            var storage = GrainFactory.GetGrain<IDeveloperStorage>(developerKey);
+            var data = await developer.GetDeveloperData().WaitAsync(TestSetup.Timeout);
+            await storage.SetString("motd", "hello", data.DeveloperSecret).WaitAsync(TestSetup.Timeout);
+            await developer.ChangeName("Changed", "Later").WaitAsync(TestSetup.Timeout);
+
+            await fixture.Cluster.Deactivate(developer);
+            await fixture.Cluster.Deactivate(storage);
+
+            var reloaded = await developer.GetDeveloperData().WaitAsync(TestSetup.Timeout);
+            Assert.True(reloaded.IsCreated);
+            Assert.Equal(data.Email, reloaded.Email);
+            Assert.Equal("Changed", reloaded.FirstName);
+            Assert.Equal("hello", await storage.GetString("motd").WaitAsync(TestSetup.Timeout));
+            var all = await storage.GetAllStringData(data.DeveloperSecret).WaitAsync(TestSetup.Timeout);
+            Assert.Equal("hello", Assert.Single(all).Value);
+        }
+
+        [PostgreSqlFact]
+        public async Task FriendListAndChallengeHandlerWithTheSameKeyKeepTheirOwnState()
+        {
+            var gameKey = Guid.NewGuid();
+            string playerId = TestSetup.UniqueId("pg-player");
+            var friend = GrainFactory.GetGrain<IPlayer>(TestSetup.UniqueId("pg-friend"));
+            var challenger = GrainFactory.GetGrain<IPlayer>(TestSetup.UniqueId("pg-challenger"));
+            var matchKey = Guid.NewGuid();
+            var friendList = GrainFactory.GetGrain<IPlayerFriendList>(gameKey, playerId, null);
+            var challenges = GrainFactory.GetGrain<IPlayerChallengeHandler>(gameKey, playerId, null);
+
+            await friendList.AddFriend(friend, "a friend").WaitAsync(TestSetup.Timeout);
+            Assert.Equal(ChallengeAcceptionStatus.Received,
+                await challenges.ChallengeRequested(challenger, new byte[] { 1 }, true).WaitAsync(TestSetup.Timeout));
+            // Stores the received request (ChallengeRequested alone only keeps it in memory).
+            await challenges.UpdateInReceiveList(challenger, matchKey).WaitAsync(TestSetup.Timeout);
+            await friendList.AddFriend(challenger, "another friend").WaitAsync(TestSetup.Timeout);
+
+            await fixture.Cluster.Deactivate(friendList);
+            await fixture.Cluster.Deactivate(challenges);
+
+            var friends = await friendList.GetFriends(Array.Empty<string>()).WaitAsync(TestSetup.Timeout);
+            Assert.Equal(
+                new[] { friend.GetPrimaryKeyString(), challenger.GetPrimaryKeyString() },
+                friends.Friends.Select(x => x.Player.GetPrimaryKeyString()).ToArray());
+            var (sent, received) = await challenges.GetChallengeRequests().WaitAsync(TestSetup.Timeout);
+            Assert.Empty(sent);
+            var request = Assert.Single(received);
+            Assert.Equal(challenger.GetPrimaryKeyString(), request.Player.GetPrimaryKeyString());
+            Assert.Equal(matchKey, request.Game);
+            Assert.Equal(ChallengeRequestState.Status.Started, request.State);
+        }
+
+        [PostgreSqlFact]
+        public async Task LeaderBoardChunkAndALeaderBoardNamedLikeItKeepTheirOwnState()
+        {
+            string gameKey = Guid.NewGuid().ToString();
+            string l1 = ResourcesUtility.GetLeaderBoardKey(gameKey, "l1");
+            string l10 = ResourcesUtility.GetLeaderBoardKey(gameKey, "l10");
+            // Chunk 0 of l1 used to have the key of the leaderboard l10 ("{game}_L_l1" + "0").
+            var chunk = GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(l1, 0));
+            var board = GrainFactory.GetGrain<ILeaderBoard>(l10);
+
+            await board.Initialize("l10", DateTime.Now, DateTime.MaxValue, false).WaitAsync(TestSetup.Timeout);
+            await chunk.WriteEntries(new List<LeaderBoardEntry> { new("player-1", "Player One", 42, DateTime.UtcNow) })
+                .WaitAsync(TestSetup.Timeout);
+
+            await fixture.Cluster.Deactivate(board);
+            await fixture.Cluster.Deactivate(chunk);
+
+            var info = await board.GetInfo().WaitAsync(TestSetup.Timeout);
+            Assert.Equal("l10", info.Name);
+            Assert.False(info.AcceptBetterScoresOnly);
+            var entry = Assert.Single(await chunk.GetEntries().WaitAsync(TestSetup.Timeout));
+            Assert.Equal("player-1", entry.PlayerID);
+            Assert.Equal(42, entry.Score);
+        }
+
+        [PostgreSqlFact]
+        public async Task ValuesEqualToTheirTypeDefaultSurviveDeactivation()
+        {
+            // The Orleans JSON settings used to leave out false, 0 and null, so a property whose
+            // constructor sets another value (GameMode.FinishGameWithOneDisconnect = true,
+            // LeaderBoardState.AcceptBetterScoresOnly = true) came back with that value instead.
+            var manager = GrainFactory.GetGrain<IGameModeManager>(Guid.NewGuid());
+            await manager.AddOrUpdateGameMode(new GameMode
+            {
+                Name = "duel",
+                MinPlayers = 2,
+                MaxPlayers = 2,
+                FinishGameWithOneDisconnect = false,
+                Criterias = new List<GameMode.MatchMakingCriteria> { new() { AcceptableThreshold = 0, StartTimeInSeconds = 0 } },
+            }).WaitAsync(TestSetup.Timeout);
+
+            await fixture.Cluster.Deactivate(manager);
+
+            var mode = await manager.GetGameModeData("duel").WaitAsync(TestSetup.Timeout);
+            Assert.False(mode.FinishGameWithOneDisconnect);
+            Assert.Equal(0, Assert.Single(mode.Criterias).AcceptableThreshold);
+        }
+
         [PostgreSqlFact]
         public async Task ReminderTableStoresAndRemovesARow()
         {

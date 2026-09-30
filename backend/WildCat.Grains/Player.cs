@@ -14,8 +14,12 @@ using Orleans.Streams;
 
 namespace WildCat.Grains
 {
-    public class Player : Grain<PlayerState>, IPlayer
+    public class Player : Grain, IPlayer
     {
+        private readonly IPersistentState<PlayerState> state;
+
+        private PlayerState State => state.State;
+
         private const string PASSWORD_KEY = "password";
         private const string STATUS_KEY = "status";
         private const string STATUS_NOT_ACTIVE = "not active";
@@ -31,8 +35,12 @@ namespace WildCat.Grains
         private readonly IEmailSender emailSender;
         private readonly ILogger<Player> logger;
 
-        public Player(IEmailSender emailSender, ILogger<Player> logger)
+        public Player(
+            [PersistentState(GrainStateNames.Player, GrainStorageNames.Default)] IPersistentState<PlayerState> state,
+            IEmailSender emailSender,
+            ILogger<Player> logger)
         {
+            this.state = state;
             this.emailSender = emailSender;
             this.logger = logger;
         }
@@ -53,7 +61,7 @@ namespace WildCat.Grains
             return Task.CompletedTask;
         }
         
-        private async Task OnTimer(object state)
+        private async Task OnTimer(object timerState)
         {
             if ((DateTime.Now - State.LastHeartBeat).TotalSeconds > 20)
             {
@@ -72,7 +80,7 @@ namespace WildCat.Grains
         public Task GameStarted(IRelayServerGame game)
         {
             State.RunningGames.Add(game);
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task GameFinished(IRelayServerGame game)
@@ -86,7 +94,7 @@ namespace WildCat.Grains
                 State.RunningGames.Remove(foundGame);
             }
 
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<int> GetEloScore()
@@ -116,7 +124,7 @@ namespace WildCat.Grains
                     State.RunningGames.RemoveAt(i);
             }
             await Logout();
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         #region AUTH
@@ -181,7 +189,7 @@ namespace WildCat.Grains
                 timer?.Dispose();
             await GrainFactory.GetGrain<IPlayerFriendList>(State.lastGameKey, this.GetPrimaryKeyString(), null)
                 .SetStatus(State.Name, status);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         private async Task AuthorizeSession(Guid sessionKey, Guid loginTicket)
@@ -213,7 +221,7 @@ namespace WildCat.Grains
                 Period = TimeSpan.FromSeconds(10),
                 Interleave = true
             });
-            await WriteStateAsync();
+            await state.WriteStateAsync();
 
             // The new login replaces the previous one, so the ticket of the previous session must
             // stop working instead of acting as this player until it idles out.
@@ -238,7 +246,7 @@ namespace WildCat.Grains
             if (isMapAdded)
             {
                 State.Devices.Add(deviceID);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 return AdditionResult.Success;
             }
             else
@@ -288,7 +296,7 @@ namespace WildCat.Grains
                 string passwordHash = await PasswordHasher.HashAsync(password);
                 State.UserNamePasswordPairs.Add(user,
                     new Dictionary<string, string> {{PASSWORD_KEY, passwordHash}});
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 return AdditionResult.Success;
             }
             else
@@ -348,7 +356,7 @@ namespace WildCat.Grains
                         {STATUS_KEY, STATUS_NOT_ACTIVE}
                     });
                 State.ActivationCodes[email] = NewEmailCode(activationCode);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 // The account exists once the state is written, so a failed send is logged rather
                 // than failing the call. A reset code (SendPasswordChangeCodeToEmail) also
                 // activates the address, which is the way to get a new code.
@@ -426,7 +434,7 @@ namespace WildCat.Grains
                 State.Name = name;
             }
 
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         #endregion
@@ -522,7 +530,7 @@ namespace WildCat.Grains
             if (State.Emails.TryGetValue(email, out var account))
             {
                 account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 return true;
             }
 
@@ -535,7 +543,7 @@ namespace WildCat.Grains
                 throw new ArgumentException("The email doesn't exist");
             string code = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
             State.PasswordResetCodes[email] = NewEmailCode(code);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             // Unlike activation, a failed send fails the call: the caller asked for this email.
             await emailSender.SendAsync(email, EmailTexts.ResetSubject, EmailTexts.ResetBody(code));
             return code;
@@ -552,14 +560,14 @@ namespace WildCat.Grains
             if (email == null)
             {
                 if (codesChanged)
-                    await WriteStateAsync();
+                    await state.WriteStateAsync();
                 throw new ArgumentException("The code is wrong or has expired.");
             }
 
             State.ActivationCodes.Remove(email);
             if (State.Emails.TryGetValue(email, out var account))
                 account[STATUS_KEY] = STATUS_ACTIVE;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return email;
         }
 
@@ -577,7 +585,7 @@ namespace WildCat.Grains
                 if (email != null)
                     codesChanged = State.PasswordResetCodes.Remove(email);
                 if (codesChanged)
-                    await WriteStateAsync();
+                    await state.WriteStateAsync();
                 return false;
             }
 
@@ -587,7 +595,7 @@ namespace WildCat.Grains
             account[STATUS_KEY] = STATUS_ACTIVE;
             State.ActivationCodes.Remove(email);
             State.PasswordResetCodes.Remove(email);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return true;
         }
 
@@ -653,7 +661,7 @@ namespace WildCat.Grains
             if (State.UserNamePasswordPairs.TryGetValue(user, out var account))
             {
                 account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 return true;
             }
 

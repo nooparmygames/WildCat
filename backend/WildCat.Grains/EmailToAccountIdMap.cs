@@ -5,14 +5,24 @@ using System.Text;
 using System.Threading.Tasks;
 using WildCat.Interfaces;
 using Orleans;
+using Orleans.Runtime;
 
 namespace WildCat.Grains
 {
-    class EmailToAccountIdMap : Grain<EmailAccountIDMapState>, IEmailToAccountIdMap
+    class EmailToAccountIdMap : Grain, IEmailToAccountIdMap
     {
+        private readonly IPersistentState<EmailAccountIDMapState> state;
+
+        public EmailToAccountIdMap([PersistentState(GrainStateNames.EmailToAccountIdMap, GrainStorageNames.Default)] IPersistentState<EmailAccountIDMapState> state)
+        {
+            this.state = state;
+        }
+
+        private EmailAccountIDMapState State => state.State;
+
         public Task Clear()
         {
-            return ClearStateAsync();
+            return state.ClearStateAsync();
         }
 
         public Task<string> GetAccountID()
@@ -27,7 +37,7 @@ namespace WildCat.Grains
             {
                 State.Email = this.GetPrimaryKeyString();
                 State.AccountID = account;
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 isAllowed = true;
             }
             return isAllowed || State.AccountID == account;

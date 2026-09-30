@@ -1,6 +1,7 @@
 # WildCat with PostgreSQL: the host (Orleans silo plus WebSocket gateway) and one database.
 #
-#   cp .env.example .env      # then set POSTGRES_PASSWORD in .env
+#   cp .env.example .env      # then set POSTGRES_PASSWORD and WILDCAT_ADMIN_JWT_SIGNING_KEY
+#                             # (openssl rand -base64 32) in .env, see README.md
 #   docker compose up --build
 #
 # Clients connect to ws://localhost:5000/ws. The database is only reachable from the compose

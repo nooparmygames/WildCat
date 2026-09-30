@@ -4,12 +4,21 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class DeveloperManager : Grain<DeveloperManagerState>, IDeveloperManager
+    public class DeveloperManager : Grain, IDeveloperManager
     {
+        private readonly IPersistentState<DeveloperManagerState> state;
+
+        public DeveloperManager([PersistentState(GrainStateNames.DeveloperManager, GrainStorageNames.Default)] IPersistentState<DeveloperManagerState> state)
+        {
+            this.state = state;
+        }
+
+        private DeveloperManagerState State => state.State;
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
         {
@@ -26,7 +35,7 @@ namespace WildCat.Grains
             var id = Guid.NewGuid();
             await GrainFactory.GetGrain<IDeveloper>(id).CreateDeveloper(data);
             State.developers.Add(data.Email, id);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return id;
         }
 
@@ -37,7 +46,7 @@ namespace WildCat.Grains
             //Set developer ID here and get all others.
             await GrainFactory.GetGrain<IDeveloper>(id).CreateDeveloper(data);
             State.developers.Add(data.Email, id);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             return id;
         }
 
@@ -67,13 +76,13 @@ namespace WildCat.Grains
         public Task AddDeveloperToSIByKey(string key, IDeveloper developer)
         {
             State.SecondaryIndex.Add(key, developer.GetPrimaryKey());
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task RemoveDeveloperFromSIKeys(string key)
         {
             State.SecondaryIndex.Remove(key);
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public async Task<DeveloperRegistration> RegisterDeveloper(string email, string password, string firstName, string lastName)
@@ -96,7 +105,7 @@ namespace WildCat.Grains
                 Status = DeveloperState.DeveloperStatus.NotActivated
             });
             State.developers.Add(email, id);
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             string code = await developer.CreateActivationCode();
             return new DeveloperRegistration { Key = id, ActivationCode = code };
         }
@@ -130,14 +139,14 @@ namespace WildCat.Grains
             if (State.GameOwners.TryGetValue(gameKey, out var existing) && existing == developerKey)
                 return Task.CompletedTask;
             State.GameOwners[gameKey] = developerKey;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task RemoveGameOwner(Guid gameKey)
         {
             if (State.GameOwners == null || !State.GameOwners.Remove(gameKey))
                 return Task.CompletedTask;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<Guid> GetGameOwner(Guid gameKey)

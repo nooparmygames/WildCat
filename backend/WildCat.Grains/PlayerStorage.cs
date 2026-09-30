@@ -2,12 +2,22 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class PlayerStorage : Grain<PlayerStorageState>, IPlayerStorage
+    public class PlayerStorage : Grain, IPlayerStorage
     {
+        private readonly IPersistentState<PlayerStorageState> state;
+
+        public PlayerStorage([PersistentState(GrainStateNames.PlayerStorage, GrainStorageNames.Default)] IPersistentState<PlayerStorageState> state)
+        {
+            this.state = state;
+        }
+
+        private PlayerStorageState State => state.State;
+
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             var gameKey = this.GetPrimaryKeyString().Split('_')[0];
@@ -35,19 +45,19 @@ namespace WildCat.Grains
         public Task SetPlayerBinary(string key, byte[] value)
         {
             State.BinaryValues[key] = value;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task SetPlayerString(string key, string value)
         {
             State.StringValues[key] = value;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task SetPlayerPublicString(string key, string value)
         {
             State.PublicStringValues[key] = value;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<Tuple<bool, string>> GetPlayerPublicString(string key)
@@ -73,7 +83,7 @@ namespace WildCat.Grains
         public Task SetPlayerPublicBinary(string key, byte[] value)
         {
             State.PublicBinaryValues[key] = value;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<Tuple<bool, byte[]>> GetPlayerPublicBinary(string key)

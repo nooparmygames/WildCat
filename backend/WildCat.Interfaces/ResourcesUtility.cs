@@ -107,6 +107,18 @@ namespace WildCat.Interfaces
             return $"{gameKey}_L_{boardName}";
         }
 
+        /// <summary>
+        /// Returns the key of one chunk (a LeaderBoardStorage grain) of the leaderboard with the key
+        /// <paramref name="leaderBoardKey"/>, as "{leaderBoardKey}#{chunkIndex}". The legacy key had
+        /// no separator, so chunk 0 of "l1" had the key of the board "l10" and chunk 10 of "l1" the
+        /// key of chunk 0 of "l11". The index never contains '#', so the last '#' always splits a
+        /// chunk key back into its board and index, whatever the board name holds.
+        /// </summary>
+        public static string GetLeaderBoardChunkKey(string leaderBoardKey, int chunkIndex)
+        {
+            return $"{leaderBoardKey}#{chunkIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+
         public static string GetEventScriptKey(string gameKey, string eventScriptName)
         {
             return $"{gameKey}_G_{eventScriptName}";

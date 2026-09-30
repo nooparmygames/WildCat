@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
@@ -11,8 +12,17 @@ namespace WildCat.Grains
     /// everything else needs the developer secret, which is checked against the Developer grain on
     /// every call so a regenerated secret takes effect at once.
     /// </summary>
-    public class DeveloperStorage : Grain<DeveloperStorageState>, IDeveloperStorage
+    public class DeveloperStorage : Grain, IDeveloperStorage
     {
+        private readonly IPersistentState<DeveloperStorageState> state;
+
+        public DeveloperStorage([PersistentState(GrainStateNames.DeveloperStorage, GrainStorageNames.Default)] IPersistentState<DeveloperStorageState> state)
+        {
+            this.state = state;
+        }
+
+        private DeveloperStorageState State => state.State;
+
         /// <summary>
         /// Throws <see cref="InvalidOperationException"/> for a wrong secret; the gateway maps that
         /// exception type to its "Secret is wrong" response.
@@ -59,28 +69,28 @@ namespace WildCat.Grains
         {
             await AssertIsSecretCorrect(secret);
             State.BinaryValues[key] = value;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public async Task SetString(string key, string value, Guid secret)
         {
             await AssertIsSecretCorrect(secret);
             State.StringValues[key] = value;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public async Task RemoveString(string key, Guid secret)
         {
             await AssertIsSecretCorrect(secret);
             if (State.StringValues.Remove(key))
-                await WriteStateAsync();
+                await state.WriteStateAsync();
         }
 
         public async Task RemoveBinary(string key, Guid secret)
         {
             await AssertIsSecretCorrect(secret);
             if (State.BinaryValues.Remove(key))
-                await WriteStateAsync();
+                await state.WriteStateAsync();
         }
 
         public async Task<Dictionary<string, string>> GetAllStringData(Guid secret)

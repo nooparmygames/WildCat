@@ -45,6 +45,23 @@ namespace WildCat.Interfaces
         Task<ValidationResult> Validate(string script);
 
         /// <summary>
+        /// Checks <paramref name="script"/> against the event name and the given
+        /// <paramref name="parameters"/> without storing anything. Use it to check an
+        /// <see cref="Edit"/> that changes the parameter list (or an <see cref="Initialize"/>),
+        /// since <see cref="Validate"/> uses the stored parameters.
+        /// </summary>
+        Task<ValidationResult> ValidateWith(List<EventParameter> parameters, string script);
+
+        /// <summary>
+        /// Deletes the event: clears its stored state and drops this silo's compiled copy. Reading,
+        /// running or editing it afterwards throws InvalidOperationException as for an event that
+        /// never existed, and <see cref="Initialize"/> creates it again. Other silos may keep a
+        /// compiled copy until it ages out of their cache, but never run it again, because every run
+        /// reads the event from this grain first. Deleting a missing event does nothing.
+        /// </summary>
+        Task Delete();
+
+        /// <summary>
         /// Compiles the stored script into this silo's script cache. Running an event compiles on
         /// demand, so this is only a warm-up. The argument is ignored; the return kind comes from
         /// the script itself.

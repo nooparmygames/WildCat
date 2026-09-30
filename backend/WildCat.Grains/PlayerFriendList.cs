@@ -3,6 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 using Orleans.Concurrency;
 using Orleans.Streams;
@@ -10,8 +11,17 @@ using Orleans.Streams;
 namespace WildCat.Grains
 {
     
-    class PlayerFriendList : Grain<FriendListState>, IPlayerFriendList
+    class PlayerFriendList : Grain, IPlayerFriendList
     {
+        private readonly IPersistentState<FriendListState> state;
+
+        public PlayerFriendList([PersistentState(GrainStateNames.PlayerFriendList, GrainStorageNames.Default)] IPersistentState<FriendListState> state)
+        {
+            this.state = state;
+        }
+
+        private FriendListState State => state.State;
+
         private IPlayer player;
         private Guid gameKey;
         private IAsyncStream<FriendListEventData> friendListEvents;
@@ -33,7 +43,7 @@ namespace WildCat.Grains
             if (this.player.GetPrimaryKeyString() != player.GetPrimaryKeyString())
             {
                 State.AddFriendAndRemoveFromLists(player, name);
-                return WriteStateAsync();
+                return state.WriteStateAsync();
             }
             return Task.CompletedTask;
         }
@@ -70,7 +80,7 @@ namespace WildCat.Grains
         {
             await GrainFactory.GetGrain<IPlayerFriendList>(gameKey, other.GetPrimaryKeyString(), null).InvitationDenied(player, data);
             State.ReceivedInvitations.RemoveAll(x => x.Sender.GetPrimaryKeyString() == other.GetPrimaryKeyString());
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         public async Task InvitationDenied(IPlayer denyer, byte[] data)
@@ -85,7 +95,7 @@ namespace WildCat.Grains
                     Data = data,
                     Type = FriendListEventData.EventType.Deny
                 };
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 friendListEvents.OnNextAsync(myStreamEventData).Ignore();
             }
         }
@@ -120,7 +130,7 @@ namespace WildCat.Grains
             if (requestResult)
             {
                 State.AddSentInvitation(player, invitee, await invitee.GetPlayerName(), data);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
             }
         }
 
@@ -144,7 +154,7 @@ namespace WildCat.Grains
                 else
                 {
                     State.AddReceivedInvitation(player, sender, name, data);
-                    await WriteStateAsync();
+                    await state.WriteStateAsync();
                     FriendListEventData eventData = new FriendListEventData
                     {
                         Friend = sender,

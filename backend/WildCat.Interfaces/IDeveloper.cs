@@ -46,8 +46,10 @@ namespace WildCat.Interfaces
 
         /// <summary>
         /// Activates the developer when <paramref name="code"/> matches the current activation code.
-        /// Returns true for an account that is already active. A code stops working after it expires
-        /// or after five wrong attempts.
+        /// The code that activated the account keeps returning true until it expires, so a repeated
+        /// request succeeds; any other code returns false whatever the account's status, so the
+        /// answer does not reveal whether the account is active. A banned account always returns
+        /// false. A code stops working after it expires or after five wrong attempts.
         /// </summary>
         Task<bool> Activate(string code);
 

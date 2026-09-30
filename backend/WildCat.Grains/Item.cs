@@ -4,12 +4,22 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class Item : Grain<ItemState>, IItem
+    public class Item : Grain, IItem
     {
+        private readonly IPersistentState<ItemState> state;
+
+        public Item([PersistentState(GrainStateNames.Item, GrainStorageNames.Default)] IPersistentState<ItemState> state)
+        {
+            this.state = state;
+        }
+
+        private ItemState State => state.State;
+
         private bool _IsCreated;
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -72,7 +82,7 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             State.Description = description;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task SetItemProperties(string name, string description, Dictionary<string, string> metaData, int maxAllowed, bool stackable, bool automaticallyConsumed, TimeSpan effectTime, bool isConsumable, bool isRegenerating, int regenerationAmount, TimeSpan regenerationPeriod,List<PlayerInventoryState.InInventoryItemState> price)
@@ -90,14 +100,14 @@ namespace WildCat.Grains
             State.RegenerationAmount = regenerationAmount;
             State.RegenerationPeriod = regenerationPeriod;
             State.Price = price;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task SetName(string name)
         {
             AssertIsCreated();
             State.Name = name;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
     }
 }

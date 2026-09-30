@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -14,13 +15,20 @@ namespace WildCat.Grains
     /// change is applied to State and written; when a change fails part way or the write fails,
     /// the last written state is read back so memory and storage agree.
     /// </summary>
-    public class PlayerInventory : Grain<PlayerInventoryState>, IPlayerInventory
+    public class PlayerInventory : Grain, IPlayerInventory
     {
+        private readonly IPersistentState<PlayerInventoryState> state;
+
+        private PlayerInventoryState State => state.State;
+
         private string gameKey, playerId;
         private readonly ILogger logger;
 
-        public PlayerInventory(ILogger<IPlayerInventory> logger)
+        public PlayerInventory(
+            [PersistentState(GrainStateNames.PlayerInventory, GrainStorageNames.Default)] IPersistentState<PlayerInventoryState> state,
+            ILogger<IPlayerInventory> logger)
         {
+            this.state = state;
             this.logger = logger;
         }
 
@@ -198,17 +206,17 @@ namespace WildCat.Grains
             {
                 applied = await change();
                 if (applied)
-                    await WriteStateAsync();
+                    await state.WriteStateAsync();
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "{Operation} failed on inventory {Inventory}", operation, this.GetPrimaryKeyString());
-                await ReadStateAsync();
+                await state.ReadStateAsync();
                 throw;
             }
 
             if (!applied)
-                await ReadStateAsync();
+                await state.ReadStateAsync();
             return applied;
         }
     }

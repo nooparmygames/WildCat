@@ -18,7 +18,7 @@ namespace WildCat.Tests
     public class SessionTests
     {
         // The state name the Session grain passes to [PersistentState].
-        private const string StateName = "session";
+        private const string StateName = GrainStateNames.Session;
         private readonly InProcessTestCluster cluster;
         private IGrainFactory GrainFactory => cluster.Client;
 

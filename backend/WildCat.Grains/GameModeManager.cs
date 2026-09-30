@@ -1,12 +1,22 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class GameModeManager : Grain<GameModeManagerState>, IGameModeManager
+    public class GameModeManager : Grain, IGameModeManager
     {
+        private readonly IPersistentState<GameModeManagerState> state;
+
+        public GameModeManager([PersistentState(GrainStateNames.GameModeManager, GrainStorageNames.Default)] IPersistentState<GameModeManagerState> state)
+        {
+            this.state = state;
+        }
+
+        private GameModeManagerState State => state.State;
+
         public Task AddOrUpdateGameMode(GameMode newMode)
         {
             var existingIndex = State.GameModes.FindIndex(x => x.Name == newMode.Name);
@@ -18,7 +28,7 @@ namespace WildCat.Grains
             {
                 State.GameModes[existingIndex] = newMode;
             }
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
 
         public Task<GameMode> GetGameModeData(string name)
@@ -38,7 +48,7 @@ namespace WildCat.Grains
             if (index >= 0)
             {
                 State.GameModes.RemoveAt(index);
-                await WriteStateAsync();
+                await state.WriteStateAsync();
             }
         }
 

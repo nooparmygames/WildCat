@@ -5,6 +5,9 @@ using WildCat.Interfaces;
 using Orleans.Configuration;
 using WildCat.Scripting;
 using Orleans.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Orleans.Serialization;
+using Newtonsoft.Json;
 
 namespace WildCat.Grains
 {
@@ -14,11 +17,11 @@ namespace WildCat.Grains
     /// </summary>
     public static class SiloBuilderExtensions
     {
-        // Grain storage names the grains use: "Default" for every Grain<T> and [PersistentState]
-        // without a provider name, "blob" for the leaderboards, and "PubSubStore" for the stream
-        // subscriptions of the memory streams.
-        private const string BlobStorageName = "blob";
-        private const string PubSubStorageName = "PubSubStore";
+        // Grain storage names (GrainStorageNames): "Default" for every grain state except the
+        // leaderboards, "blob" for the leaderboards, and "PubSubStore" for the stream subscriptions
+        // of the memory streams. The state names inside them are in GrainStateNames.
+        private const string BlobStorageName = GrainStorageNames.Blob;
+        private const string PubSubStorageName = GrainStorageNames.PubSub;
 
         /// <summary>
         /// Configures clustering, ids, endpoints, grain storage and reminders from
@@ -102,6 +105,7 @@ namespace WildCat.Grains
                     builder.AddAdoNetGrainStorageAsDefault(Storage);
                     builder.AddAdoNetGrainStorage(BlobStorageName, Storage);
                     builder.AddAdoNetGrainStorage(PubSubStorageName, Storage);
+                    builder.Services.Configure<OrleansJsonSerializerOptions>(WriteDefaultValues);
                     builder.UseAdoNetReminderService(o =>
                     {
                         o.Invariant = OrleansHostingOptions.PostgreSqlInvariant;
@@ -131,7 +135,9 @@ namespace WildCat.Grains
 
         /// <summary>
         /// Changes the script event limits (<see cref="ScriptOptions"/>). Optional: without it
-        /// the defaults apply (3 second runs, call depth 256, 500 cached scripts per silo).
+        /// the defaults apply (3 second runs, call depth 256, 500 cached scripts per silo, one
+        /// script worker thread per processor, new runs of a game refused while more than 2 of its
+        /// runs are still going past their time limit).
         /// </summary>
         public static ISiloBuilder ConfigureScriptEvents(this ISiloBuilder builder, Action<ScriptOptions> configure)
         {
@@ -147,6 +153,20 @@ namespace WildCat.Grains
         {
             builder.AddOutgoingGrainCallFilter<CallChainReentrancyFilter>();
             return builder;
+        }
+
+        /// <summary>
+        /// The ADO.NET grain storage writes state as JSON with the Orleans Newtonsoft settings, which
+        /// leave out properties that hold their type's default value (false, 0, null). A state class
+        /// whose constructor sets another value then gets that value back on the next activation:
+        /// a leaderboard created with AcceptBetterScoresOnly = false, or a game mode with
+        /// FinishGameWithOneDisconnect = false, came back as true. Writing every value makes the
+        /// stored JSON round-trip exactly.
+        /// </summary>
+        internal static void WriteDefaultValues(OrleansJsonSerializerOptions options)
+        {
+            options.JsonSerializerSettings.DefaultValueHandling = DefaultValueHandling.Include;
+            options.JsonSerializerSettings.NullValueHandling = NullValueHandling.Include;
         }
 
         private static void Validate(OrleansHostingOptions options)

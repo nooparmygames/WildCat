@@ -18,7 +18,9 @@ namespace WildCat.Interfaces
         /// Runs <paramref name="eventName"/> with <paramref name="args"/>, which come straight from
         /// the game client (ExecuteScriptEvent) and must be treated as untrusted input by the
         /// script. The session must belong to the player and game in this grain's key. Throws
-        /// ScriptTimeoutException when the script runs past the configured limit.
+        /// ScriptTimeoutException when the script runs past the configured limit, and
+        /// ScriptThrottledException, without running the script, while the game has too many
+        /// runs still going past their limit.
         /// </summary>
         Task<object> Run(ISession session, string eventName, params object[] args);
     }

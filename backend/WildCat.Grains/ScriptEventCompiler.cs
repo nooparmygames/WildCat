@@ -1,6 +1,8 @@
+using WildCat.Grains;
 using WildCat.Interfaces;
 using Microsoft.Extensions.Options;
 using Orleans;
+using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -14,12 +16,19 @@ namespace WildCat.Scripting
     /// the compiled result goes into this silo's <see cref="ScriptCache"/>, and other silos compile
     /// from <see cref="GetInfo"/> on their first run.
     /// </summary>
-    public class ScriptEventCompiler : Grain<ScriptEventState>, IScriptEventCompiler
+    public class ScriptEventCompiler : Grain, IScriptEventCompiler
     {
+        private readonly IPersistentState<ScriptEventState> state;
+
+        private ScriptEventState State => state.State;
+
         private readonly ScriptOptions options;
 
-        public ScriptEventCompiler(IOptions<ScriptOptions> options)
+        public ScriptEventCompiler(
+            [PersistentState(GrainStateNames.ScriptEventCompiler, GrainStorageNames.Default)] IPersistentState<ScriptEventState> state,
+            IOptions<ScriptOptions> options)
         {
+            this.state = state;
             this.options = options.Value;
             ScriptCache.Shared.Capacity = this.options.CacheCapacity;
         }
@@ -58,7 +67,7 @@ namespace WildCat.Scripting
             State.LastValidation = compiled.Validation;
             if (!compiled.IsValid)
             {
-                await WriteStateAsync();
+                await state.WriteStateAsync();
                 throw new InvalidOperationException($"The script is not valid: {compiled.Validation.Summarize()}");
             }
 
@@ -71,7 +80,7 @@ namespace WildCat.Scripting
             State.ScriptHash = source.Hash;
             State.Version++;
             State.IsCreated = true;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
 
         /// <summary>
@@ -117,10 +126,29 @@ namespace WildCat.Scripting
             return ScriptSandbox.RunEventAsync(GrainFactory, State, session, player, args, options, TaskScheduler.Current);
         }
 
-        public async Task<ValidationResult> Validate(string scriptText)
+        public Task<ValidationResult> Validate(string scriptText)
+        {
+            return ValidateAgainst(State.Parameters, scriptText);
+        }
+
+        public Task<ValidationResult> ValidateWith(List<EventParameter> parameters, string scriptText)
+        {
+            return ValidateAgainst(parameters ?? new List<EventParameter>(), scriptText);
+        }
+
+        public async Task Delete()
+        {
+            if (State.IsCreated)
+                ScriptCache.Shared.Remove(ScriptSource.FromState(State).CacheKey);
+            await state.ClearStateAsync();
+            // Providers differ in what they leave in State after a clear; start from an empty event.
+            state.State = new ScriptEventState();
+        }
+
+        private async Task<ValidationResult> ValidateAgainst(List<EventParameter> parameters, string scriptText)
         {
             var result = await ScriptCompilationUtility.ValidateAsync(
-                new ScriptSource(GetGameKey(), GetEventName(), State.Parameters, scriptText));
+                new ScriptSource(GetGameKey(), GetEventName(), parameters, scriptText));
             return new ValidationResult
             {
                 IsValid = result.Success,

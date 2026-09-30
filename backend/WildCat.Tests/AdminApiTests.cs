@@ -337,19 +337,111 @@ namespace WildCat.Tests
             Assert.Equal("add", only.Name);
             Assert.Contains("a * b", only.Script);
 
-            // Deleting takes the event off the list and empties its script, so the old code no
-            // longer runs for clients that still call it.
-            Assert.Equal(HttpStatusCode.NoContent, (await host.DeleteAsync($"{events}/add", token)).StatusCode);
-            Assert.Empty(await AdminApiHost.ReadAsync<List<ScriptEventResponse>>(await host.GetAsync(events, token)));
-            await AdminApiHost.ReadProblemAsync(await host.DeleteAsync($"{events}/add", token), HttpStatusCode.NotFound);
-            var emptied = await cluster.Client.GetGrain<WildCat.Interfaces.IScriptEventCompiler>(
-                WildCat.Interfaces.ResourcesUtility.GetEventScriptKey(gameKey.ToString(), "add")).GetInfo();
-            Assert.DoesNotContain("a * b", emptied.Script);
-            Assert.Empty(emptied.Parameters);
-
             var recreated = await host.PutAsync($"{events}/add", new { parameters, script = "async Task<int> add(int a, int b) { return a - b; }" }, token);
             Assert.Equal(HttpStatusCode.OK, recreated.StatusCode);
             Assert.Single(await AdminApiHost.ReadAsync<List<ScriptEventResponse>>(await host.GetAsync(events, token)));
+        }
+
+        [Fact]
+        public async Task ActivateDoesNotRevealWhetherAnAccountIsActive()
+        {
+            string email = $"{TestSetup.UniqueId("probe")}@example.com";
+            Assert.Equal(HttpStatusCode.Accepted, (await host.PostAsync("/api/v1/auth/register", new { email, password = "a long password" })).StatusCode);
+            string code = AdminApiHost.ExtractCode((await host.Emails.WaitForAsync(email)).Body);
+
+            string wrongWhileInactive = (await AdminApiHost.ReadProblemAsync(
+                await host.PostAsync("/api/v1/auth/activate", new { email, code = "WRONGCODE2" }), HttpStatusCode.BadRequest)).GetProperty("detail").GetString();
+            Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync("/api/v1/auth/activate", new { email, code })).StatusCode);
+
+            // A wrong code for the now active account gets the same answer as before, and as an
+            // unknown email; only the code that activated it succeeds again.
+            string wrongWhileActive = (await AdminApiHost.ReadProblemAsync(
+                await host.PostAsync("/api/v1/auth/activate", new { email, code = "WRONGCODE3" }), HttpStatusCode.BadRequest)).GetProperty("detail").GetString();
+            string unknownEmail = (await AdminApiHost.ReadProblemAsync(
+                await host.PostAsync("/api/v1/auth/activate", new { email = "nobody-" + email, code = "WRONGCODE3" }), HttpStatusCode.BadRequest)).GetProperty("detail").GetString();
+            Assert.Equal(wrongWhileInactive, wrongWhileActive);
+            Assert.Equal(wrongWhileInactive, unknownEmail);
+            Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync("/api/v1/auth/activate", new { email, code })).StatusCode);
+        }
+
+        [Fact]
+        public async Task AnExistingScriptEventCanChangeItsParameterList()
+        {
+            var account = await host.CreateAccountAsync();
+            Guid gameKey = (await AdminApiHost.ReadAsync<CreatedKeyResponse>(await host.PostAsync("/api/v1/games", new { name = "Params" }, account.Token))).Key;
+            string url = $"/api/v1/games/{gameKey}/events/add";
+            var two = new[] { new { name = "a", type = 3 }, new { name = "b", type = 3 } };
+            var three = new[] { new { name = "a", type = 3 }, new { name = "b", type = 3 }, new { name = "c", type = 3 } };
+            Assert.Equal(HttpStatusCode.OK, (await host.PutAsync(url, new { parameters = two, script = "int add(int a, int b) { return a + b; }" }, account.Token)).StatusCode);
+
+            // The script is checked against the new parameter list, not the stored one.
+            var widened = await host.PutAsync(url, new { parameters = three, script = "int add(int a, int b, int c) { return a + b + c; }" }, account.Token);
+            Assert.Equal(HttpStatusCode.OK, widened.StatusCode);
+            var saved = await AdminApiHost.ReadAsync<ScriptEventResponse>(widened);
+            Assert.Equal(new[] { "a", "b", "c" }, saved.Parameters.Select(p => p.Name).ToArray());
+
+            // A script that does not match the new list is rejected, and the stored event stays.
+            var mismatch = await AdminApiHost.ReadProblemAsync(await host.PutAsync(url,
+                new { parameters = two, script = "int add(int a, int b, int c) { return a + b + c; }" }, account.Token), HttpStatusCode.BadRequest);
+            Assert.Contains("parameter", mismatch.GetProperty("detail").GetString());
+
+            var (runner, session) = await CreateRunner(account.Key, gameKey);
+            Assert.Equal(6, (int)await runner.Run(session, "add", 1, 2, 3).WaitAsync(TestSetup.Timeout));
+
+            // Back to two parameters.
+            Assert.Equal(HttpStatusCode.OK, (await host.PutAsync(url, new { parameters = two, script = "int add(int a, int b) { return a * b; }" }, account.Token)).StatusCode);
+            Assert.Equal(12, (int)await runner.Run(session, "add", 3, 4).WaitAsync(TestSetup.Timeout));
+        }
+
+        [Fact]
+        public async Task DeletingAScriptEventDeletesItsGrainStateAndCompiledCopy()
+        {
+            var account = await host.CreateAccountAsync();
+            Guid gameKey = (await AdminApiHost.ReadAsync<CreatedKeyResponse>(await host.PostAsync("/api/v1/games", new { name = "Deleted" }, account.Token))).Key;
+            string events = $"/api/v1/games/{gameKey}/events";
+            var parameters = new[] { new { name = "a", type = 3 } };
+            Assert.Equal(HttpStatusCode.OK, (await host.PutAsync($"{events}/twice", new { parameters, script = "int twice(int a) { return a * 2; }" }, account.Token)).StatusCode);
+            var compiler = cluster.Client.GetGrain<WildCat.Interfaces.IScriptEventCompiler>(
+                WildCat.Interfaces.ResourcesUtility.GetEventScriptKey(gameKey.ToString(), "twice"));
+            var info = await compiler.GetInfo();
+            var cacheKey = new WildCat.Scripting.ScriptCacheKey(info.GameKey, info.Name, info.ScriptHash);
+            var (runner, session) = await CreateRunner(account.Key, gameKey);
+            Assert.Equal(10, (int)await runner.Run(session, "twice", 5).WaitAsync(TestSetup.Timeout));
+            Assert.True(WildCat.Scripting.ScriptCache.Shared.Contains(cacheKey));
+
+            Assert.Equal(HttpStatusCode.NoContent, (await host.DeleteAsync($"{events}/twice", account.Token)).StatusCode);
+
+            Assert.Empty(await AdminApiHost.ReadAsync<List<ScriptEventResponse>>(await host.GetAsync(events, account.Token)));
+            await AdminApiHost.ReadProblemAsync(await host.DeleteAsync($"{events}/twice", account.Token), HttpStatusCode.NotFound);
+            Assert.False(WildCat.Scripting.ScriptCache.Shared.Contains(cacheKey));
+            var gone = await Assert.ThrowsAsync<InvalidOperationException>(() => compiler.GetInfo());
+            Assert.Contains("does not exist", gone.Message);
+            // Gone from storage too, not only from the activation.
+            await cluster.Deactivate(compiler);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => compiler.GetInfo());
+            var diagnostics = await compiler.GetDiagnostics();
+            Assert.False(diagnostics.Success);
+
+            // A client that still runs the event gets a clean error instead of the old code.
+            var failed = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.Run(session, "twice", 5).WaitAsync(TestSetup.Timeout));
+            Assert.Contains("does not exist", failed.Message);
+
+            // The name can be used again, with a different parameter list.
+            Assert.Equal(HttpStatusCode.OK, (await host.PutAsync($"{events}/twice", new { parameters = Array.Empty<object>(), script = "int twice() { return 2; }" }, account.Token)).StatusCode);
+            Assert.Equal(2, (int)await runner.Run(session, "twice").WaitAsync(TestSetup.Timeout));
+        }
+
+        /// <summary>
+        /// A logged-in player on a new session of the game and the script runner the gateway would
+        /// use for that player.
+        /// </summary>
+        private async Task<(WildCat.Interfaces.IScriptEventRunner Runner, WildCat.Interfaces.ISession Session)> CreateRunner(Guid developerKey, Guid gameKey)
+        {
+            var grains = cluster.Client;
+            var sessionKey = await grains.GetGrain<WildCat.Interfaces.IDeveloper>(developerKey).InitializeSession(gameKey);
+            var player = await TestSetup.CreateLoggedInPlayer(grains, sessionKey, Guid.NewGuid());
+            var runner = grains.GetGrain<WildCat.Interfaces.IScriptEventRunner>(gameKey, player.GetPrimaryKeyString(), null);
+            return (runner, grains.GetGrain<WildCat.Interfaces.ISession>(sessionKey));
         }
 
         [Fact]

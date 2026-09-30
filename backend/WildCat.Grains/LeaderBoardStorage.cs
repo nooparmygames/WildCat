@@ -3,11 +3,21 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using WildCat.Interfaces;
 using Orleans;
+using Orleans.Runtime;
 
 namespace WildCat.Grains
 {
-    public class LeaderBoardStorage : Grain<LeaderBoardStorageState>, ILeaderBoardStorage
+    public class LeaderBoardStorage : Grain, ILeaderBoardStorage
     {
+        private readonly IPersistentState<LeaderBoardStorageState> state;
+
+        public LeaderBoardStorage([PersistentState(GrainStateNames.LeaderBoardStorage, GrainStorageNames.Default)] IPersistentState<LeaderBoardStorageState> state)
+        {
+            this.state = state;
+        }
+
+        private LeaderBoardStorageState State => state.State;
+
         public Task<List<LeaderBoardEntry>> GetEntries()
         {
             return Task.FromResult(State.entries);
@@ -16,7 +26,7 @@ namespace WildCat.Grains
         public async Task WriteEntries(List<LeaderBoardEntry> data)
         {
             State.entries = data;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
         }
         
         // public async Task AddPlayerScore(IPlayer player, int score)
@@ -46,7 +56,7 @@ namespace WildCat.Grains
         //     if (isSet)
         //     {
         //         State.entries.Sort((x, y) => y.Score - x.Score);
-        //         await WriteStateAsync();
+        //         await state.WriteStateAsync();
         //     }
         // }
         

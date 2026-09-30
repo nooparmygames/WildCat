@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace WildCat.Scripting
 {
@@ -15,7 +16,17 @@ namespace WildCat.Scripting
     /// counts call depth (iterator bodies get <c>Check()</c> instead, since their body runs across
     /// many MoveNext calls);</item>
     /// <item><c>Probe() ? value : default(T)</c> around instance field and property initializers,
-    /// which run before any constructor body and could otherwise recurse unchecked.</item>
+    /// which run before any constructor body and could otherwise recurse unchecked;</item>
+    /// <item><c>Enumerate&lt;T&gt;(sequence)</c> around every argument of a library method or
+    /// constructor whose parameter is IEnumerable&lt;T&gt; (or IEnumerable), including the receiver
+    /// of an extension method such as <c>source.Sum()</c>, and around the sources of query
+    /// expressions, so a library loop over a long lazy sequence (<c>Enumerable.Repeat(1,
+    /// int.MaxValue).Sum()</c>) checks the deadline for every item. Arrays, strings, in-memory
+    /// collections and the script's own types are left alone. Delegate calls are not wrapped;
+    /// the validator rejects library method groups that take a sequence, so a delegate with a
+    /// sequence parameter always runs guarded script code. foreach sources need no wrapper:
+    /// the loop body checks for every item, and a lazy source built from LINQ has guarded
+    /// inputs.</item>
     /// </list>
     /// Expression bodies become block bodies. The semantic model of the original compilation
     /// decides whether an expression body returns a value. Inserted code stays on the lines of
@@ -200,6 +211,306 @@ namespace WildCat.Scripting
             bool returnsValue = ReturnsValue(model.GetSymbolInfo(node).Symbol as IMethodSymbol);
             var visited = (AnonymousFunctionExpressionSyntax)base.VisitAnonymousMethodExpression(node);
             return GuardAnonymousFunction(visited, returnsValue);
+        }
+
+        // Sequences handed to library code. A library method that pulls items from a sequence
+        // (Sum, Distinct, new HashSet<T>(source), string.Join) runs its loop outside the script,
+        // where no Check() can reach it, so the sequence itself is wrapped in
+        // ScriptGuard.Enumerate and every item it hands out checks the deadline.
+
+        public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+        {
+            var visited = (InvocationExpressionSyntax)base.VisitInvocationExpression(node);
+            if (model.GetSymbolInfo(node).Symbol is not IMethodSymbol method || !IsLibrary(method)
+                || method.MethodKind == MethodKind.DelegateInvoke)
+            {
+                return visited;
+            }
+            visited = visited.WithArgumentList(GuardArguments(node, node.ArgumentList, visited.ArgumentList));
+
+            // An extension method called on its receiver (source.Sum()): the receiver is the
+            // sequence argument.
+            if (method.ReducedFrom != null
+                && node.Expression is MemberAccessExpressionSyntax access
+                && visited.Expression is MemberAccessExpressionSyntax visitedAccess
+                && !StartsWithConditionalBinding(access.Expression))
+            {
+                var wrapped = GuardSequence(access.Expression, visitedAccess.Expression, ThisParameterType(method));
+                if (wrapped != null)
+                    visited = visited.WithExpression(visitedAccess.WithExpression(wrapped));
+            }
+            return visited;
+        }
+
+        public override SyntaxNode VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
+        {
+            var visited = (ConditionalAccessExpressionSyntax)base.VisitConditionalAccessExpression(node);
+            // source?.Sum(): the receiver of the first call after ?. is the expression before it.
+            if (FirstBoundCall(node.WhenNotNull) is InvocationExpressionSyntax call
+                && model.GetSymbolInfo(call).Symbol is IMethodSymbol { ReducedFrom: not null } method
+                && IsLibrary(method))
+            {
+                var wrapped = GuardSequence(node.Expression, visited.Expression, ThisParameterType(method));
+                if (wrapped != null)
+                    visited = visited.WithExpression(wrapped);
+            }
+            return visited;
+        }
+
+        public override SyntaxNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
+        {
+            var visited = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node);
+            if (node.ArgumentList == null || model.GetSymbolInfo(node).Symbol is not IMethodSymbol constructor || !IsLibrary(constructor))
+                return visited;
+            return visited.WithArgumentList(GuardArguments(node, node.ArgumentList, visited.ArgumentList));
+        }
+
+        public override SyntaxNode VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
+        {
+            var visited = (ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node);
+            if (model.GetSymbolInfo(node).Symbol is not IMethodSymbol constructor || !IsLibrary(constructor))
+                return visited;
+            return visited.WithArgumentList(GuardArguments(node, node.ArgumentList, visited.ArgumentList));
+        }
+
+        public override SyntaxNode VisitConstructorInitializer(ConstructorInitializerSyntax node)
+        {
+            var visited = (ConstructorInitializerSyntax)base.VisitConstructorInitializer(node);
+            if (model.GetSymbolInfo(node).Symbol is not IMethodSymbol constructor || !IsLibrary(constructor))
+                return visited;
+            return visited.WithArgumentList(GuardArguments(node, node.ArgumentList, visited.ArgumentList));
+        }
+
+        public override SyntaxNode VisitPrimaryConstructorBaseType(PrimaryConstructorBaseTypeSyntax node)
+        {
+            var visited = (PrimaryConstructorBaseTypeSyntax)base.VisitPrimaryConstructorBaseType(node);
+            if (model.GetSymbolInfo(node).Symbol is not IMethodSymbol constructor || !IsLibrary(constructor))
+                return visited;
+            return visited.WithArgumentList(GuardArguments(node, node.ArgumentList, visited.ArgumentList));
+        }
+
+        // Query expressions call Where, Select and the others from their clauses, which are not
+        // lambdas in the syntax tree, so their sources are guarded instead.
+
+        public override SyntaxNode VisitFromClause(FromClauseSyntax node)
+        {
+            var visited = (FromClauseSyntax)base.VisitFromClause(node);
+            var wrapped = GuardQuerySource(node.Expression, visited.Expression, node.Type != null);
+            return wrapped == null ? visited : visited.WithExpression(wrapped);
+        }
+
+        public override SyntaxNode VisitJoinClause(JoinClauseSyntax node)
+        {
+            var visited = (JoinClauseSyntax)base.VisitJoinClause(node);
+            var wrapped = GuardQuerySource(node.InExpression, visited.InExpression, node.Type != null);
+            return wrapped == null ? visited : visited.WithInExpression(wrapped);
+        }
+
+        private bool IsLibrary(IMethodSymbol method)
+        {
+            return !SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, model.Compilation.Assembly);
+        }
+
+        private static ITypeSymbol ThisParameterType(IMethodSymbol reducedExtension)
+        {
+            var method = reducedExtension.GetConstructedReducedFrom() ?? reducedExtension.ReducedFrom;
+            return method.Parameters.Length > 0 ? method.Parameters[0].Type : null;
+        }
+
+        /// <summary>
+        /// The call right after ?. in <c>a?.B().C()</c>, which is <c>.B()</c>.
+        /// </summary>
+        private static ExpressionSyntax FirstBoundCall(ExpressionSyntax whenNotNull)
+        {
+            var expression = whenNotNull;
+            while (true)
+            {
+                switch (expression)
+                {
+                    case InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax } call:
+                        return call;
+                    case InvocationExpressionSyntax invocation:
+                        expression = invocation.Expression;
+                        break;
+                    case MemberAccessExpressionSyntax access:
+                        expression = access.Expression;
+                        break;
+                    case ElementAccessExpressionSyntax element:
+                        expression = element.Expression;
+                        break;
+                    case PostfixUnaryExpressionSyntax postfix:
+                        expression = postfix.Operand;
+                        break;
+                    default:
+                        return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// True for an expression that continues a ?. chain (<c>.B()</c> in <c>a?.B().C()</c>); it
+        /// has no value outside the chain, so it cannot be wrapped.
+        /// </summary>
+        private static bool StartsWithConditionalBinding(ExpressionSyntax expression)
+        {
+            while (true)
+            {
+                switch (expression)
+                {
+                    case MemberBindingExpressionSyntax:
+                    case ElementBindingExpressionSyntax:
+                        return true;
+                    case InvocationExpressionSyntax invocation:
+                        expression = invocation.Expression;
+                        break;
+                    case MemberAccessExpressionSyntax access:
+                        expression = access.Expression;
+                        break;
+                    case ElementAccessExpressionSyntax element:
+                        expression = element.Expression;
+                        break;
+                    case PostfixUnaryExpressionSyntax postfix:
+                        expression = postfix.Operand;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wraps every argument of a library call whose parameter is a sequence. The semantic model
+        /// of the original node maps arguments to parameters (named arguments, optional ones); the
+        /// rewritten argument list has the same arguments in the same order.
+        /// </summary>
+        private ArgumentListSyntax GuardArguments(SyntaxNode original, ArgumentListSyntax originalArguments, ArgumentListSyntax visitedArguments)
+        {
+            if (originalArguments == null || visitedArguments == null || originalArguments.Arguments.Count == 0)
+                return visitedArguments;
+            var arguments = model.GetOperation(original) switch
+            {
+                IInvocationOperation invocation => invocation.Arguments,
+                IObjectCreationOperation creation => creation.Arguments,
+                _ => default
+            };
+            if (arguments.IsDefaultOrEmpty)
+                return visitedArguments;
+
+            var list = visitedArguments.Arguments;
+            foreach (var argument in arguments)
+            {
+                if (argument.ArgumentKind != ArgumentKind.Explicit || argument.Parameter == null
+                    || argument.Syntax is not ArgumentSyntax syntax || !syntax.RefKindKeyword.IsKind(SyntaxKind.None))
+                {
+                    continue;
+                }
+                int index = originalArguments.Arguments.IndexOf(syntax);
+                if (index < 0)
+                    continue;
+                var wrapped = GuardSequence(syntax.Expression, list[index].Expression, argument.Parameter.Type);
+                if (wrapped != null)
+                    list = list.Replace(list[index], list[index].WithExpression(wrapped));
+            }
+            return visitedArguments.WithArguments(list);
+        }
+
+        /// <summary>
+        /// <c>ScriptGuard.Enumerate&lt;T&gt;(expression)</c> when <paramref name="parameterType"/> is
+        /// IEnumerable&lt;T&gt;, <c>ScriptGuard.EnumerateUntyped(expression)</c> when it is the
+        /// non-generic IEnumerable, or null when the expression needs no guard. The type argument
+        /// is the parameter's, so overload resolution and type inference of the library call do
+        /// not change.
+        /// </summary>
+        private ExpressionSyntax GuardSequence(ExpressionSyntax original, ExpressionSyntax visited, ITypeSymbol parameterType)
+        {
+            if (parameterType == null)
+                return null;
+            var argumentType = model.GetTypeInfo(original).Type;
+            if (argumentType == null || argumentType.TypeKind == TypeKind.Error || NeedsNoGuard(argumentType))
+                return null;
+            if (IsGenericEnumerable(parameterType, out var element))
+                return WrapSequence(visited, element, original.SpanStart);
+            if (parameterType.SpecialType == SpecialType.System_Collections_IEnumerable)
+                return WrapSequence(visited, null, original.SpanStart);
+            return null;
+        }
+
+        private ExpressionSyntax GuardQuerySource(ExpressionSyntax original, ExpressionSyntax visited, bool castsItems)
+        {
+            var type = model.GetTypeInfo(original).Type;
+            if (type == null || type.TypeKind == TypeKind.Error || NeedsNoGuard(type))
+                return null;
+            var sequences = (IsGenericEnumerable(type, out var own) ? new[] { own } : type.AllInterfaces
+                    .Where(i => i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)
+                    .Select(i => i.TypeArguments[0]))
+                .Distinct<ITypeSymbol>(SymbolEqualityComparer.Default)
+                .ToList();
+            if (sequences.Count == 1)
+                return WrapSequence(visited, sequences[0], original.SpanStart);
+            if (sequences.Count == 0 && castsItems
+                && (type.SpecialType == SpecialType.System_Collections_IEnumerable
+                    || type.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_Collections_IEnumerable)))
+            {
+                return WrapSequence(visited, null, original.SpanStart);
+            }
+            return null;
+        }
+
+        private ExpressionSyntax WrapSequence(ExpressionSyntax visited, ITypeSymbol element, int position)
+        {
+            string callee = element == null
+                ? GuardType + ".EnumerateUntyped"
+                : $"{GuardType}.Enumerate<{element.ToMinimalDisplayString(model, position)}>";
+            return SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.ParseExpression(callee),
+                    SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(visited.WithoutTrivia()))))
+                .WithLeadingTrivia(visited.GetLeadingTrivia())
+                .WithTrailingTrivia(visited.GetTrailingTrivia());
+        }
+
+        private static bool IsGenericEnumerable(ITypeSymbol type, out ITypeSymbol element)
+        {
+            if (type is INamedTypeSymbol named && named.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)
+            {
+                element = named.TypeArguments[0];
+                return true;
+            }
+            element = null;
+            return false;
+        }
+
+        // In-memory collections: iterating one costs at most its size, which the script already
+        // paid for under the guards when it filled it. Arrays and strings count too.
+        private static readonly HashSet<string> MaterializedCollections = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "System.Collections.Generic.List`1", "System.Collections.Generic.HashSet`1",
+            "System.Collections.Generic.Dictionary`2", "System.Collections.Generic.Dictionary`2+KeyCollection",
+            "System.Collections.Generic.Dictionary`2+ValueCollection", "System.Collections.Generic.Queue`1",
+            "System.Collections.Generic.Stack`1"
+        };
+
+        /// <summary>
+        /// Arrays, strings and in-memory collections need no guard, and neither do the script's
+        /// own types, whose enumerators are script code with guards of their own.
+        /// </summary>
+        private bool NeedsNoGuard(ITypeSymbol type)
+        {
+            if (type is IArrayTypeSymbol || type.SpecialType == SpecialType.System_String)
+                return true;
+            if (type is not INamedTypeSymbol named)
+                return false;
+            if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, model.Compilation.Assembly))
+                return true;
+            return MaterializedCollections.Contains(MetadataName(named.OriginalDefinition));
+        }
+
+        private static string MetadataName(INamedTypeSymbol type)
+        {
+            string name = type.MetadataName;
+            for (var outer = type.ContainingType; outer != null; outer = outer.ContainingType)
+                name = outer.MetadataName + "+" + name;
+            string ns = type.ContainingNamespace?.ToDisplayString();
+            return string.IsNullOrEmpty(ns) || type.ContainingNamespace.IsGlobalNamespace ? name : ns + "." + name;
         }
 
         public override SyntaxNode VisitVariableDeclarator(VariableDeclaratorSyntax node)

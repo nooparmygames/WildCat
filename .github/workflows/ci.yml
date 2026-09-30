@@ -1,5 +1,6 @@
-# Builds and tests the backend (with the PostgreSQL provider tests against a real database), lints,
-# tests and builds the panel, and checks that the host's Docker image still builds.
+# Builds and tests the backend (with the PostgreSQL provider tests against a real database), checks
+# compose.yaml against the .env the README's quick start produces, lints, tests and builds the panel,
+# and checks that the host's Docker image still builds.
 
 name: CI
 
@@ -96,6 +97,28 @@ jobs:
             backend/WildCat.Tests/TestResults/**/*.trx
             backend/WildCat.Tests/TestResults/**/Sequence_*.xml
           retention-days: 14
+
+  # Follows quick start B in README.md up to `docker compose up`: copy .env.example and make the
+  # two edits it asks for. Catches a compose.yaml that requires a variable the quick start does not
+  # mention (docker compose config fails on an empty required variable).
+  compose:
+    name: Compose file with the quick start .env
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create .env the way README.md says
+        run: |
+          cp .env.example .env
+          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-compose-check/" .env
+          # Base64 uses / and + but never |, so | delimits the sed expression.
+          sed -i "s|^WILDCAT_ADMIN_JWT_SIGNING_KEY=.*|WILDCAT_ADMIN_JWT_SIGNING_KEY=$(openssl rand -base64 32)|" .env
+          grep -q '^POSTGRES_PASSWORD=ci-compose-check$' .env
+          grep -Eq '^WILDCAT_ADMIN_JWT_SIGNING_KEY=.{44}$' .env
+
+      - name: Validate compose.yaml
+        run: docker compose config -q
 
   panel:
     name: Panel lint, tests and build

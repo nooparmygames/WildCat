@@ -382,6 +382,37 @@ namespace WildCat.Scripting
                 CheckType(node, parameter.Type);
             foreach (var argument in method.TypeArguments)
                 CheckType(node, argument);
+            if (IsLibraryMethodGroupReadingSequence(node, definition))
+            {
+                Report(node, ConstructNotAllowed,
+                    $"Pass a lambda instead of the method group '{definition.ContainingType?.Name}.{definition.Name}'. Library methods " +
+                    "that read a sequence must be called directly in the script, where the time limit can stop them.");
+            }
+        }
+
+        /// <summary>
+        /// A library method that takes a sequence, used as a delegate (<c>lists.Select(Enumerable.Sum)</c>
+        /// or <c>Func&lt;IEnumerable&lt;int&gt;, int&gt; f = Enumerable.Sum</c>). ScriptGuardRewriter
+        /// guards the sequences passed to library calls it can see; a call through such a delegate
+        /// would read the sequence with no guard.
+        /// </summary>
+        private bool IsLibraryMethodGroupReadingSequence(SyntaxNode node, IMethodSymbol definition)
+        {
+            if (node is not ExpressionSyntax
+                || (node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node)
+                || (node.Parent is MemberAccessExpressionSyntax access && access.Name == node)
+                || definition.ContainingType == null || IsScriptType(definition.ContainingType)
+                || !definition.Parameters.Any(p => IsSequence(p.Type)))
+            {
+                return false;
+            }
+            return model.GetOperation(node) is Microsoft.CodeAnalysis.Operations.IMethodReferenceOperation;
+        }
+
+        private static bool IsSequence(ITypeSymbol type)
+        {
+            return type.SpecialType == SpecialType.System_Collections_IEnumerable
+                || (type is INamedTypeSymbol named && named.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
         }
 
         /// <summary>

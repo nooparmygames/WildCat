@@ -44,7 +44,7 @@ namespace WildCat.Tests
         }
 
         [Fact]
-        public async Task ActivationCodeWorksOnceAndDiesAfterFiveWrongTries()
+        public async Task ActivationCodeActivatesAndDiesAfterFiveWrongTries()
         {
             var registration = await Manager.RegisterDeveloper(UniqueEmail(), "a long password", null, null);
             var developer = GrainFactory.GetGrain<IDeveloper>(registration.Key);
@@ -55,9 +55,37 @@ namespace WildCat.Tests
             string code = await developer.CreateActivationCode();
             Assert.True(await developer.Activate(" " + code.ToLowerInvariant() + " "));
             Assert.Equal(DeveloperState.DeveloperStatus.Normal, (await developer.GetDeveloperData()).Status);
-            Assert.Null((await developer.GetDeveloperData()).ActivationCode);
             Assert.Null(await developer.CreateActivationCode());
-            Assert.True(await developer.Activate("anything"));
+        }
+
+        [Fact]
+        public async Task AnActiveAccountStillChecksTheActivationCode()
+        {
+            var registration = await Manager.RegisterDeveloper(UniqueEmail(), "a long password", null, null);
+            var developer = GrainFactory.GetGrain<IDeveloper>(registration.Key);
+            Assert.True(await developer.Activate(registration.ActivationCode));
+
+            // Any other code fails as it does for an inactive account, so the answer does not tell a
+            // caller without the code that the account is active.
+            Assert.False(await developer.Activate("anything"));
+            Assert.False(await developer.Activate("WRONGCODE2"));
+            // The code that activated the account works again (a second click on the emailed link),
+            // also after a reactivation.
+            Assert.True(await developer.Activate(registration.ActivationCode));
+            await cluster.Deactivate(developer);
+            Assert.True(await developer.Activate(registration.ActivationCode.ToLowerInvariant()));
+            Assert.Equal(DeveloperState.DeveloperStatus.Normal, (await developer.GetDeveloperData()).Status);
+
+            // Wrong tries still count: after five the code stops working, and the account stays active.
+            for (int i = 0; i < 3; i++)
+                Assert.False(await developer.Activate("WRONGCODE2"));
+            Assert.False(await developer.Activate(registration.ActivationCode));
+            Assert.Null((await developer.GetDeveloperData()).ActivationCode);
+            Assert.Equal(DeveloperState.DeveloperStatus.Normal, (await developer.GetDeveloperData()).Status);
+
+            // A developer created without registration never had a code.
+            var seeded = GrainFactory.GetGrain<IDeveloper>(await TestSetup.CreateDeveloper(GrainFactory));
+            Assert.False(await seeded.Activate("anything"));
         }
 
         [Fact]

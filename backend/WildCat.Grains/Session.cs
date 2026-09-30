@@ -42,7 +42,7 @@ namespace WildCat.Grains
         private DateTime lastWrittenCallTime;
 
         public Session(
-            [PersistentState("session")] IPersistentState<SessionState> state,
+            [PersistentState(GrainStateNames.Session, GrainStorageNames.Default)] IPersistentState<SessionState> state,
             IOptions<SessionOptions> options)
         {
             this.state = state;

@@ -22,8 +22,18 @@ project's legacy name.
 | `WildCat.Gateway` (`FrontEnd`) | WebSocket gateway library mapped at `/ws` by the host, using the silo's `IClusterClient` (a separate Orleans client process before step 1); `FrontEndServer.cs`, one class of over 2,000 lines, dispatches every message |
 | `WildCat.Tests` (`Tests`) | xUnit on `InProcessTestCluster` (`TestCluster` before step 1), one shared cluster per collection |
 
-Environment facts that apply everywhere: only `LeaderBoard` names a storage provider ("blob");
-every other `Grain<T>` uses the default provider. `WildCat:Orleans:Provider` decides what backs
+Environment facts that apply everywhere: every stateful grain injects
+`[PersistentState(name, provider)] IPersistentState<T>` with a state name of its own
+(`WildCat.Grains/GrainStateNames.cs`); only `LeaderBoard` uses the "blob" provider, every other
+grain "Default". Until the step 5 review the grains derived from `Grain<T>`, which stores every
+class under the state name "state"; the ADO.NET provider keys rows by service id, grain key and
+state name only, so grain classes sharing a key (Developer and DeveloperStorage, PlayerFriendList
+and PlayerChallengeHandler, a leaderboard and a chunk of another) overwrote each other in
+PostgreSQL. `GrainStateNameTests` keeps the names unique. The ADO.NET storage writes JSON with
+every value, defaults included (`SiloBuilderExtensions.WriteDefaultValues`); the Orleans default
+left out false and 0, so values a constructor sets otherwise (a game mode's
+`FinishGameWithOneDisconnect`, a leaderboard's `AcceptBetterScoresOnly`) came back wrong after a
+reactivation. `WildCat:Orleans:Provider` decides what backs
 the storage names "Default", "blob" and "PubSubStore": memory storage for `Memory` (the default,
 also used by the tests), or ADO.NET storage in PostgreSQL for `PostgreSQL`, which also puts
 clustering and reminders in that database (schema scripts in `deploy/postgres`). In PostgreSQL
@@ -41,7 +51,7 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | Player (Player.cs) | IPlayer, S (Guid string) | PlayerState; 10 s heartbeat timer marks Offline after 20 s silence; produces on its PlayerConnection stream | Account aggregate: create account by device/user+password/email, login variants, email activation and password reset codes, stored ELO score (get/set only), running relay games, pending matches and rejoin, `SendDataToConnection` push to the gateway; forwards key/value calls to PlayerStorage |
 | PlayerCreator | IPlayerCreator, I | stateless worker | allocates a new Guid account id and calls `IPlayer.CreateAccountWith*` |
 | PlayerStorage | IPlayerStorage, S "gameKey_playerId[_file]" | PlayerStorageState | private and public key/value store per player per game (it set the global `JsonConvert.DefaultSettings` until step 4) |
-| PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | Grain<PlayerInventoryState> in its own grain storage (a JSON blob in PlayerStorage before step 4) | add/set/buy/consume/remove items, packages, timed unlock chests |
+| PlayerInventory | IPlayerInventory, S "g_p_[name_]inv" | PlayerInventoryState in its own grain storage (a JSON blob in PlayerStorage before step 4) | add/set/buy/consume/remove items, packages, timed unlock chests |
 | PlayerFriendList | IPlayerFriendList, G+S | FriendListState; produces on the FriendEvents stream for (gameKey, playerId); the `[AlwaysInterleave]` on its status setters was ignored by 3.x and removed in the port | invite handshake, friend list with public data and presence fan-out |
 | PlayerChallengeHandler | IPlayerChallengeHandler, G+S | PlayerChallengesState; produces on the ChallengeEvents stream for (gameKey, playerId) | direct 1v1 challenges; on accept creates a RelayServerGame with the default mode |
 | Session | ISession, G | SessionState, written on initialize, user binding and end; touches write at most once a minute (not persisted before step 4; kept across restarts in PostgreSQL mode) | bearer ticket: developer and game binding, user binding after login, `Touch()` and `TouchAndGetInfo()` refresh `LastCallTime`, 60 min idle expiry |
@@ -52,7 +62,7 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | RelayServerGame | IRelayServerGame, G+S (matchId + gameKey) | RelayServerGameState | match membership, status, game and player properties (10 KB cap), relays opaque byte[] to other players through `IPlayer.SendDataToConnection` |
 | GameModeManager | IGameModeManager, G | GameModeManagerState | CRUD for GameMode (min/max players, finish on one disconnect, criteria list) |
 | LeaderBoard | ILeaderBoard, S "{gameKey}_L_{name}" | LeaderBoardState on provider "blob"; full sorted list in memory, chunks in LeaderBoardStorage | add score, top, around me, rank, rewards |
-| LeaderBoardStorage | ILeaderBoardStorage, S | LeaderBoardStorageState | one chunk of entries |
+| LeaderBoardStorage | ILeaderBoardStorage, S "{boardKey}#{index}" (`ResourcesUtility.GetLeaderBoardChunkKey`; the index followed the board key without a separator before the step 5 review) | LeaderBoardStorageState | one chunk of entries |
 | Item, PackageContainer | IItem, IPackageContainer, S | ItemState, PackageContainerState | catalog definitions; random drops not implemented |
 | ResourceManager | IResourceManager, S | ResourceManagerState | registry of named resources per game (leaderboards, scripts); can emit a C# constants class for SDKs |
 | ScriptEventCompiler | IScriptEventCompiler, S "{gameKey}_G_{event}" | ScriptEventState | validates and stores a developer's C# event script and the diagnostics of the last Initialize or Edit (`GetDiagnostics`) |
@@ -111,9 +121,13 @@ types, basic collections, LINQ, `StringBuilder`, `Math`, `Random`, message-only 
 awaiting tasks) plus lock, async void, static fields, records, anonymous types, finalizers,
 unsafe code and `#r`/`#load`; diagnostics come back as `ScriptDiagnostic` with lines relative
 to the developer's script. `ScriptGuardRewriter` then inserts `ScriptGuard` calls into every
-loop body, goto, method, lambda, accessor and instance field initializer, so a run stops itself
-with `ScriptTimeoutException` at its deadline (`ScriptOptions.Timeout`, 3 s) and with
-`ScriptRecursionLimitException` before the stack runs out. Compiled scripts are cached per silo
+loop body, goto, method, lambda, accessor and instance field initializer, and wraps every
+sequence handed to a library method or constructor (and every query expression source) in a
+guarded enumerator, so a run stops itself with `ScriptTimeoutException` at its deadline
+(`ScriptOptions.Timeout`, 3 s) and with `ScriptRecursionLimitException` before the stack runs
+out. Scripts run on `ScriptWorkerPool`, a dedicated pool of threads, through `ScriptExecutor`,
+which also refuses new runs of a game that has too many runs still going past their limit (see
+bug 15 for what the guards cannot stop). Compiled scripts are cached per silo
 by (game, event, script hash), bounded to 500 entries. Scripts get `args` (from the client,
 untrusted) and a `WildCat` object (a `WildCatScriptApi`) with private data of the calling player
 only, public data of any player (read only), time, leaderboard read/write (count clamped to 20),
@@ -208,10 +222,19 @@ Correctness:
     non-thread-safe static per-silo cache (multi-silo clusters got KeyNotFound) and ignored
     compile diagnostics. Scripts now stop themselves through the inserted guard calls, a fast
     run returns at once, the cache is thread safe and filled from the compiler grain on any
-    silo, and compile errors reject the script. Limits that remain: CPU time inside a single
-    library call (for example `Enumerable.Range(0, int.MaxValue).Count()`) is not interrupted
-    until the call returns, memory is not capped, and Roslyn script assemblies are never
-    unloaded.
+    silo, and compile errors reject the script. After review: library loops over sequences
+    (`Enumerable.Repeat(1, int.MaxValue).Sum()`, `new HashSet<int>(sequence)`, query
+    expressions) stop at the deadline too, because every sequence handed to library code is
+    wrapped in a guarded enumerator; scripts run on a dedicated worker pool
+    (`ScriptOptions.WorkerThreads`, one thread per processor by default) instead of the shared
+    thread pool; and a game with more than `ScriptOptions.MaxOverdueRunsPerGame` (2) runs still
+    going after their time limit gets `ScriptThrottledException` for new runs until they finish.
+    Limits that remain: a single library call that neither calls back into script code nor
+    reads a guarded sequence runs until it returns (huge allocations such as
+    `new int[500_000_000]` or `new string('x', int.MaxValue)`, string operations on huge
+    strings, sorting a large collection, passes over large in-memory collections), memory is not
+    capped, and Roslyn script assemblies are never unloaded. Such a run holds one worker thread,
+    never a thread-pool thread.
 16. `Player.RejoinMatch` calls `game.PlayerRejoined`, which calls back into the same player.
     That worked on 3.4.3 only because call chain reentrancy was on by default there
     (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the

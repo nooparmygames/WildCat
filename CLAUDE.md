@@ -107,7 +107,10 @@ ConnectionStrings__WildCat="Host=localhost;Port=5432;Database=wildcat;Username=w
   describes it). Job `backend` runs the commands above in Release (`dotnet build -c Release`,
   then `dotnet test -c Release --no-build --blame-hang-timeout 4m --logger trx`) with
   `WILDCAT_TEST_POSTGRES` pointing at a PostgreSQL 17 service container that got the
-  `deploy/postgres` scripts, so the PostgreSQL tests must pass there too. Job `panel` runs
+  `deploy/postgres` scripts, so the PostgreSQL tests must pass there too. Job `compose` copies
+  `.env.example` to `.env`, makes the two edits README quick start B asks for (a password and an
+  `openssl rand -base64 32` signing key) and runs `docker compose config -q`, so keep the
+  quick start, `.env.example` and `compose.yaml` in step. Job `panel` runs
   `npm ci`, `lint`, `test` and `build` on Node 22; job `docker` builds the host image from
   `compose.yaml`'s context. Actions are pinned to major versions. Check the workflow after
   editing it with actionlint at the repository root (needs Go):
@@ -220,6 +223,11 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   ten rules in `SKILL.md` are the review checklist.
 - Every type crossing a grain call or stored as state gets `[GenerateSerializer]`, `[Id]` and
   `[Alias]` once the port starts. No `.Wait()`/`.Result`/`ConfigureAwait(false)` in grains.
+- Grain state goes through a constructor-injected `[PersistentState(name, provider)]
+  IPersistentState<T>`, never `Grain<T>`, with a state name of its own added to
+  `WildCat.Grains/GrainStateNames.cs`: the ADO.NET storage keys rows by grain key and state name
+  only, so two grain classes with the same key and state name overwrite each other in
+  PostgreSQL. `GrainStateNameTests` enforces it.
 - Grain interface names start with `I` and files match the type name (`IPlayer.cs`, not
   `iPlayer.cs`). Fix legacy names when a file is otherwise being edited, in a separate commit.
 - New tests use unique grain keys per test and never wait without a timeout.

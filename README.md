@@ -57,13 +57,21 @@ reset codes appear in the host's log.
 
 ### B: Docker Compose, with PostgreSQL
 
-You need Docker with Compose 2.24 or later.
+You need Docker with Compose 2.24 or later, and OpenSSL (or any other source of 32 random bytes)
+for the admin API's signing key.
 
 ```bash
 cp .env.example .env
-# edit .env and replace the placeholder POSTGRES_PASSWORD
+openssl rand -base64 32
+# edit .env: replace the placeholder POSTGRES_PASSWORD with a password of your own, and set
+# WILDCAT_ADMIN_JWT_SIGNING_KEY to the key the line above printed
 docker compose up --build
 ```
+
+`docker compose` refuses to start while the signing key (or the password) is empty and names the
+variable. The signing key signs the admin API's login tokens, so anyone who has it can sign in as
+any developer: keep it secret and generate a new one per installation. Changing it signs
+everybody out.
 
 `compose.yaml` starts PostgreSQL 17 and the WildCat host. On its first start PostgreSQL creates the
 Orleans tables from [deploy/postgres](deploy/postgres/README.md), and the host keeps cluster
@@ -99,6 +107,7 @@ environment variable name joins the sections with `__`, so `WildCat:Orleans:Prov
 | Key | Default | Meaning |
 |---|---|---|
 | `ConnectionStrings:WildCat` | empty | PostgreSQL connection string (Npgsql format). Required when the provider is `PostgreSQL`; the host stops at startup without it. |
+| `WildCat:Admin:JwtSigningKey` | empty | Base64 key, at least 32 bytes, that signs the admin API's login tokens; generate one with `openssl rand -base64 32`. Required outside Development, where the host stops at startup without it; in Development an empty value means a random key per run. With Docker Compose, set `WILDCAT_ADMIN_JWT_SIGNING_KEY` in `.env` instead. The other admin settings are in [docs/admin-api.md](docs/admin-api.md). |
 | `WildCat:Orleans:Provider` | `Memory` | `Memory`: localhost clustering, memory grain storage and in-memory reminders, one silo, nothing survives a restart. `PostgreSQL`: ADO.NET clustering, grain storage (`Default`, `blob`, `PubSubStore`) and reminders in the database above. Streams are memory streams either way. |
 | `WildCat:Orleans:ClusterId` | `wildcat-dev` | Silos with the same cluster id and database form one cluster. |
 | `WildCat:Orleans:ServiceId` | `wildcat` | Grain state and reminders are stored under this id; keep it stable across deployments. |
@@ -169,6 +178,9 @@ older one. The jobs:
   `--blame-hang-timeout 4m`. A PostgreSQL 17 service container gets the scripts from
   `deploy/postgres` and `WILDCAT_TEST_POSTGRES` points at it, so the PostgreSQL provider tests run
   too. The trx results are kept as the `backend-test-results` artifact, also when tests fail.
+- `compose`: follows quick start B up to `docker compose up`: copies `.env.example` to `.env`,
+  sets a password and a generated signing key, and checks `compose.yaml` with
+  `docker compose config -q`.
 - `panel`: `npm ci`, `npm run lint`, `npm test` and `npm run build` in `panel/` on Node 22.
 - `docker`: once `backend` passes, builds the host image from the same build context and
   Dockerfile as `compose.yaml`, without pushing it. It runs for pull requests and for pushes to

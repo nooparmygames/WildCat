@@ -202,8 +202,7 @@ namespace WildCat.Tests
         /// </summary>
         private async Task RewriteStoredState(IPlayer player, Action<PlayerState> change)
         {
-            // Grain<T> stores its state under the name "state".
-            const string stateName = "state";
+            const string stateName = GrainStateNames.Player;
             await cluster.Deactivate(player);
             var state = new GrainState<PlayerState>();
             await GetStorage().ReadStateAsync(stateName, player.GetGrainId(), state).WaitAsync(TestSetup.Timeout);

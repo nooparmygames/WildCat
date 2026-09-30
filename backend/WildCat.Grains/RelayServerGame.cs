@@ -3,13 +3,23 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 using WildCat.Protocol;
 
 namespace WildCat.Grains
 {
-    class RelayServerGame : Grain<RelayServerGameState>, IRelayServerGame
+    class RelayServerGame : Grain, IRelayServerGame
     {
+        private readonly IPersistentState<RelayServerGameState> state;
+
+        public RelayServerGame([PersistentState(GrainStateNames.RelayServerGame, GrainStorageNames.Default)] IPersistentState<RelayServerGameState> state)
+        {
+            this.state = state;
+        }
+
+        private RelayServerGameState State => state.State;
+
         private const int EVENT_CHANNEL = 0;
         private GameMode gameMode;
 
@@ -111,7 +121,7 @@ namespace WildCat.Grains
 
             State.StartTime = DateTime.Now;
             State.State = RelayServerGameStatus.Started;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             foreach (var p in players)
             {
                 await p.GameStarted(this.AsReference<IRelayServerGame>());
@@ -136,7 +146,7 @@ namespace WildCat.Grains
             State.State = RelayServerGameStatus.SomeJoined;
             if (State.Players.All(x => x.state == RelayServerPlayerGameStatus.InGame))
                 State.State = RelayServerGameStatus.AllJoined;
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             string extended;
             var primary = this.GetPrimaryKey(out extended);
             var playerName = await player.GetPlayerName();
@@ -159,7 +169,7 @@ namespace WildCat.Grains
                 if (State.Players.All(x => x.state == RelayServerPlayerGameStatus.InGame))
                     State.State = RelayServerGameStatus.AllJoined;
             }
-            await WriteStateAsync();
+            await state.WriteStateAsync();
             string extended;
             var primary = this.GetPrimaryKey(out extended);
             var msg = WildCatMessageBase.Create(

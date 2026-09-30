@@ -4,9 +4,9 @@ using WildCat.Interfaces;
 namespace WildCat.Scripting
 {
     /// <summary>
-    /// Runs compiled script events under a <see cref="ScriptBudget"/>. Shared by
-    /// <see cref="ScriptEventRunner"/> (the path game clients use) and
-    /// <see cref="ScriptEventCompiler.Run"/>.
+    /// Runs compiled script events under a <see cref="ScriptBudget"/> on the process's
+    /// <see cref="ScriptExecutor"/>. Shared by <see cref="ScriptEventRunner"/> (the path game
+    /// clients use) and <see cref="ScriptEventCompiler.Run"/>.
     /// </summary>
     internal static class ScriptSandbox
     {
@@ -44,7 +44,9 @@ namespace WildCat.Scripting
             Guid.TryParse(info.GameKey, out Guid gameKey);
             var budget = new ScriptBudget(info.Name, options.EffectiveTimeout, options.EffectiveMaxCallDepth);
             var api = new WildCatScriptApi(grainFactory, session, gameKey, player, scheduler, budget);
-            var result = await RunAsync(compiled, new Globals { args = args, WildCat = api }, budget);
+            var executor = ScriptExecutor.GetShared(options);
+            var result = await executor.RunAsync(compiled, new Globals { args = args, WildCat = api }, budget,
+                info.GameKey, options.EffectiveMaxOverdueRunsPerGame);
             if (!ScriptCompilationUtility.IsAllowedReturnValue(result))
             {
                 throw new InvalidOperationException(
@@ -54,27 +56,13 @@ namespace WildCat.Scripting
         }
 
         /// <summary>
-        /// Starts the script on the thread pool, so CPU-bound script code never occupies the grain
-        /// scheduler, and waits for it no longer than the budget. A fast script returns as soon as
-        /// it finishes. When the deadline passes the caller gets <see cref="ScriptTimeoutException"/>
-        /// at once; the script itself stops at its next guard check.
+        /// Runs a compiled script on the shared worker pool without a game (no circuit breaker);
+        /// see <see cref="ScriptExecutor.RunAsync"/>. CPU-bound script code never occupies the grain
+        /// scheduler or the thread pool.
         /// </summary>
-        public static async Task<object> RunAsync(CompiledScript compiled, Globals globals, ScriptBudget budget)
+        public static Task<object> RunAsync(CompiledScript compiled, Globals globals, ScriptBudget budget)
         {
-            var runner = compiled.Runner;
-            Task<object> run = Task.Run(() => ScriptGuard.Run(budget, () => runner(globals, budget.Token)));
-            try
-            {
-                return await run.WaitAsync(budget.Token);
-            }
-            catch (Exception ex) when (ex is not ScriptTimeoutException && ex is not ScriptRecursionLimitException && budget.IsExpired)
-            {
-                throw budget.CreateTimeoutException();
-            }
-            finally
-            {
-                budget.ReleaseWhenDone(run);
-            }
+            return ScriptExecutor.GetShared(null).RunAsync(compiled, globals, budget, gameKey: "", maxOverdueRuns: int.MaxValue);
         }
     }
 }

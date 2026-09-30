@@ -36,9 +36,10 @@ the panel's client-side routes survive a reload.
 | `AuthRequestsPerMinute` | Rate limit for the anonymous `/auth` endpoints per client address (IPv6 per /64), default 10. |
 
 Set real values through user secrets or environment variables (`WildCat__Admin__JwtSigningKey`,
-`WildCat__Admin__AdminEmails__0`); `docker-compose.yml` passes `WILDCAT_ADMIN_JWT_SIGNING_KEY`
-through. Account emails go through the `IEmailSender` the host registers; without one they are
-logged.
+`WildCat__Admin__AdminEmails__0`). With Docker Compose, `compose.yaml` at the repository root
+passes `WILDCAT_ADMIN_JWT_SIGNING_KEY` from `.env` to the host as `WildCat__Admin__JwtSigningKey`
+and refuses to start while it is empty; quick start B in the README shows how to generate it.
+Account emails go through the `IEmailSender` the host registers; without one they are logged.
 
 ## Conventions
 
@@ -62,8 +63,8 @@ otherwise, 404 for an unknown game); admins may open any game.
 
 | Method and path | Auth | Body | Response |
 |---|---|---|---|
-| POST `/auth/register` | anonymous, rate limited | `{email, password, firstName?, lastName?}` | 202; 409 if the email is taken. Emails an activation code. |
-| POST `/auth/activate` | anonymous, rate limited | `{email, code}` | 204; 400 for a wrong or expired code (7 days, 5 tries) |
+| POST `/auth/register` | anonymous, rate limited | `{email, password, firstName?, lastName?}` | 202; 409 if the email is taken (see Not there yet). Emails an activation code. |
+| POST `/auth/activate` | anonymous, rate limited | `{email, code}` | 204; 400 for a wrong or expired code (7 days, 5 tries). The code is checked for an account that is already active too, with the same 400 for a wrong code, so the answer does not tell whether an account is active; the code that activated it keeps answering 204 until it expires. |
 | POST `/auth/resend-activation` | anonymous, rate limited | `{email}` | always 202; emails a new code to an inactive account |
 | POST `/auth/login` | anonymous, rate limited | `{email, password}` | `{token, expiresAt, developer: {key, email, firstName, lastName, isAdmin}}`; 401 for a wrong email or password (same message for both); 403 for an account that is not activated or is disabled |
 | POST `/auth/request-password-reset` | anonymous, rate limited | `{email}` | always 202; emails a reset code (1 hour, 5 tries) if the account exists |
@@ -84,8 +85,8 @@ otherwise, 404 for an unknown game); admins may open any game.
 | PUT `/games/{gameKey}/items/{name}` | game | item fields | `item` (creates or replaces) |
 | DELETE `/games/{gameKey}/items/{name}` | game | | 204; inventories keep their stacks |
 | GET `/games/{gameKey}/events` | game | | `[{name, parameters: [{name, type}], script}]` |
-| PUT `/games/{gameKey}/events/{name}` | game | `{parameters, script}` | the saved event; 400 with the compiler's messages in `errors` |
-| DELETE `/games/{gameKey}/events/{name}` | game | | 204; 404 if missing. See below for what it leaves behind. |
+| PUT `/games/{gameKey}/events/{name}` | game | `{parameters, script}` | the saved event; 400 with the compiler's messages in `errors`. The script is checked against the parameters in the request, so an existing event can change its parameter list. |
+| DELETE `/games/{gameKey}/events/{name}` | game | | 204; 404 if missing. Deletes the event's stored script and compiled copy; game clients that still run it get an error, as for an event that never existed. |
 | GET `/games/{gameKey}/game-modes` | game | | `[mode]` |
 | PUT `/games/{gameKey}/game-modes/{name}` | game | mode fields | `mode` (creates or replaces) |
 | DELETE `/games/{gameKey}/game-modes/{name}` | game | | 204 |
@@ -117,11 +118,14 @@ Shapes:
 
 ## Not there yet
 
-- Deleting a script event: `IScriptEventCompiler` cannot clear an event, so DELETE takes it off
-  the list and replaces its script with an empty method (`async Task name() { }`). Clients that
-  still call it get a result without a value; none of the old code runs. A real delete comes with
-  the script sandbox work (step 9), as do structured compiler diagnostics; today `errors` holds
-  the validator's single message and compile errors in otherwise valid scripts are not reported.
+- Email enumeration through registration: `POST /auth/register` answers 409 for an email that
+  already has an account, so anyone can find out whether an address is registered. This is a
+  known trade-off for a clear sign-up form; the `/auth` rate limit (`AuthRequestsPerMinute` per
+  address) keeps probing slow. The other `/auth` endpoints give the same answer for a known and
+  an unknown email.
+- Structured compiler diagnostics: a rejected script's `errors` holds one line that summarizes
+  the first three errors (each with its id, such as `WC1007` or `CS0103`, and its line and column
+  when it has one), not a separate entry per diagnostic.
 - Deleting a game, leaderboard or item removes it from the catalog; stored grain state for the
   game's resources stays behind.
 - Tokens cannot be revoked before they expire; a password change does not end other sessions.

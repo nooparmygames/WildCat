@@ -2,12 +2,22 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Orleans;
+using Orleans.Runtime;
 using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
-    public class PackageContainer : Grain<PackageContainerState>, IPackageContainer
+    public class PackageContainer : Grain, IPackageContainer
     {
+        private readonly IPersistentState<PackageContainerState> state;
+
+        public PackageContainer([PersistentState(GrainStateNames.PackageContainer, GrainStorageNames.Default)] IPersistentState<PackageContainerState> state)
+        {
+            this.state = state;
+        }
+
+        private PackageContainerState State => state.State;
+
         private bool _IsCreated;
 
         public override Task OnActivateAsync(CancellationToken cancellationToken)
@@ -88,7 +98,7 @@ namespace WildCat.Grains
             State.RandomDropCount = randomCount;
             State.Price = price;
             State.Capacity = capacity;
-            return WriteStateAsync();
+            return state.WriteStateAsync();
         }
     }
 }

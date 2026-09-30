@@ -26,8 +26,28 @@ namespace WildCat.Scripting
         /// </summary>
         public int CacheCapacity { get; set; } = DefaultCacheCapacity;
 
+        /// <summary>
+        /// Threads of the dedicated pool that runs script code (<see cref="ScriptWorkerPool"/>),
+        /// so a runaway script can only hold one of these, never a thread-pool thread the silo and
+        /// the gateway need. 0 (the default) means one per processor. The process creates the
+        /// pool on the first script run, so a change needs a restart.
+        /// </summary>
+        public int WorkerThreads { get; set; }
+
+        /// <summary>
+        /// Circuit breaker per game: while more than this many of a game's runs are still going
+        /// after their time limit (stuck in a long library call the guard cannot interrupt, or
+        /// waiting for a free worker), new runs of that game fail at once with
+        /// ScriptThrottledException instead of queueing for the pool. Default 2.
+        /// </summary>
+        public int MaxOverdueRunsPerGame { get; set; } = 2;
+
         internal TimeSpan EffectiveTimeout => Timeout > TimeSpan.Zero ? Timeout : TimeSpan.FromSeconds(3);
 
         internal int EffectiveMaxCallDepth => MaxCallDepth > 0 ? MaxCallDepth : 256;
+
+        internal int EffectiveWorkerThreads => WorkerThreads > 0 ? WorkerThreads : Environment.ProcessorCount;
+
+        internal int EffectiveMaxOverdueRunsPerGame => MaxOverdueRunsPerGame >= 0 ? MaxOverdueRunsPerGame : 2;
     }
 }
