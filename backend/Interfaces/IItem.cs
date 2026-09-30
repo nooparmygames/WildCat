@@ -17,21 +17,23 @@ namespace Interfaces
         Task<string> GetDescription();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.ItemState")]
     public class ItemState
     {
-        public bool IsCreated { get; set; }
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public Dictionary<string, string> MetaData { get; set; }
-        public int MaxAllowedToHave { get; set; }
-        public bool Stackable { get; set; }
-        public bool AutomaticallyConsummed { get; set; }
-        public TimeSpan EffectTime { get; set; }
-        public bool IsConsumable { get; set; }
-        public bool IsRegenerating { get; set; }
-        public int RegenerationAmount { get; set; }
-        public TimeSpan RegenerationPeriod { get; set; }
-        public List<PlayerInventoryState.InInventoryItemState> Price { get; set; }
+        [Id(0)] public bool IsCreated { get; set; }
+        [Id(1)] public string Name { get; set; }
+        [Id(2)] public string Description { get; set; }
+        [Id(3)] public Dictionary<string, string> MetaData { get; set; }
+        [Id(4)] public int MaxAllowedToHave { get; set; }
+        [Id(5)] public bool Stackable { get; set; }
+        [Id(6)] public bool AutomaticallyConsummed { get; set; }
+        [Id(7)] public TimeSpan EffectTime { get; set; }
+        [Id(8)] public bool IsConsumable { get; set; }
+        [Id(9)] public bool IsRegenerating { get; set; }
+        [Id(10)] public int RegenerationAmount { get; set; }
+        [Id(11)] public TimeSpan RegenerationPeriod { get; set; }
+        [Id(12)] public List<PlayerInventoryState.InInventoryItemState> Price { get; set; }
 
         public ItemState()
         {

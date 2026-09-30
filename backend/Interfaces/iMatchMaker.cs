@@ -20,10 +20,12 @@ namespace Interfaces
         
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.FoundMatchResult")]
     public class FoundMatchResult
     {
-        public IGame game { get; set; }
-        public string otherPlayerName { get; set; }
+        [Id(0)] public IGame game { get; set; }
+        [Id(1)] public string otherPlayerName { get; set; }
 
         public FoundMatchResult(IGame game,string name)
         {

@@ -14,10 +14,12 @@ namespace Interfaces
         Task AddGroup(DateTime dt);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.TimedExecutionManagerState")]
     public class TimedExecutionManagerState
     {
-        public List<DateTime> groups;
-        public List<DateTime> finishedGroups;
+        [Id(0)] public List<DateTime> groups;
+        [Id(1)] public List<DateTime> finishedGroups;
         
         public TimedExecutionManagerState()
         {

@@ -16,6 +16,8 @@ namespace Interfaces
         Task<TimedExecuterState.State> GetState();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.TimedExecuterState")]
     public class TimedExecuterState
     {
         public enum State
@@ -24,8 +26,8 @@ namespace Interfaces
             Started,
             Finished
         }
-        public State state;
-        public List<ExecutionTask> tasks;
+        [Id(0)] public State state;
+        [Id(1)] public List<ExecutionTask> tasks;
 
         public TimedExecuterState()
         {
@@ -33,14 +35,16 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.ExecutionTask")]
     public class ExecutionTask
     {
         public enum Type { Notification, TournamentRunner }
-        public Type type;
-        public DateTime dt;
-        public string player;
-        public string data;
-        public bool isSent;
-        public Guid id;
+        [Id(0)] public Type type;
+        [Id(1)] public DateTime dt;
+        [Id(2)] public string player;
+        [Id(3)] public string data;
+        [Id(4)] public bool isSent;
+        [Id(5)] public Guid id;
     }
 }

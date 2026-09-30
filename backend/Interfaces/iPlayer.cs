@@ -69,21 +69,25 @@ namespace Interfaces
         public Task SendDataToConnection(IPlayer player, int channel, byte[] data);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerRunningMatch")]
     public class PlayerRunningMatch
     {
-        public Guid MatchId;
-        public DateTime StartTime;
-        public List<IPlayer> players;
+        [Id(0)] public Guid MatchId;
+        [Id(1)] public DateTime StartTime;
+        [Id(2)] public List<IPlayer> players;
     }
 
     public enum GameResult { Winner, Loser, Draw }
     public enum AdditionResult : byte { Success, Failure, AlreadyExisting }
 
+    [GenerateSerializer]
+    [Alias("wildcat.LoginResult")]
     public class LoginResult
     {
-        public string name;
-        public string userID;
-        public string ticket;
+        [Id(0)] public string name;
+        [Id(1)] public string userID;
+        [Id(2)] public string ticket;
 
         public LoginResult(string id, string name, string ticket)
         {
@@ -99,28 +103,30 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerState")]
     public class PlayerState
     {
         /// <summary>
         /// Key of the last title loggedin with the player
         /// </summary>
-        public Guid lastGameKey { get; set; }
-        public List<IRelayServerGame> RunningGames { get; set; }
-        public List<string> Devices { get; set; }
-        public Dictionary<string, Dictionary<string, string>> Providers { get; set; }
-        public Dictionary<string, Dictionary<string, string>> Emails { get; set; }
-        public Dictionary<string, Dictionary<string, string>> UserNamePasswordPairs { get; set; }
+        [Id(0)] public Guid lastGameKey { get; set; }
+        [Id(1)] public List<IRelayServerGame> RunningGames { get; set; }
+        [Id(2)] public List<string> Devices { get; set; }
+        [Id(3)] public Dictionary<string, Dictionary<string, string>> Providers { get; set; }
+        [Id(4)] public Dictionary<string, Dictionary<string, string>> Emails { get; set; }
+        [Id(5)] public Dictionary<string, Dictionary<string, string>> UserNamePasswordPairs { get; set; }
 
-        public string Name { get; set; }
-        public Dictionary<Guid, string> PerTitleName { get; set; }
-        public int EloScore { get; set; }
-        public Dictionary<Guid, int> EloScores { get; set; }
+        [Id(6)] public string Name { get; set; }
+        [Id(7)] public Dictionary<Guid, string> PerTitleName { get; set; }
+        [Id(8)] public int EloScore { get; set; }
+        [Id(9)] public Dictionary<Guid, int> EloScores { get; set; }
 
-        public bool IsCreated { get; set; }
-        public bool IsLoggedIn { get; set; }
-        public Guid sessionToken { get; set; }
-        public OnlineStatus OnlineStatus { get; set; }
-        public DateTime LastHeartBeat { get; set; }
+        [Id(10)] public bool IsCreated { get; set; }
+        [Id(11)] public bool IsLoggedIn { get; set; }
+        [Id(12)] public Guid sessionToken { get; set; }
+        [Id(13)] public OnlineStatus OnlineStatus { get; set; }
+        [Id(14)] public DateTime LastHeartBeat { get; set; }
 
         public PlayerState()
         {

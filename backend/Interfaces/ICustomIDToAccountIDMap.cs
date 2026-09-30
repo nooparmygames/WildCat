@@ -17,9 +17,11 @@ namespace Interfaces
         Task Clear();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.CustomAccountIDMapState")]
     public class CustomAccountIDMapState
     {
-        public string AccountID { get; set; }
-        public string CustomId { get; set; }
+        [Id(0)] public string AccountID { get; set; }
+        [Id(1)] public string CustomId { get; set; }
     }
 }

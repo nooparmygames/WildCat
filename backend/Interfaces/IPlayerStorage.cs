@@ -23,13 +23,15 @@ namespace Interfaces
         Task<Tuple<bool, byte[]>> GetPlayerPublicBinary(string key);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerStorageState")]
     public class PlayerStorageState
     {
-        public string GameKey { get; set; }
-        public Dictionary<string, string> StringValues { get; set; }
-        public Dictionary<string, byte[]> BinaryValues { get; set; }
-        public Dictionary<string, string> PublicStringValues { get; set; }
-        public Dictionary<string, byte[]> PublicBinaryValues { get; set; }
+        [Id(0)] public string GameKey { get; set; }
+        [Id(1)] public Dictionary<string, string> StringValues { get; set; }
+        [Id(2)] public Dictionary<string, byte[]> BinaryValues { get; set; }
+        [Id(3)] public Dictionary<string, string> PublicStringValues { get; set; }
+        [Id(4)] public Dictionary<string, byte[]> PublicBinaryValues { get; set; }
 
         public PlayerStorageState()
         {

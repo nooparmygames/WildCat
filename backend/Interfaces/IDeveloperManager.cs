@@ -20,10 +20,12 @@ namespace Interfaces
 
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.DeveloperManagerState")]
     public class DeveloperManagerState
     {
-        public Dictionary<string, Guid> developers { get; set; }
-        public Dictionary<string, Guid> SecondaryIndex { get; set; }
+        [Id(0)] public Dictionary<string, Guid> developers { get; set; }
+        [Id(1)] public Dictionary<string, Guid> SecondaryIndex { get; set; }
 
         public DeveloperManagerState()
         {

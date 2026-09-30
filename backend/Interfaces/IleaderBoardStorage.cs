@@ -14,9 +14,11 @@ namespace Interfaces
         // Task UpdatePlayerScore(IPlayer player, int score, int index);
     }
     
+    [GenerateSerializer]
+    [Alias("wildcat.LeaderBoardStorageState")]
     public class LeaderBoardStorageState
     {
-        public List<LeaderBoardEntry> entries { get; set; }
+        [Id(0)] public List<LeaderBoardEntry> entries { get; set; }
         public LeaderBoardStorageState()
         {
             entries = new List<LeaderBoardEntry>();

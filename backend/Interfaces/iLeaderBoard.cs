@@ -18,12 +18,14 @@ namespace Interfaces
         Task<(string, int)[]> GetRewards();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.LeaderBoardEntry")]
     public class LeaderBoardEntry
     {
-        public DateTime EntryTime { get; set; }
-        public string PlayerID { get; set; }
-        public string Name { get; set; }
-        public int Score { get; set; }
+        [Id(0)] public DateTime EntryTime { get; set; }
+        [Id(1)] public string PlayerID { get; set; }
+        [Id(2)] public string Name { get; set; }
+        [Id(3)] public int Score { get; set; }
 
         public LeaderBoardEntry(string player, string name, int score, DateTime dateTime)
         {
@@ -34,19 +36,21 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.LeaderBoardState")]
     public class LeaderBoardState
     {
         public enum LeaderBoardType { Weekly, Monthly, Yearly, Permanent }
-        public LeaderBoardType Type { get; set; }
-        public (string, int)[] rewards { get; set; }
-        public string Name { get; set; }
+        [Id(0)] public LeaderBoardType Type { get; set; }
+        [Id(1)] public (string, int)[] rewards { get; set; }
+        [Id(2)] public string Name { get; set; }
         // public List<LeaderBoardEntry> entries { get; set; }
-        public int NumberOfLists { get; set; }
-        public List<string> StorageGrainKeys;
-        public int MaxListLength { get; }
-        public DateTime start;
-        public DateTime end;
-        public bool AcceptBetterScoresOnly { get; set; }
+        [Id(3)] public int NumberOfLists { get; set; }
+        [Id(4)] public List<string> StorageGrainKeys;
+        [Id(5)] public int MaxListLength { get; }
+        [Id(6)] public DateTime start;
+        [Id(7)] public DateTime end;
+        [Id(8)] public bool AcceptBetterScoresOnly { get; set; }
 
         public LeaderBoardState()
         {

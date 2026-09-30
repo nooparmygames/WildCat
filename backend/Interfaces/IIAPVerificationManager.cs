@@ -54,15 +54,17 @@ namespace Interfaces
     }
 }
 
+[GenerateSerializer]
+[Alias("wildcat.IAPState")]
 public class IAPState
 {
     public const string GRANT_TYPE_AUTHORIZATION = "authorization_code";
     public const string GRANT_TYPE_REFRESH = "refresh_token";
-    public string ClientID { get; set; }
-    public string ClientSecret { get; set; }
-    public string RefreshToken { get; set; }
-    public string Token { get; set; }
-    public string PackageName { get; set; }
+    [Id(0)] public string ClientID { get; set; }
+    [Id(1)] public string ClientSecret { get; set; }
+    [Id(2)] public string RefreshToken { get; set; }
+    [Id(3)] public string Token { get; set; }
+    [Id(4)] public string PackageName { get; set; }
 
 }
 

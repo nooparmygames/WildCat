@@ -16,11 +16,13 @@ namespace Interfaces
         Task Compile(bool hasReturnValue);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.EventParameter")]
     public class EventParameter
     {
         public enum ParamType { BoolParam, ByteParam, ShortParam, IntParam, LongParam, FloatParam, DoubleParam, StringParam, ByteArrayParam }
-        public ParamType Type { get; set; }
-        public string Name { get; set; }
+        [Id(0)] public ParamType Type { get; set; }
+        [Id(1)] public string Name { get; set; }
 
         public string GetCastTypeString()
         {
@@ -51,21 +53,25 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.ScriptEventState")]
     public class ScriptEventState
     {
-        public bool IsCreated { get; set; }
-        public string Name { get; set; }
-        public string Script { get; set; }
-        public List<EventParameter> Parameters { get; set; }
-        public ulong Version { get; set; }
-        public bool HasReturnValue { get; set; }
-        public string GameKey { get; set; }
+        [Id(0)] public bool IsCreated { get; set; }
+        [Id(1)] public string Name { get; set; }
+        [Id(2)] public string Script { get; set; }
+        [Id(3)] public List<EventParameter> Parameters { get; set; }
+        [Id(4)] public ulong Version { get; set; }
+        [Id(5)] public bool HasReturnValue { get; set; }
+        [Id(6)] public string GameKey { get; set; }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.ValidationResult")]
     public class ValidationResult
     {
-        public bool IsValid { get; set; }
-        public string ErrorMsg { get; set; }
-        public bool HasReturnValue { get; set; }
+        [Id(0)] public bool IsValid { get; set; }
+        [Id(1)] public string ErrorMsg { get; set; }
+        [Id(2)] public bool HasReturnValue { get; set; }
     }
 }

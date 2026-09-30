@@ -25,11 +25,13 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.AccountingCollection")]
     public class AccountingCollection
     {
-        public DateTime StartDate { get; set; }
-        public DateTime EndDate { get; set; }
-        public List<AccountingInfo> Games { get; set; }
+        [Id(0)] public DateTime StartDate { get; set; }
+        [Id(1)] public DateTime EndDate { get; set; }
+        [Id(2)] public List<AccountingInfo> Games { get; set; }
 
         public AccountingCollection()
         {
@@ -38,12 +40,14 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.AccountingInfo")]
     public class AccountingInfo
     {
-        public string GameName { get; set; }
-        public int CallCount { get; set; }
-        public ulong MessageCount { get; set; }
-        public string GameKey { get; set; }
+        [Id(0)] public string GameName { get; set; }
+        [Id(1)] public int CallCount { get; set; }
+        [Id(2)] public ulong MessageCount { get; set; }
+        [Id(3)] public string GameKey { get; set; }
 
         public AccountingInfo()
         {
@@ -56,22 +60,24 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.DeveloperState")]
     public class DeveloperState
     {
         public enum DeveloperStatus { Normal, Banned, Limited }
 
-        public bool IsCreated { get; set; }
-        public string PasswordHash { get; set; }
-        public DeveloperStatus Status { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string Email { get; set; }
-        public string PhoneNumber { get; set; }
-        public string Address { get; set; }
-        public string Description { get; set; }
-        public Guid DeveloperSecret { get; set; }
-        public ICollection<GameInfo> GameInfos { get; set; }
-        public Dictionary<string, string> AdditionalData { get; set; }
+        [Id(0)] public bool IsCreated { get; set; }
+        [Id(1)] public string PasswordHash { get; set; }
+        [Id(2)] public DeveloperStatus Status { get; set; }
+        [Id(3)] public string FirstName { get; set; }
+        [Id(4)] public string LastName { get; set; }
+        [Id(5)] public string Email { get; set; }
+        [Id(6)] public string PhoneNumber { get; set; }
+        [Id(7)] public string Address { get; set; }
+        [Id(8)] public string Description { get; set; }
+        [Id(9)] public Guid DeveloperSecret { get; set; }
+        [Id(10)] public ICollection<GameInfo> GameInfos { get; set; }
+        [Id(11)] public Dictionary<string, string> AdditionalData { get; set; }
 
         public DeveloperState()
         {

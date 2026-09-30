@@ -18,6 +18,8 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.InvoiceData")]
     public class InvoiceData
     {
         public const ulong CALL_BATCH_PRICE = 35;
@@ -27,17 +29,17 @@ namespace Interfaces
 
         public enum InvoicePaymentStatus { Paid, UnPaid, ProcessingPayment, Cancelled }
 
-        public InvoicePaymentStatus status;
-        public string InvoiceId { get; set; }
-        public DateTime InvoiceDate { get; set; }
-        public DateTime DueDate { get; set; }
-        public ulong CallCount { get; set; }
-        public ulong MessageCount { get; set; }
+        [Id(0)] public InvoicePaymentStatus status;
+        [Id(1)] public string InvoiceId { get; set; }
+        [Id(2)] public DateTime InvoiceDate { get; set; }
+        [Id(3)] public DateTime DueDate { get; set; }
+        [Id(4)] public ulong CallCount { get; set; }
+        [Id(5)] public ulong MessageCount { get; set; }
 
         /// <summary>
         /// Used by the payment system to store arbitrary data
         /// </summary>
-        public string AdditionalData { get; set; }
+        [Id(6)] public string AdditionalData { get; set; }
         /// <summary>
         /// Cacluates the price of the invoice
         /// </summary>
@@ -51,8 +53,10 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.DeveloperInvoiceCollectionState")]
     public class DeveloperInvoiceCollectionState
     {
-        public List<InvoiceData> Invoices { get; set; }
+        [Id(0)] public List<InvoiceData> Invoices { get; set; }
     }
 }

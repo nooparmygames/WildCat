@@ -37,13 +37,15 @@ namespace Interfaces
 
     public enum PlayerStateInGame { Playing,Finished,Disconnected}
 
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerInGameData`1")]
     public class PlayerInGameData<T> where T : new()
     {
-        public PlayerStateInGame state;
-        public T value;
-        public IPlayer player;
-        public int Elo;
-        public string name;
+        [Id(0)] public PlayerStateInGame state;
+        [Id(1)] public T value;
+        [Id(2)] public IPlayer player;
+        [Id(3)] public int Elo;
+        [Id(4)] public string name;
 
         public PlayerInGameData(IPlayer player,T value)
         {

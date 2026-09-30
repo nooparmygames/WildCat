@@ -23,10 +23,12 @@ namespace Interfaces
         Task InitializeSession(Guid developerKey, Guid gameKey);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.SessionGameInfo")]
     public class SessionGameInfo
     {
-        public Guid DeveloperKey { get; set; }
-        public Guid GameKey { get; set; }
-        public string UserID { get; set; }
+        [Id(0)] public Guid DeveloperKey { get; set; }
+        [Id(1)] public Guid GameKey { get; set; }
+        [Id(2)] public string UserID { get; set; }
     }
 }

@@ -22,12 +22,16 @@ namespace Interfaces
         Task<(PlayerInventoryState.StateValues.Status, TimeSpan)> GetUnlocktime();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerInventoryState")]
     public class PlayerInventoryState
     {
+        [GenerateSerializer]
+        [Alias("wildcat.PlayerInventoryState.InInventoryItemState")]
         public struct InInventoryItemState
         {
-            public IInventoryItem Item { get; set; }
-            public int Count { get; set; }
+            [Id(0)] public IInventoryItem Item { get; set; }
+            [Id(1)] public int Count { get; set; }
         }
 
         public PlayerInventoryState(int size)
@@ -40,7 +44,7 @@ namespace Interfaces
 
         }
         public List<InInventoryItemState> items { get { return value.items; } }
-        private StateValues value;
+        [Id(0)] private StateValues value;
 
         public int size { get { return value.size; } }
         public StateValues.Status status { get { return value.status; } }
@@ -99,14 +103,16 @@ namespace Interfaces
             return value.CanContain(count);
         }
 
+        [GenerateSerializer]
+        [Alias("wildcat.PlayerInventoryState.StateValues")]
         public struct StateValues
         {
-            public List<InInventoryItemState> items { get; set; }
-            public int size { get; set; }
-            public DateTime startTime;
-            public DateTime endTime;
+            [Id(0)] public List<InInventoryItemState> items { get; set; }
+            [Id(1)] public int size { get; set; }
+            [Id(2)] public DateTime startTime;
+            [Id(3)] public DateTime endTime;
             public enum Status { NotCountingTimeForUnlock, CountingTimeForUnlock }
-            public Status status;
+            [Id(4)] public Status status;
 
             public StateValues(int size)
             {

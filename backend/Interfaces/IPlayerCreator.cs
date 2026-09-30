@@ -16,9 +16,11 @@ namespace Interfaces
         Task<AccountCreationResult> CreateAccountWithProvider(string providerName, Dictionary<string,string> data);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.AccountCreationResult")]
     public class AccountCreationResult
     {
-        public string Account { get; set; }
-        public AdditionResult result;
+        [Id(0)] public string Account { get; set; }
+        [Id(1)] public AdditionResult result;
     }
 }

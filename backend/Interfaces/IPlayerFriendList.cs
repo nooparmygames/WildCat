@@ -24,12 +24,14 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.FriendListState")]
     public class FriendListState
     {
-        public List<FriendListEntry> Friends { get; set; }
-        public List<FriendListInvitation> SentInvitations { get; set; }
-        public List<FriendListInvitation> ReceivedInvitations { get; set; }
-        public OnlineStatus Status { get; set; }
+        [Id(0)] public List<FriendListEntry> Friends { get; set; }
+        [Id(1)] public List<FriendListInvitation> SentInvitations { get; set; }
+        [Id(2)] public List<FriendListInvitation> ReceivedInvitations { get; set; }
+        [Id(3)] public OnlineStatus Status { get; set; }
 
         public FriendListState()
         {
@@ -108,12 +110,14 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.FriendListData")]
     public class FriendListData
     {
-        public List<FriendListEntry> Friends { get; set; }
-        public List<FriendListInvitation> SentInvitations { get; set; }
-        public List<FriendListInvitation> ReceivedInvitations { get; set; }
-        public Dictionary<string, Dictionary<string, string>> publicData { get; set; }
+        [Id(0)] public List<FriendListEntry> Friends { get; set; }
+        [Id(1)] public List<FriendListInvitation> SentInvitations { get; set; }
+        [Id(2)] public List<FriendListInvitation> ReceivedInvitations { get; set; }
+        [Id(3)] public Dictionary<string, Dictionary<string, string>> publicData { get; set; }
 
         public FriendListData()
         {
@@ -122,13 +126,15 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.FriendListEntry")]
     public class FriendListEntry
     {
-        public IPlayer Player { get; set; }
-        public string Name { get; set; }
-        public OnlineStatus OnlineStatus;
-        public Dictionary<string, byte[]> AdditionalData { get; set; }
-        public Dictionary<string, string> AdditionalStringData { get; set; }
+        [Id(0)] public IPlayer Player { get; set; }
+        [Id(1)] public string Name { get; set; }
+        [Id(2)] public OnlineStatus OnlineStatus;
+        [Id(3)] public Dictionary<string, byte[]> AdditionalData { get; set; }
+        [Id(4)] public Dictionary<string, string> AdditionalStringData { get; set; }
 
         public Dictionary<string, string> GetStrings()
         {
@@ -154,15 +160,17 @@ namespace Interfaces
     public enum OnlineStatus : byte { Online, Offline }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.FriendListEventData")]
     public struct FriendListEventData
     {
         public enum EventType { Invite, Accept, Deny, StateChange }
-        public IPlayer Friend { get; set; }
-        public EventType Type { get; set; }
-        public byte[] Data { get; set; }
-        public OnlineStatus OnlineStatus { get; set; }
-        public string FriendName { get; set; }
-        public Guid GameKey { get; set; }
+        [Id(0)] public IPlayer Friend { get; set; }
+        [Id(1)] public EventType Type { get; set; }
+        [Id(2)] public byte[] Data { get; set; }
+        [Id(3)] public OnlineStatus OnlineStatus { get; set; }
+        [Id(4)] public string FriendName { get; set; }
+        [Id(5)] public Guid GameKey { get; set; }
 
         public override string ToString()
         {
@@ -171,13 +179,15 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.FriendListInvitation")]
     public struct FriendListInvitation
     {
-        public byte[] data { get; set; }
-        public IPlayer Sender { get; set; }
-        public IPlayer Receiver { get; set; }
-        public DateTime CreationDate { get; set; }
-        public string SenderName { get; set; }
-        public string ReceiverName { get; set; }
+        [Id(0)] public byte[] data { get; set; }
+        [Id(1)] public IPlayer Sender { get; set; }
+        [Id(2)] public IPlayer Receiver { get; set; }
+        [Id(3)] public DateTime CreationDate { get; set; }
+        [Id(4)] public string SenderName { get; set; }
+        [Id(5)] public string ReceiverName { get; set; }
     }
 }

@@ -31,17 +31,19 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.RelayServerGameState")]
     public class RelayServerGameState
     {
-        public Dictionary<string, byte[]> GameProperties { get; set; }
-        public Dictionary<IPlayer, Dictionary<string, byte[]>> PlayerProperties { get; set; }
-        public RelayServerGameStatus State { get; set; }
-        public List<RelayServerGamePlayerState> Players { get; set; }
-        public int MaxPlayers { get; set; }
-        public DateTime StartTime { get; set; }
+        [Id(0)] public Dictionary<string, byte[]> GameProperties { get; set; }
+        [Id(1)] public Dictionary<IPlayer, Dictionary<string, byte[]>> PlayerProperties { get; set; }
+        [Id(2)] public RelayServerGameStatus State { get; set; }
+        [Id(3)] public List<RelayServerGamePlayerState> Players { get; set; }
+        [Id(4)] public int MaxPlayers { get; set; }
+        [Id(5)] public DateTime StartTime { get; set; }
 
         private const int MAX_DATA_SIZE = 10240;
-        private int storedDataSize;
+        [Id(6)] private int storedDataSize;
 
         public bool SetGameProperty(string key, byte[] value)
         {
@@ -90,11 +92,13 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.RelayServerGamePlayerState")]
     public class RelayServerGamePlayerState
     {
-        public IPlayer player { get; set; }
-        public RelayServerPlayerGameStatus state { get; set; }
-        public DateTime lastMessageTime { get; set; }
+        [Id(0)] public IPlayer player { get; set; }
+        [Id(1)] public RelayServerPlayerGameStatus state { get; set; }
+        [Id(2)] public DateTime lastMessageTime { get; set; }
     }
 
     public enum RelayServerGameStatus { NotStarted, Started, SomeJoined, AllJoined, SomeFinished, AllFinished, FinishedWithDisconnect }
@@ -109,6 +113,8 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.GameNotRunningException")]
     public class GameNotRunningException : Exception
     {
         public GameNotRunningException()
@@ -116,7 +122,12 @@ namespace Interfaces
 
         }
 
-        public GameNotRunningException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext ctx):base(info,ctx)
+        public GameNotRunningException(string message) : base(message)
+        {
+
+        }
+
+        public GameNotRunningException(string message, Exception innerException) : base(message, innerException)
         {
 
         }

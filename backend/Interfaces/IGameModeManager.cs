@@ -15,9 +15,11 @@ namespace Interfaces
         Task Remove(string name);
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.GameModeManagerState")]
     public class GameModeManagerState
     {
-        public List<GameMode> GameModes { get; set; }
+        [Id(0)] public List<GameMode> GameModes { get; set; }
 
         public GameModeManagerState()
         {
@@ -25,15 +27,17 @@ namespace Interfaces
         }
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.GameMode")]
     public class GameMode
     {
-        public string Name { get; set; }
-        public int MinPlayers { get; set; }
-        public int MaxPlayers { get; set; }
-        public bool FinishGameWithOneDisconnect { get; set; }
-        public string Script { get; set; }
+        [Id(0)] public string Name { get; set; }
+        [Id(1)] public int MinPlayers { get; set; }
+        [Id(2)] public int MaxPlayers { get; set; }
+        [Id(3)] public bool FinishGameWithOneDisconnect { get; set; }
+        [Id(4)] public string Script { get; set; }
         public bool HasScript { get { return !string.IsNullOrEmpty(Script); } }
-        public List<MatchMakingCriteria> Criterias { get; set; }
+        [Id(5)] public List<MatchMakingCriteria> Criterias { get; set; }
 
         public GameMode()
         {
@@ -41,11 +45,13 @@ namespace Interfaces
             FinishGameWithOneDisconnect = true;
         }
 
+        [GenerateSerializer]
+        [Alias("wildcat.GameMode.MatchMakingCriteria")]
         public class MatchMakingCriteria
         {
-            public bool IsMinPlayersEnough { get; set; }
-            public int AcceptableThreshold { get; set; }
-            public int StartTimeInSeconds { get; set; }
+            [Id(0)] public bool IsMinPlayersEnough { get; set; }
+            [Id(1)] public int AcceptableThreshold { get; set; }
+            [Id(2)] public int StartTimeInSeconds { get; set; }
         }
 
         public static GameMode CreateDefault()

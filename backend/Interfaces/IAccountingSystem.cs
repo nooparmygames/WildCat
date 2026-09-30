@@ -13,11 +13,13 @@ namespace Interfaces
         Task<MonthlyAccountingInfo> GetData();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.MonthlyAccountingInfo")]
     public class MonthlyAccountingInfo
     {
-        public string Month { get; set; }
-        public Guid GameKey { get; set; }
-        public ulong CallCount { get; set; }
-        public ulong MessageCount { get; set; }
+        [Id(0)] public string Month { get; set; }
+        [Id(1)] public Guid GameKey { get; set; }
+        [Id(2)] public ulong CallCount { get; set; }
+        [Id(3)] public ulong MessageCount { get; set; }
     }
 }

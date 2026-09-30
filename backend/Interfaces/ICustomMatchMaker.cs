@@ -20,9 +20,11 @@ namespace Interfaces
 
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.FoundRelayMatchResult")]
     public class FoundRelayMatchResult
     {
-        public IRelayServerGame game { get; set; }
+        [Id(0)] public IRelayServerGame game { get; set; }
         
 
         public FoundRelayMatchResult(IRelayServerGame game)

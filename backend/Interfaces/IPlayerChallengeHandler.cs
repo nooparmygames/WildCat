@@ -25,14 +25,16 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.ChallengeEventData")]
     public struct ChallengeEventData
     {
         public enum EventType { Request, Started, Deny }
-        public IPlayer otherPlayer { get; set; }
-        public EventType Type { get; set; }
-        public byte[] data { get; set; }
-        public Guid gameID { get; set; }
-        public Guid TitleKey { get; set; }
+        [Id(0)] public IPlayer otherPlayer { get; set; }
+        [Id(1)] public EventType Type { get; set; }
+        [Id(2)] public byte[] data { get; set; }
+        [Id(3)] public Guid gameID { get; set; }
+        [Id(4)] public Guid TitleKey { get; set; }
 
         public override string ToString()
         {
@@ -41,6 +43,8 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.ChallengeTimeoutException")]
     public class ChallengeTimeoutException : Exception
     {
         public ChallengeTimeoutException()
@@ -48,17 +52,24 @@ namespace Interfaces
 
         }
 
-        public ChallengeTimeoutException(System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext ctx) : base(info, ctx)
+        public ChallengeTimeoutException(string message) : base(message)
+        {
+
+        }
+
+        public ChallengeTimeoutException(string message, Exception innerException) : base(message, innerException)
         {
 
         }
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerChallengesState")]
     public class PlayerChallengesState
     {
-        public List<ChallengeRequestState> RequestsSent { get; set; }
-        public List<ChallengeRequestState> RequestsReceived { get; set; }
+        [Id(0)] public List<ChallengeRequestState> RequestsSent { get; set; }
+        [Id(1)] public List<ChallengeRequestState> RequestsReceived { get; set; }
 
         public PlayerChallengesState()
         {
@@ -68,14 +79,16 @@ namespace Interfaces
     }
 
     [Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.ChallengeRequestState")]
     public struct ChallengeRequestState
     {
         public enum Status:byte { Pending, Started, Finished }
-        public Status State { get; set; }
-        public IPlayer Player { get; set; }
-        public uint Timeout { get; set; }
-        public byte[] data;
-        public DateTime RequestTime { get; set; }
-        public Guid Game { get; set; }
+        [Id(0)] public Status State { get; set; }
+        [Id(1)] public IPlayer Player { get; set; }
+        [Id(2)] public uint Timeout { get; set; }
+        [Id(3)] public byte[] data;
+        [Id(4)] public DateTime RequestTime { get; set; }
+        [Id(5)] public Guid Game { get; set; }
     }
 }

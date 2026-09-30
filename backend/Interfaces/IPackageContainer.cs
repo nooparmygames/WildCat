@@ -14,26 +14,30 @@ namespace Interfaces
         Task<PackageContainerState> GetInfo();
     }
 
+    [GenerateSerializer]
+    [Alias("wildcat.PackageContainerState")]
     public class PackageContainerState
     {
+        [GenerateSerializer]
+        [Alias("wildcat.PackageContainerState.PackageItemInfo")]
         public class PackageItemInfo
         {
-            public IInventoryItem Item { get; set; }
-            public int Count;
-            public int chance;
+            [Id(0)] public IInventoryItem Item { get; set; }
+            [Id(1)] public int Count;
+            [Id(2)] public int chance;
         }
 
-        public bool IsCreated { get; set; }
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public List<PackageItemInfo> items { get; set; }
-        public List<PlayerInventoryState.InInventoryItemState> UnlockItems { get; set; }
-        public bool IsLocked { get; set; }
-        public bool IsRandomDrop { get; set; }
-        public int RandomDropCount { get; set; }
-        public List<PlayerInventoryState.InInventoryItemState> Price { get; set; }
+        [Id(0)] public bool IsCreated { get; set; }
+        [Id(1)] public string Name { get; set; }
+        [Id(2)] public string Description { get; set; }
+        [Id(3)] public List<PackageItemInfo> items { get; set; }
+        [Id(4)] public List<PlayerInventoryState.InInventoryItemState> UnlockItems { get; set; }
+        [Id(5)] public bool IsLocked { get; set; }
+        [Id(6)] public bool IsRandomDrop { get; set; }
+        [Id(7)] public int RandomDropCount { get; set; }
+        [Id(8)] public List<PlayerInventoryState.InInventoryItemState> Price { get; set; }
 
-        public int Capacity { get; set; }
+        [Id(9)] public int Capacity { get; set; }
 
         public PackageContainerState()
         {

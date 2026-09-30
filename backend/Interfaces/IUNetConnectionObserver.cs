@@ -8,15 +8,17 @@ using Orleans;
 namespace Interfaces
 {
     [System.Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.UNetConnectionDataTransferMessage")]
     public class UNetConnectionDataTransferMessage
     {
-        public EventType eventType;
-        public IPlayer player;
-        public int connectionId;
-        public int channelId;
-        public byte[] data;
-        public string gameKey;
-        public Guid matchId;
+        [Id(0)] public EventType eventType;
+        [Id(1)] public IPlayer player;
+        [Id(2)] public int connectionId;
+        [Id(3)] public int channelId;
+        [Id(4)] public byte[] data;
+        [Id(5)] public string gameKey;
+        [Id(6)] public Guid matchId;
         public enum EventType
         {
             DataTransfer,
