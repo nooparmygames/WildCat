@@ -34,9 +34,9 @@ namespace WildCat.Unity
         [SerializeField]
         private bool dontDestroyOnLoad = true;
 
-        [Tooltip("Keep running (and answering heartbeats) while the player window is not focused.")]
+        [Tooltip("Set Application.runInBackground to true in Awake, so the game, and with it the SDK's events and Task completions, keeps running while the window is not focused. Off by default because it changes the whole application; outside WebGL the heartbeat runs on a background thread either way.")]
         [SerializeField]
-        private bool runInBackground = true;
+        private bool runInBackground = false;
 
         [Tooltip("Connect and initialize the session in Start. Errors go to the console; call ConnectAndInitializeAsync yourself to handle them.")]
         [SerializeField]
@@ -130,6 +130,9 @@ namespace WildCat.Unity
                 return;
             client.Dispose();
             client = null;
+            // Dispose fails the waiting requests through the dispatcher; nobody pumps it after
+            // this, so run those completions now and code awaiting them sees the failure.
+            dispatcher.Pump(int.MaxValue, OnCallbackError);
         }
 
         private void OnApplicationQuit()

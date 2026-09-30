@@ -29,6 +29,36 @@ namespace WildCat
             return Connection.SendRequestAsync<T>(requestType, payload, responseType, true, null, timeout, false, cancellationToken);
         }
 
+        /// <summary>
+        /// Runs <paramref name="start"/> and turns an exception it throws (a bad argument, no
+        /// session) into a faulted Task, so every failure reaches the caller the same way and
+        /// <c>task.AsCoroutine()</c> never throws. Async methods get this from the compiler.
+        /// </summary>
+        internal static Task Guard(Func<Task> start)
+        {
+            try
+            {
+                return start();
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException(ex);
+            }
+        }
+
+        /// <summary>As <see cref="Guard(Func{Task})"/>, for calls with a result.</summary>
+        internal static Task<T> Guard<T>(Func<Task<T>> start)
+        {
+            try
+            {
+                return start();
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<T>(ex);
+            }
+        }
+
         /// <summary>Raises a feature event; push handlers already run on the dispatcher's thread.</summary>
         internal void Raise<T>(Action<T> handler, T args)
         {

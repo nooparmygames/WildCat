@@ -15,9 +15,12 @@ namespace WildCat
         /// <summary>Sets the logged in player's display name.</summary>
         public Task SetNameAsync(string name, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(name, "name");
-            return Request<EmptyMessage>(WildCatMsgType.SetNameRequest, new StringMessage { value = name },
-                WildCatMsgType.SetNameResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(name, "name");
+                return Request<EmptyMessage>(WildCatMsgType.SetNameRequest, new StringMessage { value = name },
+                    WildCatMsgType.SetNameResponse, cancellationToken);
+            });
         }
 
         /// <summary>The logged in player's display name; empty when none was set.</summary>

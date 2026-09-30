@@ -52,7 +52,7 @@ namespace WildCat
             });
         }
 
-        /// <summary>A player entered the match (also sent for the logged in player). Carries the display name.</summary>
+        /// <summary>A player entered the match (also sent for the logged in player). Carries the account id.</summary>
         public event Action<MatchPlayerEvent> PlayerJoined;
 
         /// <summary>A player disconnected from the match (game modes that go on without them).</summary>
@@ -79,9 +79,12 @@ namespace WildCat
         /// </summary>
         public Task LeaveAsync(Guid matchId, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireMatch(matchId);
-            return Connection.SendRequestAsync<EmptyMessage>(WildCatMsgType.LeaveGameRequest, new EmptyMessage(),
-                WildCatMsgType.LeaveGameResponse, true, matchId.ToString(), null, false, cancellationToken);
+            return Guard(() =>
+            {
+                RequireMatch(matchId);
+                return Connection.SendRequestAsync<EmptyMessage>(WildCatMsgType.LeaveGameRequest, new EmptyMessage(),
+                    WildCatMsgType.LeaveGameResponse, true, matchId.ToString(), null, false, cancellationToken);
+            });
         }
 
         /// <summary>
@@ -97,7 +100,7 @@ namespace WildCat
         public Task SetPlayerPropertyAsync<T>(Guid matchId, string key, T value, CancellationToken cancellationToken = default(CancellationToken))
             where T : MessageBase
         {
-            return SetPropertyAsync(matchId, true, key, WireCodec.EncodePayload(value), cancellationToken);
+            return Guard(() => SetPropertyAsync(matchId, true, key, WireCodec.EncodePayload(value), cancellationToken));
         }
 
         /// <summary>
@@ -114,19 +117,22 @@ namespace WildCat
         public Task SetGlobalPropertyAsync<T>(Guid matchId, string key, T value, CancellationToken cancellationToken = default(CancellationToken))
             where T : MessageBase
         {
-            return SetPropertyAsync(matchId, false, key, WireCodec.EncodePayload(value), cancellationToken);
+            return Guard(() => SetPropertyAsync(matchId, false, key, WireCodec.EncodePayload(value), cancellationToken));
         }
 
         private Task SetPropertyAsync(Guid matchId, bool isPlayerProperty, string key, byte[] value, CancellationToken cancellationToken)
         {
-            RequireMatch(matchId);
-            RequireText(key, "key");
-            byte[] bytes = value ?? new byte[0];
-            if (bytes.Length > MaxPropertyBytes)
-                throw new ArgumentException("Match property values are limited to " + MaxPropertyBytes + " bytes.", nameof(value));
-            return Request<EmptyMessage>(WildCatMsgType.SetMatchPropertyRequest,
-                new SetMatchPropertyData { Game = matchId, isPlayerProperty = isPlayerProperty, key = key, value = bytes },
-                WildCatMsgType.SetMatchPropertyResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireMatch(matchId);
+                RequireText(key, "key");
+                byte[] bytes = value ?? new byte[0];
+                if (bytes.Length > MaxPropertyBytes)
+                    throw new ArgumentException("Match property values are limited to " + MaxPropertyBytes + " bytes.", nameof(value));
+                return Request<EmptyMessage>(WildCatMsgType.SetMatchPropertyRequest,
+                    new SetMatchPropertyData { Game = matchId, isPlayerProperty = isPlayerProperty, key = key, value = bytes },
+                    WildCatMsgType.SetMatchPropertyResponse, cancellationToken);
+            });
         }
 
         /// <summary>
@@ -135,9 +141,12 @@ namespace WildCat
         /// </summary>
         public Task RejoinAsync(Guid matchId, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireMatch(matchId);
-            return Request<EmptyMessage>(WildCatMsgType.RejoinMatchRequest, new GuidMessage { value = matchId },
-                WildCatMsgType.RejoinMatchResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireMatch(matchId);
+                return Request<EmptyMessage>(WildCatMsgType.RejoinMatchRequest, new GuidMessage { value = matchId },
+                    WildCatMsgType.RejoinMatchResponse, cancellationToken);
+            });
         }
 
         /// <summary>The matches the logged in player is still part of, for example after a reconnection.</summary>

@@ -9,6 +9,9 @@
     The backend projects bring their own WildCat.Protocol.dll, whose types have the same names as
     the SDK's copy compiled here. The AliasTheServerProtocol target below gives that assembly the
     extern alias "server", so "WildCat.Protocol" in this project always means the SDK's copy.
+
+    The WebGL transport from Runtime/Unity is compiled in too: without UNITY_WEBGL defined it uses
+    no Unity API, so its receive queue can be tested here (it never runs in a browser here).
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -19,6 +22,7 @@
   <ItemGroup>
     <Compile Include="$(PackageRoot)Runtime\Protocol\**\*.cs" Link="Sdk\Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="$(PackageRoot)Runtime\Core\**\*.cs" Link="Sdk\Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="$(PackageRoot)Runtime\Unity\WebGL\WebGLWebSocketTransport.cs" Link="Sdk\Unity\WebGL\WebGLWebSocketTransport.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -21,10 +21,18 @@ namespace WildCat
 
         /// <summary>
         /// Looks for a match in <paramref name="gameMode"/> for up to <paramref name="maxWait"/>
-        /// (15 seconds by default, whole seconds). Returns the match, or null when the matchmaker
-        /// found nobody in time. The player is in the match when this returns: relay messages can
-        /// be sent to it, and <see cref="MatchesClient.PlayerJoined"/> reports the other players.
+        /// (15 seconds by default, whole seconds; the server caps it at 20 seconds). Returns the
+        /// match, or null when the matchmaker found nobody in time. The player is in the match
+        /// when this returns: relay messages can be sent to it, and
+        /// <see cref="MatchesClient.PlayerJoined"/> reports the other players.
         /// </summary>
+        /// <remarks>
+        /// Cancelling <paramref name="cancellationToken"/> only stops waiting for the answer: the
+        /// protocol has no message to leave matchmaking, so the server keeps looking until its
+        /// wait ends and may still put the player in a match. After a cancelled search, check
+        /// <see cref="MatchesClient.GetPendingAsync"/> (and leave with
+        /// <see cref="MatchesClient.LeaveAsync"/>) before searching again.
+        /// </remarks>
         public async Task<MatchInfo> FindMatchAsync(string gameMode, uint skill = 0, TimeSpan? maxWait = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {

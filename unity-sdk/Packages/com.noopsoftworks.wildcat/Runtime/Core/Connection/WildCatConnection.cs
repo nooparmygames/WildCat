@@ -169,6 +169,16 @@ namespace WildCat
             }
         }
 
+        /// <summary>True once DisconnectAsync or Dispose started closing the connection.</summary>
+        private bool IsClosing
+        {
+            get
+            {
+                lock (gate)
+                    return closing || disposed;
+            }
+        }
+
         internal void SetSession(string newTicket, bool isLoggedIn)
         {
             lock (gate)
@@ -298,12 +308,18 @@ namespace WildCat
 
         /// <summary>
         /// Queues a frame exactly as given (no request id or ticket is added). Returns false when
-        /// the connection is not open. Relay.Send is the usual way to send game messages.
+        /// the connection is not open or the send queue is full (see
+        /// <see cref="WildCatClientOptions.MaxQueuedMessages"/>). Throws ArgumentException for a
+        /// frame larger than <see cref="WildCatClientOptions.MaxMessageBytes"/>, which the gateway
+        /// would answer by closing the socket. Relay.Send is the usual way to send game messages.
         /// </summary>
         public bool Send(WildCatMessageBase frame)
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
+            byte[] encoded = WireCodec.Encode(frame);
+            if (encoded.Length > options.MaxMessageBytes)
+                throw TooLarge(frame.msgType, encoded.Length);
             Link current;
             lock (gate)
             {
@@ -311,7 +327,13 @@ namespace WildCat
                     return false;
                 current = link;
             }
-            return current != null && current.TrySend(WireCodec.Encode(frame));
+            return current != null && current.TrySend(encoded, null, false) == SendResult.Queued;
+        }
+
+        private ArgumentException TooLarge(WildCatMsgType type, int size)
+        {
+            return new ArgumentException("The " + type + " message is " + size + " bytes, more than WildCatClientOptions.MaxMessageBytes ("
+                                         + options.MaxMessageBytes + "); the gateway would close the connection. Nothing was sent.");
         }
 
         /// <summary>
@@ -397,15 +419,27 @@ namespace WildCat
 
         /// <summary>
         /// The request machinery behind every call. <paramref name="isInternal"/> requests
-        /// (heartbeats, session resume) may run while reconnecting and complete on the network
-        /// thread instead of through the dispatcher.
+        /// (heartbeats, session resume) may run while reconnecting, skip the send queue limits and
+        /// complete on the network thread instead of through the dispatcher.
         /// </summary>
+        /// <remarks>
+        /// <c>onAnswer</c> runs on the network thread when a successful answer arrives, before the
+        /// completion is posted to the dispatcher, and only while the socket that carried the
+        /// request is still the current one and the connection is not closing. It runs under the
+        /// connection's lock, so it must be quick and must not call back into the connection's
+        /// public API. Session state goes there, so that an answer the game pumps late cannot
+        /// overwrite what a reconnection or a disconnect did in between. When the socket is gone or
+        /// the connection closed, the answer is ignored and the request fails with
+        /// <see cref="WildCatDisconnectedException"/>; when the hook throws, the request fails
+        /// with that exception.
+        /// </remarks>
         internal Task<T> SendRequestAsync<T>(WildCatMsgType requestType, MessageBase payload, WildCatMsgType responseType,
-            bool sendTicket, string gameTarget, TimeSpan? timeout, bool isInternal, CancellationToken cancellationToken)
+            bool sendTicket, string gameTarget, TimeSpan? timeout, bool isInternal, CancellationToken cancellationToken,
+            Action<T> onAnswer = null)
             where T : MessageBase, new()
         {
             if (payload == null)
-                throw new ArgumentNullException(nameof(payload));
+                return Task.FromException<T>(new ArgumentNullException(nameof(payload)));
             Link current;
             string currentTicket;
             lock (gate)
@@ -449,8 +483,10 @@ namespace WildCat
             {
                 return Task.FromException<T>(ex);
             }
+            if (encoded.Length > options.MaxMessageBytes)
+                return Task.FromException<T>(TooLarge(requestType, encoded.Length));
 
-            PendingRequest<T> request = new PendingRequest<T>(id, requestType, responseType, current, isInternal);
+            PendingRequest<T> request = new PendingRequest<T>(id, requestType, responseType, current, isInternal, onAnswer);
             pending[id] = request;
 
             TimeSpan limit = timeout ?? options.RequestTimeout;
@@ -466,9 +502,55 @@ namespace WildCat
             // A link that died between the check above and here has already failed the requests it
             // knew about, so check again after queueing: either this sees it dead, or the link's
             // cleanup runs later and fails this request too.
-            if (!current.TrySend(encoded) || !current.Alive)
+            SendResult queued = current.TrySend(encoded, request, isInternal);
+            if (queued == SendResult.Full)
+            {
+                Complete(id, r => r.Fail(new WildCatException(WildCatErrorCodes.SendQueueFull,
+                    "Cannot send " + requestType + ": the send queue is full (the connection is not keeping up). Nothing was sent.",
+                    requestType)), false);
+            }
+            else if (queued != SendResult.Queued || !current.Alive)
+            {
                 Complete(id, r => r.Fail(NotConnected(requestType)), false);
+            }
             return request.Completion.Task;
+        }
+
+        /// <summary>
+        /// Runs a request's <c>onAnswer</c> hook if the answer still counts: the connection is not
+        /// closing or disposed and the request's socket is the current one. Returns why the answer
+        /// was not used, or null.
+        /// </summary>
+        private Exception ApplyAnswer(PendingRequest request, Action apply)
+        {
+            Exception refused = null;
+            lock (gate)
+            {
+                if (disposed || closing)
+                {
+                    refused = new WildCatDisconnectedException(request.RequestType
+                        + " was answered after the connection was closed; the answer was ignored.", DisconnectReason.ClientClosed);
+                }
+                else if (link != request.Link || !request.Link.Alive)
+                {
+                    refused = new WildCatDisconnectedException(request.RequestType
+                        + " was answered on a socket that has since dropped; the answer was ignored.", DisconnectReason.ConnectionLost);
+                }
+                else
+                {
+                    try
+                    {
+                        apply();
+                    }
+                    catch (Exception ex)
+                    {
+                        refused = ex;
+                    }
+                }
+            }
+            if (refused != null && !(refused is WildCatDisconnectedException))
+                Log(WildCatLogLevel.Warning, "Applying the answer to " + request.RequestType + " failed: " + refused.Message, null);
+            return refused;
         }
 
         private WildCatDisconnectedException NotConnected(WildCatMsgType requestType)
@@ -525,6 +607,7 @@ namespace WildCat
             PendingRequest request;
             if (!pending.TryRemove(id, out request))
                 return;
+            request.MarkFinished();
             request.ReleaseTimers(fromTimeout);
             Action complete = outcome(request);
             if (request.IsInternal)
@@ -550,7 +633,7 @@ namespace WildCat
                         throw new TimeoutException("Opening the socket took longer than " + options.ConnectTimeout.TotalSeconds + " seconds.");
                     }
                 }
-                return new Link(transport);
+                return new Link(transport, options.MaxQueuedMessages, options.MaxQueuedBytes);
             }
             catch
             {
@@ -605,16 +688,21 @@ namespace WildCat
                 while (true)
                 {
                     await current.WaitForFrameAsync().ConfigureAwait(false);
-                    byte[] message;
-                    if (!current.TryDequeue(out message))
+                    Outgoing next;
+                    if (!current.TryDequeue(out next))
                         continue;
-                    if (ReferenceEquals(message, CloseMarker))
+                    if (ReferenceEquals(next.Bytes, CloseMarker))
                     {
                         using (CancellationTokenSource limit = new CancellationTokenSource(CloseHandshakeTimeout))
                             await current.Transport.CloseAsync(limit.Token).ConfigureAwait(false);
                         return;
                     }
-                    await current.Transport.SendAsync(message, current.Stop.Token).ConfigureAwait(false);
+                    // A request that timed out or was cancelled while it waited in the queue is not
+                    // sent: nobody waits for its answer, and the caller, told it failed, should be
+                    // able to count on the server never having run it.
+                    if (next.Request != null && next.Request.IsFinished)
+                        continue;
+                    await current.Transport.SendAsync(next.Bytes, current.Stop.Token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (current.Stop.IsCancellationRequested)
@@ -722,8 +810,11 @@ namespace WildCat
                 PendingRequest request;
                 if (pending.TryRemove(frame.requestID, out request))
                 {
+                    request.MarkFinished();
                     request.ReleaseTimers(false);
-                    Action complete = request.Answer(frame);
+                    // Decodes the answer and applies its session state here, on the network
+                    // thread, before the completion waits in the dispatcher.
+                    Action complete = request.Answer(frame, this);
                     if (request.IsInternal)
                         complete();
                     else
@@ -896,10 +987,12 @@ namespace WildCat
                     if (resume != null)
                         await resume(stop).ConfigureAwait(false);
                 }
-                catch (WildCatException ex)
+                catch (WildCatException ex) when (ex.ErrorCode == WildCatErrorCodes.Refused || ex.ErrorCode == WildCatErrorCodes.AlreadyExists)
                 {
-                    // The server is there but refuses the old session or login; trying again will
-                    // not change that.
+                    // The server is there but refuses the old session or login (the game key is
+                    // gone, the password changed); trying again will not change that. Other codes,
+                    // such as -1 (an internal error while a silo restarts, for example), are
+                    // retried below with the usual backoff.
                     Log(WildCatLogLevel.Error, "Reconnected, but the server refused to resume the session: " + ex.Message, null);
                     CloseForGood(DisconnectReason.ResumeFailed, ex);
                     fresh.Abort(DisconnectReason.ClientClosed, null);
@@ -907,10 +1000,12 @@ namespace WildCat
                 }
                 catch (Exception ex)
                 {
-                    if (stop.IsCancellationRequested)
+                    // DisconnectAsync or Dispose ended the connection while it resumed; they close it.
+                    if (stop.IsCancellationRequested || IsClosing)
                         return;
                     lastError = ex;
-                    Log(WildCatLogLevel.Info, "Resuming the session after reconnection attempt " + attempt + " failed: " + ex.Message, null);
+                    Log(ex is WildCatException ? WildCatLogLevel.Warning : WildCatLogLevel.Info,
+                        "Resuming the session after reconnection attempt " + attempt + " failed: " + ex.Message, null);
                     fresh.Abort(DisconnectReason.ConnectionLost, ex);
                     continue;
                 }
@@ -1059,18 +1154,45 @@ namespace WildCat
             }
         }
 
+        private enum SendResult
+        {
+            Queued,
+            Full,
+            Closed,
+        }
+
+        /// <summary>A frame waiting for the writer, with the request it carries (null for relayed frames).</summary>
+        private struct Outgoing
+        {
+            public Outgoing(byte[] bytes, PendingRequest request)
+            {
+                Bytes = bytes;
+                Request = request;
+            }
+
+            public byte[] Bytes { get; }
+
+            public PendingRequest Request { get; }
+        }
+
         /// <summary>One socket and its loops. A reconnection makes a new one.</summary>
         private sealed class Link
         {
-            private readonly ConcurrentQueue<byte[]> outbound = new ConcurrentQueue<byte[]>();
+            private readonly object queueLock = new object();
+            private readonly Queue<Outgoing> outbound = new Queue<Outgoing>();
             private readonly SemaphoreSlim signal = new SemaphoreSlim(0, int.MaxValue);
+            private readonly int maxQueuedMessages;
+            private readonly long maxQueuedBytes;
+            private long queuedBytes;
             private int alive = 1;
             private int closeRequested;
             private int aborted;
 
-            public Link(ITransport transport)
+            public Link(ITransport transport, int maxQueuedMessages, long maxQueuedBytes)
             {
                 Transport = transport;
+                this.maxQueuedMessages = maxQueuedMessages;
+                this.maxQueuedBytes = maxQueuedBytes;
             }
 
             public ITransport Transport { get; }
@@ -1103,13 +1225,24 @@ namespace WildCat
                 return Interlocked.Exchange(ref alive, 0) == 1;
             }
 
-            public bool TrySend(byte[] frame)
+            /// <summary>
+            /// Queues a frame for the writer. Full when the queue already holds its limit of frames
+            /// or bytes (heartbeats and the resume pass <paramref name="ignoreLimits"/>, so a busy
+            /// queue cannot hide a dead socket); Closed when the link is dead or closing.
+            /// </summary>
+            public SendResult TrySend(byte[] frame, PendingRequest request, bool ignoreLimits)
             {
                 if (!Alive || Volatile.Read(ref closeRequested) == 1)
-                    return false;
-                outbound.Enqueue(frame);
+                    return SendResult.Closed;
+                lock (queueLock)
+                {
+                    if (!ignoreLimits && (outbound.Count >= maxQueuedMessages || queuedBytes + frame.Length > maxQueuedBytes))
+                        return SendResult.Full;
+                    outbound.Enqueue(new Outgoing(frame, request));
+                    queuedBytes += frame.Length;
+                }
                 signal.Release();
-                return true;
+                return SendResult.Queued;
             }
 
             /// <summary>Makes the writer send the close message after the frames queued so far.</summary>
@@ -1117,7 +1250,8 @@ namespace WildCat
             {
                 if (Interlocked.Exchange(ref closeRequested, 1) == 1)
                     return;
-                outbound.Enqueue(CloseMarker);
+                lock (queueLock)
+                    outbound.Enqueue(new Outgoing(CloseMarker, null));
                 signal.Release();
             }
 
@@ -1126,9 +1260,19 @@ namespace WildCat
                 return signal.WaitAsync(Stop.Token);
             }
 
-            public bool TryDequeue(out byte[] frame)
+            public bool TryDequeue(out Outgoing frame)
             {
-                return outbound.TryDequeue(out frame);
+                lock (queueLock)
+                {
+                    if (outbound.Count == 0)
+                    {
+                        frame = default(Outgoing);
+                        return false;
+                    }
+                    frame = outbound.Dequeue();
+                    queuedBytes -= frame.Bytes.Length;
+                    return true;
+                }
             }
 
             /// <summary>Drops the socket; the receive loop then reports <paramref name="reason"/>.</summary>
@@ -1151,6 +1295,8 @@ namespace WildCat
 
         private abstract class PendingRequest
         {
+            private int finished;
+
             protected PendingRequest(uint id, WildCatMsgType requestType, WildCatMsgType responseType, Link link, bool isInternal)
             {
                 Id = id;
@@ -1161,6 +1307,17 @@ namespace WildCat
             }
 
             public uint Id { get; }
+
+            /// <summary>True once the request left the pending table (answered, timed out, cancelled or failed).</summary>
+            public bool IsFinished
+            {
+                get { return Volatile.Read(ref finished) == 1; }
+            }
+
+            public void MarkFinished()
+            {
+                Volatile.Write(ref finished, 1);
+            }
 
             public WildCatMsgType RequestType { get; }
 
@@ -1176,8 +1333,11 @@ namespace WildCat
 
             public CancellationTokenRegistration CancelRegistration { get; set; }
 
-            /// <summary>Reads the answer (on the network thread) and returns what completes the Task.</summary>
-            public abstract Action Answer(WildCatMessageBase frame);
+            /// <summary>
+            /// Reads the answer and applies its hook (on the network thread) and returns what
+            /// completes the Task.
+            /// </summary>
+            public abstract Action Answer(WildCatMessageBase frame, WildCatConnection owner);
 
             public abstract Action Fail(Exception error);
 
@@ -1196,14 +1356,18 @@ namespace WildCat
 
         private sealed class PendingRequest<T> : PendingRequest where T : MessageBase, new()
         {
-            public PendingRequest(uint id, WildCatMsgType requestType, WildCatMsgType responseType, Link link, bool isInternal)
+            private readonly Action<T> onAnswer;
+
+            public PendingRequest(uint id, WildCatMsgType requestType, WildCatMsgType responseType, Link link, bool isInternal,
+                Action<T> onAnswer)
                 : base(id, requestType, responseType, link, isInternal)
             {
+                this.onAnswer = onAnswer;
             }
 
             public TaskCompletionSource<T> Completion { get; } = new TaskCompletionSource<T>();
 
-            public override Action Answer(WildCatMessageBase frame)
+            public override Action Answer(WildCatMessageBase frame, WildCatConnection owner)
             {
                 Exception error = null;
                 T value = null;
@@ -1232,6 +1396,8 @@ namespace WildCat
                 {
                     error = ex;
                 }
+                if (error == null && onAnswer != null)
+                    error = owner.ApplyAnswer(this, () => onAnswer(value));
                 if (error != null)
                     return () => Completion.TrySetException(error);
                 return () => Completion.TrySetResult(value);

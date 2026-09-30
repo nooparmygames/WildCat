@@ -41,8 +41,11 @@ namespace WildCat
         /// <summary>
         /// Queues <paramref name="message"/> for the other players of <paramref name="matchId"/>.
         /// Returns false, sending nothing, when the connection is not open (for example while it
-        /// reconnects). Nothing comes back: the server drops messages for a match that is not
-        /// running, and refuses them (logged as a warning) when nobody is logged in.
+        /// reconnects) or when the send queue is full because the socket does not keep up (see
+        /// <see cref="WildCatClientOptions.MaxQueuedMessages"/>). Throws ArgumentException for a
+        /// message larger than <see cref="WildCatClientOptions.MaxMessageBytes"/>. Nothing comes
+        /// back: the server drops messages for a match that is not running, and refuses them
+        /// (logged as a warning) when nobody is logged in.
         /// </summary>
         public bool Send<T>(Guid matchId, WildCatMsgType type, T message) where T : MessageBase
         {

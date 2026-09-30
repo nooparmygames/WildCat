@@ -17,5 +17,12 @@ namespace WildCat
         /// when the SDK and the server do not speak the same protocol version.
         /// </summary>
         public const int UnexpectedResponse = -1000;
+
+        /// <summary>
+        /// Not from the server: the request was not sent because the send queue was full (see
+        /// <see cref="WildCatClientOptions.MaxQueuedMessages"/>). The connection stays open; try
+        /// again once it has caught up.
+        /// </summary>
+        public const int SendQueueFull = -1001;
     }
 }

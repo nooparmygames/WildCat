@@ -122,6 +122,30 @@ namespace WildCat.Sdk.Tests
         }
 
         [Fact]
+        public async Task PushEventsArriveExactlyOnceAfterAResume()
+        {
+            var (developerKey, gameKey) = await Server.CreateGameAsync();
+            var (alice, _) = await LoggedInClientAsync(developerKey, gameKey);
+            var (bob, bobLogin) = await LoggedInClientAsync(developerKey, gameKey);
+            var aliceBack = new Recorder<bool>();
+            var bobBack = new Recorder<bool>();
+            alice.Reconnected += () => aliceBack.Add(true);
+            bob.Reconnected += () => bobBack.Add(true);
+
+            Assert.True(Server.DropAllConnections() > 0);
+            await aliceBack.WaitForAnyAsync("Alice's reconnection");
+            await bobBack.WaitForAnyAsync("Bob's reconnection");
+
+            // The server subscribed Bob's new socket to his events; the dead one must not add a copy.
+            var invitations = new Recorder<FriendEvent>();
+            bob.Friends.InvitationReceived += invitations.Add;
+            await Wait.For(alice.Friends.InviteByPlayerIdAsync(bobLogin.PlayerId));
+            await invitations.WaitForAnyAsync("the invitation after the resume");
+            await Task.Delay(1000);
+            Assert.Equal(1, invitations.Count);
+        }
+
+        [Fact]
         public async Task ReconnectionBacksOffUntilTheServerTakesConnectionsAgain()
         {
             var (developerKey, gameKey) = await Server.CreateGameAsync();

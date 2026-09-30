@@ -13,10 +13,7 @@ namespace WildCat
 
         public Guid MatchId { get; }
 
-        /// <summary>
-        /// The player's account id, except for <see cref="MatchesClient.PlayerJoined"/>, where the
-        /// server sends the player's display name (empty when none is set).
-        /// </summary>
+        /// <summary>The player's account id.</summary>
         public string Player { get; }
     }
 }

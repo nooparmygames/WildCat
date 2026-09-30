@@ -17,15 +17,22 @@ The first release as a UPM package for Unity 6, replacing the `Assets/Backend` S
 - `WildCatConnection`: a thread-safe transport with a single writer, request/response matching
   by request id, a timeout per request (15 seconds by default), a heartbeat every 10 seconds
   with round trip time measurement, and automatic reconnection with exponential backoff (1 to 30
-  seconds, with jitter) that resumes the session and the login.
+  seconds, with jitter) that resumes the session and the login (giving up only when the server
+  refuses it with error code 1 or 2). Session state is applied on the network thread as each
+  answer arrives, so a late pump cannot undo a reconnection or a disconnect.
+- Send limits: outgoing messages above `MaxMessageBytes` (1 MiB) fail with ArgumentException
+  before they are sent, the send queue is bounded (`MaxQueuedMessages`, `MaxQueuedBytes`; a full
+  queue fails requests with `WildCatErrorCodes.SendQueueFull`), and requests that timed out while
+  queued are not sent.
 - Errors as exceptions: `WildCatException` (server error code and text, including the gateway's
   ErrorMsg refusals), `TimeoutException`, `WildCatDisconnectedException`.
 - `IMainThreadDispatcher` seam; `WildCatBehaviour` pumps a `QueuedDispatcher` so events and Task
   completions run on Unity's main thread.
 - Calls for password recovery and activation codes: `Auth.RecoverPasswordAsync`,
   `Auth.ResetPasswordAsync`, `Auth.ResendActivationCodeAsync`.
-- `WildCatSettings` asset, `WildCatBehaviour` component, coroutine helpers (`AsCoroutine`), and
-  a browser WebSocket transport for WebGL (not verified in a browser yet).
+- `WildCatSettings` asset, `WildCatBehaviour` component (with an opt-in Run In Background
+  option), coroutine helpers (`AsCoroutine`; argument errors come back as failed Tasks, so it
+  never throws), and a browser WebSocket transport for WebGL (not verified in a browser yet).
 - Editor menus: About window, documentation links, settings asset creation, Add Client To Scene,
   Create Clone.
 - The Basic sample.
@@ -36,6 +43,11 @@ The first release as a UPM package for Unity 6, replacing the `Assets/Backend` S
   `backend/WildCat.Protocol`); it is not compatible with servers from before roadmap step 6.
 - Passwords are sent only over `wss://` or to localhost unless
   `AllowPlainTextPasswordsWithoutTls` is set.
+
+### Deprecated
+
+- `Friends.InviteByDisplayNameAsync`: the server cannot find players by display name yet, so it
+  always fails with error code 1.
 
 ### Removed
 

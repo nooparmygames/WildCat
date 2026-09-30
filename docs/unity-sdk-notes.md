@@ -40,12 +40,26 @@ DOTS-era packages) was trimmed to what the sample needs.
   round trip time. Everything is `ConfigureAwait(false)`; application callbacks and Task
   completions go through `IMainThreadDispatcher` (WildCatBehaviour pumps a QueuedDispatcher in
   Update), internal requests (heartbeat, resume) complete on the network thread.
+- Session state (keys, ticket, player, stored credentials) and the server time offset are
+  applied by a hook on the pending request that runs on the network thread when the answer is
+  decoded, under the connection's lock, and only if the request's socket is still the current
+  one and the connection is not closing. Before that fix they were set in continuations on the
+  dispatcher, so an answer pumped after a reconnection put the dropped socket's ticket back (the
+  new socket never logged in and got no pushes) and one pumped after DisconnectAsync stored the
+  password again. Dispose clears the session and the credentials too.
+- Send limits: frames above `MaxMessageBytes` (1 MiB, the gateway's limit) are refused with
+  ArgumentException without touching the socket; the outbound queue is bounded
+  (`MaxQueuedMessages` 1024, `MaxQueuedBytes` 8 MiB; heartbeats and the resume are exempt), so
+  Relay.Send returns false and requests fail at once with `WildCatErrorCodes.SendQueueFull`
+  (-1001) when it is full; the writer skips requests that timed out or were cancelled while
+  queued. Argument errors fail the returned Task instead of throwing.
 - Errors: `WildCatException` (code and text from an OptionalResponse or an ErrorMsg),
   `TimeoutException` (per request, 15 s default), `WildCatDisconnectedException` (not connected,
   dropped, reconnecting).
 - Reconnection: exponential backoff 1 s to 30 s with plus or minus 20 percent jitter, then a new
   InitializeSession with the same keys and an Authenticate with the last credentials; the
-  server refusing the resume stops reconnecting (ResumeFailed).
+  server refusing the resume with code 1 or 2 stops reconnecting (ResumeFailed), any other
+  failure (code -1 included) counts as a failed attempt and is retried.
 - Frame shapes follow the gateway: InitializeSession, Authenticate, CreateNewAccount and
   EmailActivation carry the ticket in the payload (header without ticket), GetServerTime carries
   none, LeaveGame carries the game target and the ticket, everything else the ticket in the
@@ -63,9 +77,12 @@ Verified with plain .NET (CI runs both in the backend job):
   gateway on Kestrel: sessions, device, user name and email logins, gateway refusals, find match
   with two clients, relay order, match properties and events, friends and challenges events,
   cloud data, leaderboards through a script event, inventory, request timeouts and late answers,
-  heartbeats, explicit disconnect and reconnect, server-side drops with session resume, backoff,
-  giving up, the queued dispatcher. `CoreTests` add an in-memory fake server for exact frame
-  checks; `PackageLayoutTests` check package.json, the asmdefs and the .meta files.
+  heartbeats, explicit disconnect and reconnect, server-side drops with session resume, pushes
+  after a resume, backoff, giving up, the queued dispatcher. `CoreTests` add an in-memory fake
+  server for exact frame checks and races (answers pumped after a resume or a disconnect, a
+  retried resume, send limits, the server time offset); `WebGLTransportTests` compile the
+  browser transport without `UNITY_WEBGL` and test its receive queue; `PackageLayoutTests` check
+  package.json, the asmdefs and the .meta files.
 - `WildCat.Sdk.CoreCheck` proves the Core compiles as Unity compiles it.
 
 Not verified in Unity (no Unity install was available for step 8):
@@ -73,8 +90,10 @@ Not verified in Unity (no Unity install was available for step 8):
 - `Runtime/Unity`, `Editor/` and `Samples~/Basic` were compiled only against hand-written
   stand-ins for the UnityEngine and UnityEditor members they use (also with `UNITY_WEBGL`
   defined for the WebGL transport), in a throwaway project that is not in the repository.
-- The WebGL `.jslib` and transport never ran in a browser; Task.Delay and the request timers on
-  WebGL's single thread are unverified.
+- The WebGL `.jslib` and transport never ran in a browser; Task.Delay (heartbeat, backoff) and
+  the request timeouts (CancellationTokenSource timers) on WebGL's single thread are unverified.
+  If they do not fire there, drive them from the dispatcher pump on WebGL (a timer list checked
+  in WildCatBehaviour.Update); not done yet because it could not be tried.
 - The .meta files, the asmdefs and the sample's `WildCatSettings.asset` were written by hand (the
   asset's field names are checked against the script by a test).
 - There is no sample scene or prefab: the sample builds its objects at run time and its README
@@ -134,7 +153,8 @@ completed Task, `errorCode` and `errorMessage` are `WildCatException.ErrorCode` 
 | `AddUserNameAndPasswordToAccount`, `AddEmailAndPasswordToAccount`, `ActivateEmail` | `Auth.AddUserNameAsync`, `Auth.AddEmailAsync`, `Auth.ActivateEmailAsync` |
 | `SetName`, `GetName`, `GetPlayerName` | `Profile.SetNameAsync`, `GetNameAsync`, `GetPlayerNameAsync` |
 | `SaveCloudData`, `GetCloudData`, `SavePublicCloudData`, `GetPublicCloudData`, `GetPlayerPublicCloudData`, `GetPublisherData` | `CloudData.SetAsync`, `GetAsync`, `SetPublicAsync`, `GetPublicAsync`, `GetPlayerPublicAsync`, `GetPublisherDataAsync` |
-| `GetFriends`, `InviteFriendBy{UserName,Email,PlayerId}`, `AcceptFriendInvitation`, `DenyFriendInvitation` | `Friends.GetAsync`, `InviteBy{UserName,Email,PlayerId,DisplayName}Async`, `AcceptAsync`, `DenyAsync` |
+| `developerKey`, `gameKey` | `Session.DeveloperKey`, `Session.GameKey` |
+| `GetFriends`, `InviteFriendBy{UserName,Email,PlayerId}`, `AcceptFriendInvitation`, `DenyFriendInvitation` | `Friends.GetAsync`, `InviteBy{UserName,Email,PlayerId}Async`, `AcceptAsync`, `DenyAsync` (`InviteByDisplayNameAsync` exists but is obsolete: it always fails, see below) |
 | `OnFriendListReceived`, `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`, `OnFriendStatusChanged` | the `Friends.GetAsync` result, `Friends.InvitationReceived`, `InvitationAccepted`, `InvitationDenied`, `StatusChanged` |
 | `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`, `GetChallenges` | `Challenges.SendAsync`, `AcceptAsync`, `DenyAsync`, `GetAsync` |
 | `OnchallengeRequestReceived`, `OnchallengeStarted`, `OnchallengeDenied` | `Challenges.ChallengeReceived`, `ChallengeAccepted`, `ChallengeDenied` |
@@ -151,20 +171,21 @@ completed Task, `errorCode` and `errorMessage` are `WildCatException.ErrorCode` 
 
 ## Server issues the SDK tests found
 
-Left for the server work (the SDK tests avoid them and say why):
+Fixed on the server since: SetMatchProperty (129) with `isPlayerProperty` (it always failed with
+code -1; `MatchTests.PlayerPropertiesReachTheOtherPlayer` covers it now) and GetPlayerChallenges
+(161) listing received challenges under sent (`SocialTests` checks the received list).
 
-- `RelayServerGameState.SetPlayerProperties` (WildCat.Interfaces/IRelayServerGame.cs) assigns a
-  new empty table to `PlayerProperties` when the player has no entry, then indexes the missing
-  entry, so SetMatchProperty (129) with `isPlayerProperty` always fails with code -1 and the
-  exception text. It should add `PlayerProperties[playerKey] = new Dictionary<string, byte[]>()`.
+Still open (the SDK documents them):
+
 - `Push/ChallengeEventFrames` never sets `ChallengeMessage.TimeOut`, so StartChallengeRequestedEvent
   (19) always says 15 seconds whatever the challenger asked for (`ChallengeEventData` has no
   timeout field to copy).
-- GetPlayerChallenges (161) puts received challenges in the sent list (known, in wire-protocol.md).
-- GamePlayerAddedEvent (9) carries the player's display name in `Player`, not the account id,
-  unlike the other match events.
+- InviteFriend (90) by player name never finds anyone: `NameToAccountIdMap.SetId` is never
+  called (docs/legacy-backend-notes.md, bug 20), so the SDK marks
+  `Friends.InviteByDisplayNameAsync` obsolete and does not advertise it.
+- There is no message to leave matchmaking, so cancelling `FindMatchAsync` only stops the
+  client's wait; the server may still put the player in a match.
 
-Fixed after the step 6 review: player properties are stored (fixed in step 6b; the server tests
-now set properties for two players and check both bags survive a deactivation and a rejoin),
-and GamePlayerAddedEvent carries the account id. The SDK's `MatchesClient.PlayerJoined` comment
-and the note in the SDK's `MatchTests` still describe the old behavior.
+Fixed after the step 6 review: player properties are stored (the server tests set properties for
+two players and check both bags survive a deactivation and a rejoin), and GamePlayerAddedEvent
+(9) carries the account id like the other match events.

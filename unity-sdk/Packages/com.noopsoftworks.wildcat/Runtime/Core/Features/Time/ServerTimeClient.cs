@@ -53,15 +53,23 @@ namespace WildCat
         {
             Stopwatch watch = Stopwatch.StartNew();
             DateTimeMessage answer = await Connection.SendRequestAsync<DateTimeMessage>(WildCatMsgType.GetServerTimeRequest,
-                new EmptyMessage(), WildCatMsgType.GetServerTimeResponse, false, null, null, false, cancellationToken).ConfigureAwait(false);
-            TimeSpan roundTrip = watch.Elapsed;
-            DateTime serverNow = answer.value;
+                new EmptyMessage(), WildCatMsgType.GetServerTimeResponse, false, null, null, false, cancellationToken,
+                arrived => Record(arrived.value, watch.Elapsed)).ConfigureAwait(false);
+            return answer.value;
+        }
+
+        /// <summary>
+        /// Runs on the network thread as the answer arrives, like the heartbeat's measurement, so
+        /// the wait until the game pumps the dispatcher counts neither as network delay nor as
+        /// clock difference.
+        /// </summary>
+        private void Record(DateTime serverNow, TimeSpan roundTrip)
+        {
             lock (sync)
             {
                 offset = serverNow + TimeSpan.FromTicks(roundTrip.Ticks / 2) - DateTime.UtcNow;
                 synchronized = true;
             }
-            return serverNow;
         }
     }
 }

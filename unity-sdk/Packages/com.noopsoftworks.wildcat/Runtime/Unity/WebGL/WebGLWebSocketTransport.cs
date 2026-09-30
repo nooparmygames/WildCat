@@ -49,7 +49,12 @@ namespace WildCat.Unity
         private readonly Queue<byte[]> received = new Queue<byte[]>();
         private readonly int maxMessageBytes;
         private TaskCompletionSource<bool> opening = null;
+        private CancellationTokenRegistration openingRegistration;
         private TaskCompletionSource<byte[]> receiving;
+        // The receive loop passes the link's Stop token, which lives as long as the socket, to
+        // every ReceiveAsync; each registration is disposed as soon as its receive completes, or
+        // every message received would stay referenced from that token until the socket closes.
+        private CancellationTokenRegistration receivingRegistration;
 #if UNITY_WEBGL && !UNITY_EDITOR
         private int socket = -1;
 #endif
@@ -75,7 +80,7 @@ namespace WildCat.Unity
                 return Task.FromException(new InvalidOperationException("The browser could not open a WebSocket to " + uri + "."));
             Sockets[socket] = this;
             TaskCompletionSource<bool> pending = opening;
-            cancellationToken.Register(() =>
+            openingRegistration = cancellationToken.Register(() =>
             {
                 if (pending.TrySetCanceled())
                     Abort();
@@ -84,6 +89,20 @@ namespace WildCat.Unity
 #else
             throw new PlatformNotSupportedException("WebGLWebSocketTransport works only in WebGL players.");
 #endif
+        }
+
+        /// <summary>Completes the ConnectAsync Task (once) and drops its cancellation registration.</summary>
+        private void FinishOpening(Exception error)
+        {
+            TaskCompletionSource<bool> pending = opening;
+            if (pending == null)
+                return;
+            bool changed = error == null ? pending.TrySetResult(true) : pending.TrySetException(error);
+            if (changed)
+            {
+                openingRegistration.Dispose();
+                openingRegistration = default(CancellationTokenRegistration);
+            }
         }
 
         public Task SendAsync(byte[] message, CancellationToken cancellationToken)
@@ -99,6 +118,8 @@ namespace WildCat.Unity
 
         public Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
         {
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromCanceled<byte[]>(cancellationToken);
             TaskCompletionSource<byte[]> waiting;
             lock (sync)
             {
@@ -111,8 +132,43 @@ namespace WildCat.Unity
                 receiving = new TaskCompletionSource<byte[]>();
                 waiting = receiving;
             }
-            cancellationToken.Register(() => waiting.TrySetCanceled());
+            CancellationTokenRegistration registration = cancellationToken.Register(() => CancelReceive(waiting));
+            bool stillWaiting;
+            lock (sync)
+            {
+                stillWaiting = receiving == waiting;
+                if (stillWaiting)
+                    receivingRegistration = registration;
+            }
+            // Completed (or cancelled) between the two locks: nothing will dispose it later.
+            if (!stillWaiting)
+                registration.Dispose();
             return waiting.Task;
+        }
+
+        /// <summary>Takes the waiting receive, if any, and its registration, which the caller disposes after completing it.</summary>
+        private TaskCompletionSource<byte[]> TakeReceive(out CancellationTokenRegistration registration)
+        {
+            TaskCompletionSource<byte[]> waiting = receiving;
+            registration = receivingRegistration;
+            receiving = null;
+            receivingRegistration = default(CancellationTokenRegistration);
+            return waiting;
+        }
+
+        private void CancelReceive(TaskCompletionSource<byte[]> waiting)
+        {
+            // A message that arrives after the cancellation waits for the next ReceiveAsync
+            // instead of going to the cancelled one.
+            lock (sync)
+            {
+                if (receiving == waiting)
+                {
+                    receiving = null;
+                    receivingRegistration = default(CancellationTokenRegistration);
+                }
+            }
+            waiting.TrySetCanceled();
         }
 
         public Task CloseAsync(CancellationToken cancellationToken)
@@ -154,6 +210,7 @@ namespace WildCat.Unity
                 return;
             }
             TaskCompletionSource<byte[]> waiting;
+            CancellationTokenRegistration registration;
             lock (sync)
             {
                 if (closed)
@@ -163,29 +220,31 @@ namespace WildCat.Unity
                     received.Enqueue(message);
                     return;
                 }
-                waiting = receiving;
-                receiving = null;
+                waiting = TakeReceive(out registration);
             }
+            registration.Dispose();
             waiting.TrySetResult(message);
         }
 
         private void Closed(bool gracefully)
         {
             TaskCompletionSource<byte[]> waiting;
+            CancellationTokenRegistration registration;
+            Exception error;
             lock (sync)
             {
                 if (!gracefully && failure == null)
                     failure = new InvalidOperationException("The WebSocket closed unexpectedly.");
                 closed = true;
-                waiting = receiving;
-                receiving = null;
+                error = failure;
+                waiting = TakeReceive(out registration);
             }
-            if (opening != null)
-                opening.TrySetException(failure ?? new InvalidOperationException("The WebSocket closed before it opened."));
+            registration.Dispose();
+            FinishOpening(error ?? new InvalidOperationException("The WebSocket closed before it opened."));
             if (waiting == null)
                 return;
-            if (failure != null)
-                waiting.TrySetException(failure);
+            if (error != null)
+                waiting.TrySetException(error);
             else
                 waiting.TrySetResult(null);
         }
@@ -193,18 +252,20 @@ namespace WildCat.Unity
         private void Fail(Exception error)
         {
             TaskCompletionSource<byte[]> waiting;
+            CancellationTokenRegistration registration;
+            Exception first;
             lock (sync)
             {
                 if (failure == null)
                     failure = error;
+                first = failure;
                 closed = true;
-                waiting = receiving;
-                receiving = null;
+                waiting = TakeReceive(out registration);
             }
-            if (opening != null)
-                opening.TrySetException(failure);
+            registration.Dispose();
+            FinishOpening(first);
             if (waiting != null)
-                waiting.TrySetException(failure);
+                waiting.TrySetException(first);
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -212,8 +273,8 @@ namespace WildCat.Unity
         private static void OnOpen(int id)
         {
             WebGLWebSocketTransport transport;
-            if (Sockets.TryGetValue(id, out transport) && transport.opening != null)
-                transport.opening.TrySetResult(true);
+            if (Sockets.TryGetValue(id, out transport))
+                transport.FinishOpening(null);
         }
 
         [MonoPInvokeCallback(typeof(MessageCallback))]

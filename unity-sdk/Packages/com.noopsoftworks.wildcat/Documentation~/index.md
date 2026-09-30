@@ -40,13 +40,29 @@ game code --> client.Feature --> WildCatConnection --> ITransport --> WebSocket 
   `WildCatException` for a failed `OptionalResponse` or an ErrorMsg (8), a `TimeoutException`
   when the per-request timer fires first. Answers are matched only by id, never by guessing from
   the payload.
+- The send path has limits: a frame larger than `MaxMessageBytes` is refused with
+  `ArgumentException` before it reaches the queue (the gateway would close the socket), the queue
+  holds at most `MaxQueuedMessages` frames and `MaxQueuedBytes` bytes (then `Relay.Send`
+  returns false and requests fail at once with `WildCatErrorCodes.SendQueueFull`; heartbeats and
+  the resume are exempt, so a stalled socket still shows up as a missed heartbeat), and the writer
+  skips requests that timed out or were cancelled while they waited, so a request reported as
+  failed was never sent.
 - Frames without a request id (and game messages above `HighestInternal`) are pushes: the
   registered handlers for that message type run through the dispatcher, then `MessageReceived`.
 - The feature clients are thin: they build the request payload, pick the frame shape the gateway
   expects (ticket in the header, in the payload, or none; game target for LeaveGame) and turn the
   answer into SDK types (`LoginResult`, `MatchInfo`, `FriendList`, `LeaderboardPage` and so on).
 - Session state: `Session.InitializeAsync` stores the keys and the ticket; a login replaces the
-  ticket with the one it returns and remembers the credentials (in memory) for resuming.
+  ticket with the one it returns and remembers the credentials (in memory) for resuming. Both
+  apply their answer on the network thread the moment it arrives, before the completion waits in
+  the dispatcher, and only if the socket that carried the request is still the current one and
+  the connection is not closing; otherwise the answer is ignored and the call fails with
+  `WildCatDisconnectedException`. So a completion the game pumps late cannot bring back a
+  session that a reconnection replaced or a password that `DisconnectAsync` forgot.
+  `DisconnectAsync`, a final disconnect and `Dispose` clear the keys, the ticket, the player and
+  the stored credentials.
+- Argument checks (an empty id, a missing session, a value too large) fail the returned Task
+  instead of throwing, so `AsCoroutine` and fire-and-forget calls see them like any other error.
 
 ### Reconnection
 
@@ -61,9 +77,12 @@ When a link dies without the application asking (server close, network error, mi
    logged in, `Authenticate` with the same credentials. Only then is the state `Connected` again
    and `Reconnected` raised. Requests made meanwhile fail with `WildCatDisconnectedException`
    (reason `Reconnecting`); `Relay.Send` returns false.
-4. If the server refuses the resume (a `WildCatException`: the game key is gone, the password
-   changed), reconnection stops with `Disconnected` (reason `ResumeFailed`). After
-   `MaxReconnectAttempts` failed attempts (0 means no limit) it stops with `ReconnectFailed`.
+4. If the server refuses the resume with error code 1 or 2 (the game key is gone, the password
+   changed), reconnection stops with `Disconnected` (reason `ResumeFailed`): trying again would
+   not change the answer. Any other failure of the resume, a `WildCatException` with code -1 (an
+   internal error, for example while a silo restarts) included, drops the new socket and counts
+   as a failed attempt. After `MaxReconnectAttempts` failed attempts (0 means no limit) it stops
+   with `ReconnectFailed`.
 
 Matches are not rejoined automatically; after `Reconnected`, check `Matches.GetPendingAsync()`
 and call `Matches.RejoinAsync(id)`, which answers with `Matches.Resynced`.
@@ -99,9 +118,9 @@ Never block the main thread on an SDK Task: the completion is queued for the nex
 | `Auth` | `LoginWithDeviceAsync`, `LoginWithUserNameAsync`, `LoginWithEmailAsync`, `CreateAccountWith{Device,UserName,Email}Async`, `AddUserNameAsync`, `AddEmailAsync`, `ActivateEmailAsync`, `ResendActivationCodeAsync`, `RecoverPasswordAsync`, `ResetPasswordAsync`, `PlayerId`, `PlayerName` |
 | `Profile` | `SetNameAsync`, `GetNameAsync`, `GetPlayerNameAsync` |
 | `CloudData` | `SetAsync`/`GetAsync` (private), `SetPublicAsync`/`GetPublicAsync`, `GetPlayerPublicAsync`, `GetPublisherDataAsync` |
-| `Friends` | `GetAsync`, `InviteByPlayerIdAsync`/`ByUserNameAsync`/`ByEmailAsync`/`ByDisplayNameAsync`, `AcceptAsync`, `DenyAsync`; events `InvitationReceived`, `InvitationAccepted`, `InvitationDenied`, `StatusChanged` |
+| `Friends` | `GetAsync`, `InviteByPlayerIdAsync`/`ByUserNameAsync`/`ByEmailAsync`, `AcceptAsync`, `DenyAsync`; events `InvitationReceived`, `InvitationAccepted`, `InvitationDenied`, `StatusChanged` (`InviteByDisplayNameAsync` is obsolete: the server cannot find players by display name, so it always fails) |
 | `Challenges` | `SendAsync`, `AcceptAsync`, `DenyAsync`, `GetAsync`; events `ChallengeReceived`, `ChallengeAccepted`, `ChallengeDenied` |
-| `Matchmaking` | `FindMatchAsync(gameMode, skill, maxWait)`: a `MatchInfo`, or null when nobody was found |
+| `Matchmaking` | `FindMatchAsync(gameMode, skill, maxWait)`: a `MatchInfo`, or null when nobody was found. The server caps `maxWait` at 20 s; cancelling stops the wait, not the server's search (check `Matches.GetPendingAsync` afterwards) |
 | `Matches` | `LeaveAsync`, `SetPlayerPropertyAsync`, `SetGlobalPropertyAsync`, `RejoinAsync`, `GetPendingAsync`; events `PlayerJoined`, `PlayerLeft`, `PlayerRejoined`, `Resynced`, `PropertyChanged`, `Finished` |
 | `Relay` | `Send<T>(matchId, type, message)`, `SendRaw`, `On<T>(type, handler)` (optionally with the match id), `MessageType(n)`, `IsGameMessage` |
 | `Leaderboards` | `GetTopAsync`, `GetAroundMeAsync`, `GetRankAsync` (no score setting from clients) |
@@ -124,7 +143,14 @@ string. Relay payloads are `MessageBase` subclasses that write their fields in
 | `AutoReconnect`, `ResumeSession` | true, true | |
 | `ReconnectMinDelay`, `ReconnectMaxDelay`, `ReconnectJitter`, `MaxReconnectAttempts` | 1 s, 30 s, 0.2, 0 (no limit) | |
 | `AllowPlainTextPasswordsWithoutTls` | false | passwords only over wss:// or to localhost |
-| `MaxMessageBytes` | 1 MiB | a bigger message from the server drops the socket |
+| `MaxMessageBytes` | 1 MiB | keep equal to the gateway's `Gateway:MaxMessageBytes`; a bigger message is not sent (ArgumentException), and one from the server drops the socket |
+| `MaxQueuedMessages`, `MaxQueuedBytes` | 1024, 8 MiB | send queue limits; at least 1 and at least `MaxMessageBytes` |
+
+`WildCatBehaviour` has its own inspector options: the `WildCatSettings` asset, Dont Destroy On
+Load (on), Run In Background (off; sets `Application.runInBackground` in Awake so the game, and
+the SDK's callbacks, keep running while the window is not focused), Connect On Start (off) and
+Max Callbacks Per Frame (0, no limit). It disposes the client in `OnDestroy` and pumps once more
+so awaited calls fail instead of waiting forever.
 
 ### Transports
 
@@ -148,7 +174,10 @@ Unity (CI runs them in the backend job):
   heartbeats, explicit disconnects, server-side drops with reconnection and session resume,
   backoff and giving up, and the queued dispatcher. `CoreTests` use an in-memory fake server for
   exact control (frame shapes, answer order, errors, heartbeat timeouts, resume with a password,
-  refused resume).
+  refused resume and the retried one after an internal error, answers pumped after a
+  reconnection or a disconnect, the send limits, the server time offset). `WebGLTransportTests`
+  run the browser transport's receive queue (compiled without `UNITY_WEBGL`, so without the
+  .jslib).
 - `WildCat.Sdk.CoreCheck` builds `Runtime/Core` the way Unity does: netstandard2.1, C# 9, no
   nullable annotations, warnings as errors, against a separate `WildCat.Protocol` assembly.
 - `PackageLayoutTests` check package.json, the asmdefs and that every file has a `.meta` with a
@@ -171,8 +200,11 @@ Not verified in a real Unity editor or player (no Unity was available when 0.1.0
   and `Samples~/Basic` were compiled against hand-written stand-ins for the UnityEngine and
   UnityEditor APIs they use, and reviewed by reading, but never imported into Unity.
 - The WebGL transport and its `.jslib` compiled (with `UNITY_WEBGL` defined) against the same
-  stand-ins; they have not run in a browser. Whether `Task.Delay` and the request timers behave
-  on WebGL's single thread is also unverified.
+  stand-ins and the receive queue is tested in plain .NET, but they have not run in a browser.
+  Whether `Task.Delay` (heartbeat, reconnection backoff) and the request timeouts
+  (`CancellationTokenSource` timers) fire on WebGL's single thread is also unverified. If they do
+  not, the fix is to drive them from the dispatcher pump on WebGL (a timer list checked in
+  `Update`); that was left until it can be tried in a browser.
 - The `.meta` files and the sample's `WildCatSettings.asset` were written by hand; Unity may
   rewrite them on first import.
 - `ClientWebSocket` on Unity 6 IL2CPP mobile players is expected to work (Unity supports it) but
@@ -180,10 +212,8 @@ Not verified in a real Unity editor or player (no Unity was available when 0.1.0
 
 ## Known server issues seen from the SDK
 
-- `Matches.SetPlayerPropertyAsync` fails with code -1: the server's
-  `RelayServerGameState.SetPlayerProperties` resets the whole table instead of adding the
-  player's entry. Global properties work.
 - `ChallengeEvent.TimeoutSeconds` is always 15: the server does not pass the challenger's
   timeout on in StartChallengeRequestedEvent.
-- `Challenges.GetAsync` lists received challenges under `Sent` (see `ChallengeList`).
 - `MatchesClient.PlayerJoined` carries the player's display name, not the account id.
+- `Friends.InviteByDisplayNameAsync` always fails: the server's map from display names to
+  players is never filled.

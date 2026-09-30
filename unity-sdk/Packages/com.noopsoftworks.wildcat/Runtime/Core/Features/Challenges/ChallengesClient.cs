@@ -30,37 +30,48 @@ namespace WildCat
         public event Action<ChallengeEvent> ChallengeDenied;
 
         /// <summary>
-        /// Challenges another player. Error code 1 when that player is not connected, 2 when they
-        /// challenged the logged in player already (accept theirs instead).
+        /// Challenges another player, online or not (the challenge waits for them until it times
+        /// out). Error code 1 for an unknown player or yourself, 2 when they challenged the logged
+        /// in player already (accept theirs instead). A new challenge to the same player replaces
+        /// the pending one.
         /// </summary>
         public Task SendAsync(string playerId, uint timeoutSeconds = 15, byte[] data = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
-            return Request<EmptyMessage>(WildCatMsgType.StartChallengeRequest,
-                new ChallengeMessage { Player = playerId, TimeOut = timeoutSeconds, data = data ?? new byte[0] },
-                WildCatMsgType.StartChallengeResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(playerId, "playerId");
+                return Request<EmptyMessage>(WildCatMsgType.StartChallengeRequest,
+                    new ChallengeMessage { Player = playerId, TimeOut = timeoutSeconds, data = data ?? new byte[0] },
+                    WildCatMsgType.StartChallengeResponse, cancellationToken);
+            });
         }
 
         /// <summary>Accepts the challenge from <paramref name="playerId"/>. Error code 1 after it timed out.</summary>
         public Task AcceptAsync(string playerId, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
-            return Request<EmptyMessage>(WildCatMsgType.AcceptChallengeRequest,
-                new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
-                WildCatMsgType.AcceptChallengeResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(playerId, "playerId");
+                return Request<EmptyMessage>(WildCatMsgType.AcceptChallengeRequest,
+                    new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
+                    WildCatMsgType.AcceptChallengeResponse, cancellationToken);
+            });
         }
 
         /// <summary>Denies the challenge from <paramref name="playerId"/>.</summary>
         public Task DenyAsync(string playerId, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
-            return Request<EmptyMessage>(WildCatMsgType.DenyChallengeRequest,
-                new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
-                WildCatMsgType.DenyChallengeResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(playerId, "playerId");
+                return Request<EmptyMessage>(WildCatMsgType.DenyChallengeRequest,
+                    new ChallengeMessage { Player = playerId, data = data ?? new byte[0] },
+                    WildCatMsgType.DenyChallengeResponse, cancellationToken);
+            });
         }
 
-        /// <summary>The challenges the logged in player sent and received (see the remark on <see cref="ChallengeList"/>).</summary>
+        /// <summary>The challenges the logged in player sent and received.</summary>
         public async Task<ChallengeList> GetAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             ChallengeRequestsMessage answer = await Request<ChallengeRequestsMessage>(WildCatMsgType.GetPlayerChallengesRequest,

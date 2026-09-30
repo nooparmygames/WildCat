@@ -147,10 +147,19 @@ namespace WildCat
             return Connection.DisconnectAsync();
         }
 
-        /// <summary>Drops the connection without raising events.</summary>
+        /// <summary>
+        /// Drops the connection without raising events and forgets the session: the keys, the
+        /// ticket, the player and the stored credentials (the password of a user name or email
+        /// login included). Waiting requests fail with <see cref="WildCatDisconnectedException"/>
+        /// through the dispatcher.
+        /// </summary>
         public void Dispose()
         {
             Connection.Dispose();
+            // After the connection is disposed no answer can store anything again (see
+            // WildCatConnection.SendRequestAsync), so this clears for good.
+            Session.Clear();
+            Auth.Clear();
         }
 
         /// <summary>

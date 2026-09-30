@@ -109,16 +109,30 @@ namespace WildCat
                 data = new Dictionary<string, string>(),
             };
             AuthenticationResponse answer = await Connection.SendRequestAsync<AuthenticationResponse>(WildCatMsgType.AuthenticateRequest,
-                request, WildCatMsgType.AuthenticateResponse, false, null, null, isInternal, cancellationToken).ConfigureAwait(false);
+                request, WildCatMsgType.AuthenticateResponse, false, null, null, isInternal, cancellationToken,
+                accepted => Apply(login, ticket, accepted)).ConfigureAwait(false);
+            return new LoginResult(answer.userId, answer.name, answer.isNewlyCreated);
+        }
 
+        /// <summary>
+        /// Stores the login. Runs on the network thread as the answer arrives (see
+        /// WildCatConnection.SendRequestAsync), not when the game pumps the completion: a late pump
+        /// after a disconnect would otherwise store the password again, and one after a
+        /// reconnection would put the dropped socket's ticket back.
+        /// </summary>
+        private void Apply(StoredLogin login, Guid sessionTicket, AuthenticationResponse answer)
+        {
+            Guid returned;
+            Guid newTicket = Guid.TryParse(answer.ticket, out returned) && returned != Guid.Empty ? returned : sessionTicket;
+            if (!session.TryReplaceTicket(sessionTicket, newTicket))
+                throw new InvalidOperationException("Session.InitializeAsync opened a new session before the login was answered; log in again.");
             lock (sync)
             {
                 playerId = answer.userId;
                 playerName = answer.name;
                 lastLogin = Connection.Options.ResumeSession ? login : null;
             }
-            Connection.SetSession(string.IsNullOrEmpty(answer.ticket) ? ticket.ToString() : answer.ticket, true);
-            return new LoginResult(answer.userId, answer.name, answer.isNewlyCreated);
+            Connection.SetSession(newTicket.ToString(), true);
         }
 
         /// <summary>Creates a device account without logging in; returns the account id. Error code 2 when the device has one.</summary>
@@ -180,57 +194,72 @@ namespace WildCat
 
         private Task AddLoginAsync(LoginType type, string id, string password, CancellationToken cancellationToken)
         {
-            RequireText(id, "id");
-            EnsurePasswordsMaySend();
-            return Request<EmptyMessage>(WildCatMsgType.AddAuthMechanismToAccountRequest,
-                new AddAuthenticationToAccountRequest
-                {
-                    LoginType = type,
-                    Id = id,
-                    PasswordHash = password ?? "",
-                    data = new Dictionary<string, string>(),
-                },
-                WildCatMsgType.AddAuthMechanismToAccountResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(id, "id");
+                EnsurePasswordsMaySend();
+                return Request<EmptyMessage>(WildCatMsgType.AddAuthMechanismToAccountRequest,
+                    new AddAuthenticationToAccountRequest
+                    {
+                        LoginType = type,
+                        Id = id,
+                        PasswordHash = password ?? "",
+                        data = new Dictionary<string, string>(),
+                    },
+                    WildCatMsgType.AddAuthMechanismToAccountResponse, cancellationToken);
+            });
         }
 
         /// <summary>Activates an email address with the code the server mailed. Error code 1 for an unknown address or a wrong code.</summary>
         public Task ActivateEmailAsync(string email, string code, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(email, "email");
-            RequireText(code, "code");
-            Guid ticket = RequireSession();
-            return Connection.SendRequestAsync<EmptyMessage>(WildCatMsgType.EmailActivationRequest,
-                new EmailActivationRequest { ticket = ticket.ToString(), email = email, code = code },
-                WildCatMsgType.EmailActivationResponse, false, null, null, false, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(email, "email");
+                RequireText(code, "code");
+                Guid ticket = RequireSession();
+                return Connection.SendRequestAsync<EmptyMessage>(WildCatMsgType.EmailActivationRequest,
+                    new EmailActivationRequest { ticket = ticket.ToString(), email = email, code = code },
+                    WildCatMsgType.EmailActivationResponse, false, null, null, false, cancellationToken);
+            });
         }
 
         /// <summary>Mails a new activation code to an address that is not activated yet. Always succeeds.</summary>
         public Task ResendActivationCodeAsync(string email, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(email, "email");
-            return Request<EmptyMessage>(WildCatMsgType.ResendActivationRequest, new ResendActivationRequest { email = email },
-                WildCatMsgType.ResendActivationResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(email, "email");
+                return Request<EmptyMessage>(WildCatMsgType.ResendActivationRequest, new ResendActivationRequest { email = email },
+                    WildCatMsgType.ResendActivationResponse, cancellationToken);
+            });
         }
 
         /// <summary>Mails a password reset code for <see cref="ResetPasswordAsync"/>. Always succeeds, so it does not reveal which addresses exist.</summary>
         public Task RecoverPasswordAsync(string email, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(email, "email");
-            return Request<EmptyMessage>(WildCatMsgType.RecoverPasswordRequest, new RecoverPasswordRequest { email = email },
-                WildCatMsgType.RecoverPasswordResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(email, "email");
+                return Request<EmptyMessage>(WildCatMsgType.RecoverPasswordRequest, new RecoverPasswordRequest { email = email },
+                    WildCatMsgType.RecoverPasswordResponse, cancellationToken);
+            });
         }
 
         /// <summary>Sets a new password with the code from <see cref="RecoverPasswordAsync"/> (and activates the address).</summary>
         public Task ResetPasswordAsync(string email, string code, string newPassword,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(email, "email");
-            RequireText(code, "code");
-            RequireText(newPassword, "newPassword");
-            EnsurePasswordsMaySend();
-            return Request<EmptyMessage>(WildCatMsgType.ResetPasswordWithCodeRequest,
-                new ResetPasswordWithCodeRequest { email = email, code = code, newPassword = newPassword },
-                WildCatMsgType.ResetPasswordWithCodeResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(email, "email");
+                RequireText(code, "code");
+                RequireText(newPassword, "newPassword");
+                EnsurePasswordsMaySend();
+                return Request<EmptyMessage>(WildCatMsgType.ResetPasswordWithCodeRequest,
+                    new ResetPasswordWithCodeRequest { email = email, code = code, newPassword = newPassword },
+                    WildCatMsgType.ResetPasswordWithCodeResponse, cancellationToken);
+            });
         }
 
         private Guid RequireSession()

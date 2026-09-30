@@ -73,6 +73,11 @@ namespace WildCat.Sdk.Tests
             Assert.Equal(aliceLogin.PlayerId, challenge.PlayerId);
             Assert.Equal(new byte[] { 5 }, challenge.Data);
 
+            // Received challenges are listed as received (the server listed them under sent before step 6b).
+            ChallengeList bobsList = await Wait.For(bob.Challenges.GetAsync());
+            Assert.Contains(bobsList.Received, c => c.PlayerId == aliceLogin.PlayerId);
+            Assert.DoesNotContain(bobsList.Sent, c => c.PlayerId == aliceLogin.PlayerId);
+
             // The old SDK waited for the deny answer on the request type, so this never completed.
             await Wait.For(bob.Challenges.DenyAsync(aliceLogin.PlayerId));
             ChallengeEvent denial = await denials.WaitForAnyAsync("Alice's denial event");

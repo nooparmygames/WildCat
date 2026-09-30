@@ -64,8 +64,27 @@ namespace WildCat
         /// </summary>
         public bool AllowPlainTextPasswordsWithoutTls { get; set; }
 
-        /// <summary>The largest message the SDK accepts from the server; a bigger one drops the socket.</summary>
+        /// <summary>
+        /// The largest message (one encoded frame) the SDK sends or accepts. Keep it equal to the
+        /// gateway's Gateway:MaxMessageBytes (1 MiB by default): the gateway closes the socket on a
+        /// bigger message, so the SDK refuses to send one (ArgumentException, nothing is sent), and
+        /// a bigger message from the server drops the socket.
+        /// </summary>
         public int MaxMessageBytes { get; set; } = 1024 * 1024;
+
+        /// <summary>
+        /// How many frames may wait to be written to the socket. When the queue is full,
+        /// Relay.Send returns false and requests fail at once with a <see cref="WildCatException"/>
+        /// whose code is <see cref="WildCatErrorCodes.SendQueueFull"/>, instead of piling up behind
+        /// a socket that does not keep up. Heartbeats and the session resume are not limited.
+        /// </summary>
+        public int MaxQueuedMessages { get; set; } = 1024;
+
+        /// <summary>
+        /// How many bytes may wait to be written to the socket, with the same effect as
+        /// <see cref="MaxQueuedMessages"/>. At least <see cref="MaxMessageBytes"/>.
+        /// </summary>
+        public long MaxQueuedBytes { get; set; } = 8 * 1024 * 1024;
 
         /// <summary>
         /// The delay before reconnection attempt <paramref name="attempt"/> (1 for the first):
@@ -109,6 +128,10 @@ namespace WildCat
                 throw new ArgumentException("WildCatClientOptions.MaxReconnectAttempts must not be negative.");
             if (MaxMessageBytes < 1024)
                 throw new ArgumentException("WildCatClientOptions.MaxMessageBytes must be at least 1024.");
+            if (MaxQueuedMessages < 1)
+                throw new ArgumentException("WildCatClientOptions.MaxQueuedMessages must be at least 1.");
+            if (MaxQueuedBytes < MaxMessageBytes)
+                throw new ArgumentException("WildCatClientOptions.MaxQueuedBytes must be at least MaxMessageBytes.");
         }
     }
 }

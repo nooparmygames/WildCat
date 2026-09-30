@@ -19,9 +19,12 @@ namespace WildCat
         /// <summary>Saves a private value of the logged in player.</summary>
         public Task SetAsync(string key, string value, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireKey(key);
-            return Request<EmptyMessage>(WildCatMsgType.SetCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
-                WildCatMsgType.SetCloudDataResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireKey(key);
+                return Request<EmptyMessage>(WildCatMsgType.SetCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
+                    WildCatMsgType.SetCloudDataResponse, cancellationToken);
+            });
         }
 
         /// <summary>Reads a private value of the logged in player; empty when the key was never set.</summary>
@@ -36,9 +39,12 @@ namespace WildCat
         /// <summary>Saves a public value of the logged in player, which friends and other players can read.</summary>
         public Task SetPublicAsync(string key, string value, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireKey(key);
-            return Request<EmptyMessage>(WildCatMsgType.SetPublicCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
-                WildCatMsgType.SetPublicCloudDataResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireKey(key);
+                return Request<EmptyMessage>(WildCatMsgType.SetPublicCloudDataRequest, new SetCloudDataRequest { key = key, value = value ?? "" },
+                    WildCatMsgType.SetPublicCloudDataResponse, cancellationToken);
+            });
         }
 
         /// <summary>Reads a public value of the logged in player; null when the key is not set.</summary>

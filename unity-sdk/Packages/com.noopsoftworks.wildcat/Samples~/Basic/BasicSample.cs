@@ -75,8 +75,11 @@ namespace WildCat.Samples.Basic
             client.Reconnected += () =>
             {
                 Log("Reconnected; the session and login were resumed");
-                // Matches are not rejoined on their own. This sample simply ends the match.
-                EndMatch();
+                // Matches are not rejoined on their own (a game would call Matches.GetPendingAsync
+                // and Matches.RejoinAsync). This sample leaves the match on the server, so the other
+                // player is not kept waiting for this one, and then ends it here.
+                if (match != null)
+                    Run(null, LeaveMatchAsync);
             };
             client.Disconnected += e =>
             {
@@ -268,9 +271,18 @@ namespace WildCat.Samples.Basic
         private async Task LeaveMatchAsync()
         {
             MatchInfo leaving = match;
-            EndMatch();
-            if (leaving != null)
+            if (leaving == null)
+                return;
+            try
+            {
                 await client.Matches.LeaveAsync(leaving.Id);
+            }
+            finally
+            {
+                // Matches.Finished may have ended it already, or a new match may have started.
+                if (match == leaving)
+                    EndMatch();
+            }
         }
 
         private void EndMatch()

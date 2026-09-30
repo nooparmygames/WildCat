@@ -26,6 +26,48 @@ namespace WildCat.Sdk.Tests
         /// <summary>While true, connection attempts fail.</summary>
         public bool RefuseConnections { get; set; }
 
+        /// <summary>
+        /// The largest message the fake gateway takes; a bigger one breaks the socket, as the real
+        /// gateway closes it with MessageTooBig (Gateway:MaxMessageBytes, 1 MiB by default).
+        /// </summary>
+        public int MaxMessageBytes { get; set; } = 1024 * 1024;
+
+        private TaskCompletionSource<bool> sendGate;
+        private int sendsHeld;
+
+        /// <summary>Sends that are waiting in <see cref="HoldSends"/> right now.</summary>
+        public int SendsHeld
+        {
+            get { return Volatile.Read(ref sendsHeld); }
+        }
+
+        /// <summary>Makes every send wait until <see cref="ReleaseSends"/>, like a socket whose peer stopped reading.</summary>
+        public void HoldSends()
+        {
+            Interlocked.CompareExchange(ref sendGate, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), null);
+        }
+
+        public void ReleaseSends()
+        {
+            Interlocked.Exchange(ref sendGate, null)?.TrySetResult(true);
+        }
+
+        internal async Task WaitIfHeldAsync()
+        {
+            TaskCompletionSource<bool> gate = Volatile.Read(ref sendGate);
+            if (gate == null)
+                return;
+            Interlocked.Increment(ref sendsHeld);
+            try
+            {
+                await gate.Task;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref sendsHeld);
+            }
+        }
+
         public IReadOnlyList<FakeTransport> Transports
         {
             get
@@ -140,6 +182,12 @@ namespace WildCat.Sdk.Tests
             try
             {
                 await Task.Yield();
+                await server.WaitIfHeldAsync();
+                if (message.Length > server.MaxMessageBytes)
+                {
+                    Break();
+                    return;
+                }
                 WildCatMessageBase frame = WireCodec.Decode(message);
                 received.Enqueue(frame);
                 foreach (WildCatMessageBase answer in server.AnswersTo(frame))

@@ -366,6 +366,257 @@ namespace WildCat.Sdk.Tests
             await Wait.For(secure.Auth.LoginWithUserNameAsync("ada", "pw"));
         }
 
+        /// <summary>Pumps <paramref name="dispatcher"/> the way WildCatBehaviour.Update does until <paramref name="condition"/> holds.</summary>
+        private static Task PumpUntilAsync(QueuedDispatcher dispatcher, Func<bool> condition, string description)
+        {
+            return Wait.UntilAsync(() =>
+            {
+                dispatcher.Pump();
+                return condition();
+            }, description);
+        }
+
+        private static async Task<T> PumpedAsync<T>(QueuedDispatcher dispatcher, Task<T> task)
+        {
+            await PumpUntilAsync(dispatcher, () => task.IsCompleted, "the call to complete through the pump");
+            return await task;
+        }
+
+        private static async Task PumpedAsync(QueuedDispatcher dispatcher, Task task)
+        {
+            await PumpUntilAsync(dispatcher, () => task.IsCompleted, "the call to complete through the pump");
+            await task;
+        }
+
+        [Fact]
+        public async Task ALoginAnswerPumpedAfterAResumeDoesNotOverwriteTheResumedSession()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            var dispatcher = new QueuedDispatcher();
+            using WildCatClient client = NewClient(server, null, dispatcher);
+            var reconnected = new Recorder<bool>();
+            client.Reconnected += () => reconnected.Add(true);
+            await PumpedAsync(dispatcher, client.ConnectAsync());
+            await PumpedAsync(dispatcher, client.Session.InitializeAsync(DeveloperKey, GameKey));
+            Guid firstTicket = client.Session.Ticket;
+
+            Task<LoginResult> login = client.Auth.LoginWithDeviceAsync("device-1");
+            // The answer arrives, but the game has not pumped yet (a long frame, a scene load, a paused app).
+            await Wait.UntilAsync(() => dispatcher.Count > 0, "the login answer");
+            server.Current.Break();
+            await Wait.UntilAsync(() => client.Connection.State == ConnectionState.Connected && server.Transports.Count == 2, "the resume");
+
+            await PumpedAsync(dispatcher, login);
+            await PumpUntilAsync(dispatcher, () => reconnected.Count == 1, "the Reconnected event");
+
+            // The login took effect when its answer arrived, so the resume repeated it on the new
+            // socket, and its late completion did not put the first socket's ticket back.
+            var resumedLogin = Assert.Single(server.Transports[1].Received, f => f.msgType == WildCatMsgType.AuthenticateRequest);
+            Assert.True(client.IsLoggedIn);
+            Assert.Equal("player-device-1", client.Auth.PlayerId);
+            Assert.NotEqual(firstTicket, client.Session.Ticket);
+            Assert.Equal(client.Session.Ticket.ToString(), client.Connection.Ticket);
+            Assert.Equal(client.Session.Ticket.ToString(), resumedLogin.GetPayload<AuthenticationRequest>().ticket);
+        }
+
+        [Fact]
+        public async Task ALoginAnswerPumpedAfterDisconnectDoesNotStoreThePassword()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            var dispatcher = new QueuedDispatcher();
+            using WildCatClient client = NewClient(server, null, dispatcher);
+            await PumpedAsync(dispatcher, client.ConnectAsync());
+            await PumpedAsync(dispatcher, client.Session.InitializeAsync(DeveloperKey, GameKey));
+
+            Task<LoginResult> login = client.Auth.LoginWithUserNameAsync("ada", "secret words", createAccount: true);
+            await Wait.UntilAsync(() => dispatcher.Count > 0, "the login answer");
+            Task disconnect = client.DisconnectAsync();
+            await Wait.UntilAsync(() => client.Connection.State == ConnectionState.Disconnected, "the close");
+            await PumpedAsync(dispatcher, disconnect);
+            await PumpedAsync(dispatcher, login);
+
+            Assert.Equal(ConnectionState.Disconnected, client.Connection.State);
+            Assert.Null(client.Connection.Ticket);
+            Assert.False(client.Connection.IsLoggedIn);
+            Assert.False(client.IsLoggedIn);
+            Assert.Null(client.Auth.LastLogin);
+            Assert.False(client.Session.IsInitialized);
+        }
+
+        [Fact]
+        public async Task DisposeForgetsTheStoredPassword()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            WildCatClient client = NewClient(server);
+            await Wait.For(client.ConnectAsync());
+            await Wait.For(client.Session.InitializeAsync(DeveloperKey, GameKey));
+            await Wait.For(client.Auth.LoginWithUserNameAsync("ada", "secret words", createAccount: true));
+            Assert.NotNull(client.Auth.LastLogin);
+
+            client.Dispose();
+
+            Assert.Null(client.Auth.LastLogin);
+            Assert.Null(client.Auth.PlayerId);
+            Assert.False(client.Session.IsInitialized);
+            Assert.Equal(Guid.Empty, client.Session.DeveloperKey);
+        }
+
+        [Fact]
+        public async Task ATransientInternalErrorDuringResumeIsRetried()
+        {
+            int inits = 0;
+            var server = new FakeServer
+            {
+                Respond = frame =>
+                {
+                    // The first resume attempt meets an internal error, such as a grain call that
+                    // failed while a silo restarts.
+                    if (frame.msgType == WildCatMsgType.InitializeSessionRequest && Interlocked.Increment(ref inits) == 2)
+                        return new[] { FakeServer.Failure(frame, WildCatMsgType.InitializeSessionResponse, WildCatErrorCodes.Internal, "Internal error") };
+                    return FakeServer.Basics(frame);
+                },
+            };
+            using WildCatClient client = await LoggedInAsync(server);
+            var outcome = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var attempts = new Recorder<ReconnectingEventArgs>();
+            client.Reconnecting += attempts.Add;
+            client.Reconnected += () => outcome.TrySetResult("reconnected");
+            client.Disconnected += e => outcome.TrySetResult("disconnected: " + e.Reason);
+
+            server.Current.Break();
+
+            Assert.Equal("reconnected", await Wait.For(outcome.Task));
+            Assert.Equal(2, attempts.Count);
+            Assert.IsType<WildCatException>(attempts.Items[1].LastError);
+            Assert.Equal(3, server.Transports.Count);
+            Assert.True(client.IsLoggedIn);
+        }
+
+        [Fact]
+        public async Task TheServerTimeOffsetDoesNotIncludeTheWaitForThePump()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            var dispatcher = new QueuedDispatcher();
+            using WildCatClient client = NewClient(server, null, dispatcher);
+            await PumpedAsync(dispatcher, client.ConnectAsync());
+
+            Task<DateTime> time = client.ServerTime.GetAsync();
+            await Wait.UntilAsync(() => dispatcher.Count > 0, "the answer");
+            await Task.Delay(600); // a long frame
+            await PumpedAsync(dispatcher, time);
+
+            // The fake server's clock is this machine's clock, so the offset should be about zero.
+            Assert.True(Math.Abs(client.ServerTime.Offset.TotalMilliseconds) < 100,
+                "Offset was " + client.ServerTime.Offset.TotalMilliseconds + " ms");
+            Assert.True(client.ServerTime.IsSynchronized);
+        }
+
+        [Fact]
+        public async Task AnOversizedRequestFailsWithoutDroppingTheSocket()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            using WildCatClient client = await LoggedInAsync(server, o => o.RequestTimeout = TimeSpan.FromSeconds(2));
+            string big = new string('x', 1024 * 1024);
+
+            var error = await Assert.ThrowsAsync<ArgumentException>(() => Wait.For(client.CloudData.SetAsync("k", big)));
+            Assert.Contains("MaxMessageBytes", error.Message);
+            Assert.Throws<ArgumentException>(() => client.Relay.SendRaw(Guid.NewGuid(), RelayClient.MessageType(1), new byte[1024 * 1024]));
+
+            // Nothing went out, so the first socket is still open and works.
+            Assert.Equal("name", await Wait.For(client.Profile.GetNameAsync()));
+            Assert.True(client.IsConnected);
+            Assert.Single(server.Transports);
+            Assert.DoesNotContain(server.Received, f => f.msgType == WildCatMsgType.SetCloudDataRequest || RelayClient.IsGameMessage(f.msgType));
+        }
+
+        [Fact]
+        public async Task ATimedOutRequestIsNotSent()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            using WildCatClient client = await LoggedInAsync(server);
+            server.HoldSends();
+            // A relayed message takes the writer, which now waits in SendAsync like a stalled socket.
+            Assert.True(client.Relay.Send(Guid.NewGuid(), RelayClient.MessageType(1), new IntegerMessage { value = 1 }));
+            await Wait.UntilAsync(() => server.SendsHeld == 1, "the writer to be busy");
+
+            Task<StringMessage> late = client.Connection.RequestAsync<StringMessage>(WildCatMsgType.GetPlayerNameRequest,
+                new StringMessage { value = "p" }, WildCatMsgType.GetPlayerNameResponse, new RequestOptions { Timeout = TimeSpan.FromMilliseconds(100) });
+            await Assert.ThrowsAsync<TimeoutException>(() => Wait.For(late));
+            server.ReleaseSends();
+
+            Assert.Equal("name", await Wait.For(client.Profile.GetNameAsync()));
+            Assert.DoesNotContain(server.Received, f => f.msgType == WildCatMsgType.GetPlayerNameRequest);
+        }
+
+        [Fact]
+        public async Task AFullSendQueueRefusesRelayMessagesAndFailsRequestsAtOnce()
+        {
+            var server = new FakeServer { Respond = FakeServer.Basics };
+            using WildCatClient client = await LoggedInAsync(server, o => o.MaxQueuedMessages = 8);
+            Guid match = Guid.NewGuid();
+            WildCatMsgType type = RelayClient.MessageType(1);
+            server.HoldSends();
+            Assert.True(client.Relay.Send(match, type, new IntegerMessage { value = 0 }));
+            await Wait.UntilAsync(() => server.SendsHeld == 1, "the writer to be busy");
+
+            // The writer holds one frame; eight more fit in the queue, the next is refused.
+            int accepted = 1;
+            while (accepted < 100 && client.Relay.Send(match, type, new IntegerMessage { value = accepted }))
+                accepted++;
+            Assert.Equal(9, accepted);
+            Task<string> refused = client.Profile.GetNameAsync();
+            var full = await Assert.ThrowsAsync<WildCatException>(() => Wait.For(refused));
+            Assert.Equal(WildCatErrorCodes.SendQueueFull, full.ErrorCode);
+            Assert.True(client.IsConnected);
+
+            // Once the socket catches up, everything queued goes out in order and the queue takes more.
+            server.ReleaseSends();
+            await Wait.UntilAsync(() => server.Received.Count(f => f.msgType == type) == accepted, "the queued game messages");
+            Assert.Equal(Enumerable.Range(0, accepted),
+                server.Received.Where(f => f.msgType == type).Select(f => f.GetPayload<IntegerMessage>().value));
+            Assert.Equal("name", await Wait.For(client.Profile.GetNameAsync()));
+            Assert.True(client.Relay.Send(match, type, new IntegerMessage { value = 100 }));
+            Assert.Throws<ArgumentException>(() => new WildCatClient(new WildCatClientOptions { MaxQueuedBytes = 1000 }));
+        }
+
+        [Fact]
+        public async Task ArgumentErrorsFailTheTaskInsteadOfThrowing()
+        {
+            // So that task.AsCoroutine() and fire-and-forget calls see every error the same way.
+            using WildCatClient client = NewClient(new FakeServer());
+            var calls = new Func<Task>[]
+            {
+                () => client.Matches.LeaveAsync(Guid.Empty),
+                () => client.Matches.RejoinAsync(Guid.Empty),
+                () => client.Matches.SetPlayerPropertyAsync(Guid.Empty, "k", new byte[0]),
+                () => client.Matches.SetPlayerPropertyAsync<IntegerMessage>(Guid.NewGuid(), "k", null),
+                () => client.Matches.SetGlobalPropertyAsync(Guid.NewGuid(), "", new byte[0]),
+                () => client.Matches.SetGlobalPropertyAsync(Guid.NewGuid(), "k", new byte[MatchesClient.MaxPropertyBytes + 1]),
+                () => client.Auth.AddEmailAsync("", "pw"),
+                () => client.Auth.AddUserNameAsync(null, "pw"),
+                () => client.Auth.ActivateEmailAsync("ada@example.com", ""),
+                () => client.Auth.ResendActivationCodeAsync(""),
+                () => client.Auth.RecoverPasswordAsync(null),
+                () => client.Auth.ResetPasswordAsync("ada@example.com", "code", ""),
+                () => client.Profile.SetNameAsync(""),
+                () => client.CloudData.SetAsync("", "v"),
+                () => client.CloudData.SetPublicAsync(new string('k', 101), "v"),
+                () => client.Friends.InviteByPlayerIdAsync(""),
+                () => client.Friends.AcceptAsync(""),
+                () => client.Friends.DenyAsync(null),
+                () => client.Challenges.SendAsync(""),
+                () => client.Challenges.AcceptAsync(""),
+                () => client.Challenges.DenyAsync(""),
+                () => client.Connection.RequestAsync<EmptyMessage>(WildCatMsgType.GetNameRequest, null, WildCatMsgType.GetNameResponse),
+            };
+            foreach (Func<Task> call in calls)
+            {
+                Task task = call();
+                Assert.True(task.IsFaulted, "A call returned " + task.Status + " instead of a faulted Task.");
+                await Assert.ThrowsAnyAsync<ArgumentException>(() => task);
+            }
+        }
+
         [Fact]
         public void ReconnectionDelaysDoubleWithinTheLimitsAndSpread()
         {

@@ -68,7 +68,9 @@ public class Lobby : MonoBehaviour
 ```
 
 Prefer coroutines? `yield return client.Profile.GetNameAsync().AsCoroutine()` returns a
-yield instruction with `IsSuccessful`, `Result`, `Error` and `ErrorCode`.
+yield instruction with `IsSuccessful`, `Result`, `Error` and `ErrorCode`. Calls that return a
+Task never throw when they are made: a bad argument or a missing session also comes back as a
+failed Task, so `AsCoroutine` sees every error.
 
 The Basic sample (Package Manager > WildCat > Samples) shows a whole flow, relayed game messages
 between two clients included.
@@ -83,18 +85,34 @@ Unity objects. Do not block the main thread on a Task (`.Result`, `.Wait()`): it
 waits for the next `Update`. Outside Unity (tools, tests) the default `InlineDispatcher` runs
 callbacks on the network thread.
 
+Nothing is pumped while Unity does not call `Update`, for example while a desktop player is not
+focused. Outside WebGL the heartbeat and the reconnection do not need the pump, so the connection
+stays up, but events and completions wait. The component's Run In Background option (off by default) sets
+`Application.runInBackground` so the game keeps running when unfocused. When the component is
+destroyed it drops the connection and pumps once more, so code awaiting a call sees it fail.
+
 ## Errors, timeouts and reconnection
 
 - A server error is a `WildCatException` with the server's `ErrorCode` (1 refused, 2 already
   exists, -1 internal) and message. `IsGatewayRefusal` marks refusals from the gateway itself:
   no session, not logged in, unsupported message.
 - A request without an answer within `RequestTimeout` (15 s) fails with `TimeoutException`; an
-  answer that comes later is dropped. FindMatch waits its matchmaking time on top.
+  answer that comes later is dropped, and a request that timed out before it left the send
+  queue is never sent. FindMatch waits its matchmaking time on top (the server caps that at 20
+  seconds); cancelling FindMatchAsync stops the wait but not the server's search.
+- A message larger than `MaxMessageBytes` (1 MiB, the gateway's limit) is refused with
+  `ArgumentException` before anything is sent, instead of making the gateway close the socket.
+  When more than `MaxQueuedMessages` (1024) frames or `MaxQueuedBytes` (8 MiB) wait to be
+  written, `Relay.Send` returns false and requests fail at once with a `WildCatException` whose
+  `ErrorCode` is `WildCatErrorCodes.SendQueueFull`.
 - When the socket drops, waiting requests fail with `WildCatDisconnectedException` at once and
   the client reconnects after 1, 2, 4 ... up to 30 seconds (with jitter), raising `Reconnecting`
   before each attempt. It then opens a new session with the same keys and logs in again with the
   last credentials, and raises `Reconnected`. Matches are not rejoined on their own: call
-  `Matches.GetPendingAsync` and `Matches.RejoinAsync`. `Disconnected` is raised once when the
+  `Matches.GetPendingAsync` and `Matches.RejoinAsync` (or `Matches.LeaveAsync`). If the server
+  refuses the resume with error code 1 or 2 (the game key is gone, the password changed), the
+  client stops with `Disconnected` (reason `ResumeFailed`); other errors, such as -1 while a
+  server restarts, are retried with the same backoff. `Disconnected` is raised once when the
   connection closes for good.
 - A heartbeat every 10 seconds keeps the player online on the server and measures the round
   trip time (`Connection.RoundTripTime`, `SmoothedRoundTripTime`); a heartbeat without an answer
@@ -105,6 +123,8 @@ callbacks on the network thread.
 - Passwords go to the server as plain text (it stores a salted hash), so the SDK sends them only
   over `wss://` or to localhost. `AllowPlainTextPasswordsWithoutTls` lifts that for a test server
   on a trusted network and logs a warning on every use.
+- With `ResumeSession` (the default) the last password stays in memory for resuming the login;
+  `DisconnectAsync` and `Dispose` forget it.
 - The developer and game keys identify the game and ship in every build; they are not secrets.
   Never put the developer secret in a game.
 - Clients cannot set scores or grant items. Do that in a server script event and call it with
@@ -125,6 +145,7 @@ The old SDK was a singleton MonoBehaviour, `BackendPlatform.Instance`, whose cal
 | `InitializeSession(developerKey, gameKey)` | `Session.InitializeAsync(developerKey, gameKey)`; `WildCatBehaviour.ConnectAndInitializeAsync()` does both |
 | `OnConnected`, `OnConnectionFailed`, `OnDisconnected` | `Connected`; ConnectAsync throws `WildCatDisconnectedException`; `Disconnected` (raised once), plus `Reconnecting`, `Reconnected` |
 | `isConnected`, `isLoggedIn`, `userID`, `userName` | `IsConnected`, `IsLoggedIn`, `Auth.PlayerId`, `Auth.PlayerName` |
+| `developerKey`, `gameKey` | `Session.DeveloperKey`, `Session.GameKey` (set by `Session.InitializeAsync`; the keys to use live in `WildCatSettings`) |
 | `AuthenticateWithDevice(autoCreate)` | `Auth.LoginWithThisDeviceAsync(createAccount)` |
 | `AuthenticateWithTestDevice(device, autoCreate)` | `Auth.LoginWithDeviceAsync(deviceId, createAccount)` |
 | `AuthenticateWithUserAndPassword(user, password, autoCreate)` | `Auth.LoginWithUserNameAsync(userName, password, createAccount)` |
@@ -141,7 +162,7 @@ The old SDK was a singleton MonoBehaviour, `BackendPlatform.Instance`, whose cal
 | `GetPlayerPublicCloudData(player, key)` | `CloudData.GetPlayerPublicAsync(playerId, key)` |
 | `GetPublisherData(key)` | `CloudData.GetPublisherDataAsync(key)` |
 | `GetFriends(keys)`, `OnFriendListReceived` | `Friends.GetAsync(publicDataKeys)` returning a `FriendList` |
-| `InviteFriendByUserName`, `InviteFriendByEmail`, `InviteFriendByPlayerId` | `Friends.InviteByUserNameAsync`, `InviteByEmailAsync`, `InviteByPlayerIdAsync` (and `InviteByDisplayNameAsync`) |
+| `InviteFriendByUserName`, `InviteFriendByEmail`, `InviteFriendByPlayerId` | `Friends.InviteByUserNameAsync`, `InviteByEmailAsync`, `InviteByPlayerIdAsync` |
 | `AcceptFriendInvitation`, `DenyFriendInvitation` | `Friends.AcceptAsync`, `Friends.DenyAsync` |
 | `OnFriendshipInvitation`, `OnFriendshipAccepted`, `OnFriendshipDenied`, `OnFriendStatusChanged` | `Friends.InvitationReceived`, `InvitationAccepted`, `InvitationDenied`, `StatusChanged` |
 | `SendChallengeRequest`, `AcceptChallengeRequest`, `DenyChallengeRequest`, `GetChallenges` | `Challenges.SendAsync`, `AcceptAsync`, `DenyAsync` (the old one never completed), `GetAsync` |

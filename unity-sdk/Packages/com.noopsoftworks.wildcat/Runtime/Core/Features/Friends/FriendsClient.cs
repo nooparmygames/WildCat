@@ -74,7 +74,13 @@ namespace WildCat
             return InviteAsync(InvitationType.Email, email, data, cancellationToken);
         }
 
-        /// <summary>Invites a player by display name.</summary>
+        /// <summary>
+        /// Invites a player by display name. Obsolete: it always fails with error code 1, because
+        /// the server's map from display names to players is never filled
+        /// (docs/legacy-backend-notes.md in the repository, bug 20). Use <see cref="InviteByPlayerIdAsync"/>,
+        /// <see cref="InviteByUserNameAsync"/> or <see cref="InviteByEmailAsync"/>.
+        /// </summary>
+        [Obsolete("The server cannot find players by display name, so this always fails with error code 1. Invite by player id, user name or email.")]
         public Task InviteByDisplayNameAsync(string displayName, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return InviteAsync(InvitationType.playerName, displayName, data, cancellationToken);
@@ -82,28 +88,37 @@ namespace WildCat
 
         private Task InviteAsync(InvitationType type, string value, byte[] data, CancellationToken cancellationToken)
         {
-            RequireText(value, "value");
-            return Request<EmptyMessage>(WildCatMsgType.InviteFriendRequest,
-                new InviteFriendRequest { type = type, value = value, data = data ?? new byte[0] },
-                WildCatMsgType.InviteFriendResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(value, "value");
+                return Request<EmptyMessage>(WildCatMsgType.InviteFriendRequest,
+                    new InviteFriendRequest { type = type, value = value, data = data ?? new byte[0] },
+                    WildCatMsgType.InviteFriendResponse, cancellationToken);
+            });
         }
 
         /// <summary>Accepts the invitation from <paramref name="playerId"/>.</summary>
         public Task AcceptAsync(string playerId, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
-            return Request<EmptyMessage>(WildCatMsgType.AcceptFriendRequest,
-                new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
-                WildCatMsgType.AcceptFriendResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(playerId, "playerId");
+                return Request<EmptyMessage>(WildCatMsgType.AcceptFriendRequest,
+                    new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
+                    WildCatMsgType.AcceptFriendResponse, cancellationToken);
+            });
         }
 
         /// <summary>Denies the invitation from <paramref name="playerId"/>.</summary>
         public Task DenyAsync(string playerId, byte[] data = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            RequireText(playerId, "playerId");
-            return Request<EmptyMessage>(WildCatMsgType.DenyFriendRequest,
-                new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
-                WildCatMsgType.DenyFriendResponse, cancellationToken);
+            return Guard(() =>
+            {
+                RequireText(playerId, "playerId");
+                return Request<EmptyMessage>(WildCatMsgType.DenyFriendRequest,
+                    new StringAndByteArrayMessage { stringValue = playerId, byteArrayValue = data ?? new byte[0] },
+                    WildCatMsgType.DenyFriendResponse, cancellationToken);
+            });
         }
 
         private void OnFriendEvent(WildCatMessageBase frame, Action<FriendEvent> handler)

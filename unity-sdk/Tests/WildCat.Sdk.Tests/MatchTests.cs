@@ -111,10 +111,6 @@ namespace WildCat.Sdk.Tests
             Assert.Equal(3, global.GetValue<IntegerMessage>().value);
             await aliceChanges.WaitForAsync(c => c.Key == "round", "the global property on Alice's side too");
 
-            // Player properties are not tested here: the server's RelayServerGameState.SetPlayerProperties
-            // replaces the whole property table instead of adding the player's entry and then fails
-            // with a KeyNotFoundException, so SetPlayerProperty (129) always answers code -1 for now.
-
             await Assert.ThrowsAsync<ArgumentException>(() => alice.Matches.SetGlobalPropertyAsync(aliceMatch.Id, "big", new byte[MatchesClient.MaxPropertyBytes + 1]));
 
             await Wait.For(alice.Matches.LeaveAsync(aliceMatch.Id));
@@ -122,6 +118,29 @@ namespace WildCat.Sdk.Tests
             MatchFinished end = await finished.WaitForAnyAsync("the match to finish");
             Assert.Equal(aliceMatch.Id, end.MatchId);
             Assert.False(end.ByDisconnect);
+        }
+
+        [Fact]
+        public async Task PlayerPropertiesReachTheOtherPlayer()
+        {
+            var (alice, bob, aliceLogin, _, aliceMatch, _) = await StartMatchAsync();
+            var bobChanges = new Recorder<MatchPropertyChange>();
+            var aliceChanges = new Recorder<MatchPropertyChange>();
+            bob.Matches.PropertyChanged += bobChanges.Add;
+            alice.Matches.PropertyChanged += aliceChanges.Add;
+
+            await Wait.For(alice.Matches.SetPlayerPropertyAsync(aliceMatch.Id, "hp", new IntegerMessage { value = 7 }));
+
+            MatchPropertyChange change = await bobChanges.WaitForAsync(c => c.Key == "hp", "the player property on Bob's side");
+            Assert.False(change.IsGlobal);
+            Assert.Equal(aliceLogin.PlayerId, change.PlayerId);
+            Assert.Equal(aliceMatch.Id, change.MatchId);
+            Assert.Equal(7, change.GetValue<IntegerMessage>().value);
+
+            // A player property change goes to the other players only.
+            await Wait.For(alice.Matches.SetGlobalPropertyAsync(aliceMatch.Id, "marker", new byte[] { 1 }));
+            await aliceChanges.WaitForAsync(c => c.Key == "marker", "a later global change on Alice's side");
+            Assert.DoesNotContain(aliceChanges.Items, c => c.Key == "hp");
         }
 
         [Fact]

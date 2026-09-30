@@ -6,6 +6,7 @@ namespace WildCat
     /// <summary>
     /// The server answered a request with an error. <see cref="ErrorCode"/> is the code from the
     /// answer (see <see cref="WildCatErrorCodes"/>) and the exception message is the server's text.
+    /// Codes from -1000 down are the SDK's own (an answer of the wrong type, a full send queue).
     /// </summary>
     public class WildCatException : Exception
     {
@@ -16,7 +17,7 @@ namespace WildCat
             RequestType = requestType;
         }
 
-        /// <summary>The error code of the answer: 1 refused, 2 already exists, -1 internal error, or a code the message documents.</summary>
+        /// <summary>The error code of the answer: 1 refused, 2 already exists, -1 internal error, a code the message documents, or one of the SDK's codes from -1000 down.</summary>
         public int ErrorCode { get; }
 
         /// <summary>The request the server refused.</summary>
