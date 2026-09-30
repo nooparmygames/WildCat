@@ -400,7 +400,7 @@ namespace WildCat.Tests
             foreach (var type in ported)
             {
                 Assert.True(registry.TryGet(type, out var route, out var handler), $"{type} has no handler");
-                Assert.IsNotType<LegacyAdapterHandler>(handler);
+                Assert.NotNull(handler);
                 Assert.Equal(type + 1, route.ResponseType);
             }
 
@@ -412,7 +412,6 @@ namespace WildCat.Tests
                 WildCatMsgType.ResendActivationRequest, WildCatMsgType.ResetPasswordWithCodeRequest,
             }, signIn);
 
-            Assert.DoesNotContain(registry.LegacyTypes, t => ported.Contains(t));
             Assert.All(registry.Routes, r => Assert.True(r.RequestType <= WildCatMsgType.HighestInternal));
             Assert.All(GatewayExtensions.HandlerTypes(), t => Assert.True(typeof(IMessageHandler).IsAssignableFrom(t)));
         }

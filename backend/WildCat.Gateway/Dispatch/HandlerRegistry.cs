@@ -7,14 +7,14 @@ namespace WildCat.Gateway
 {
     /// <summary>
     /// The request type to handler map, built once at startup from every registered
-    /// <see cref="IMessageHandler"/>. Two handlers for one type fail the build. Until roadmap
-    /// step 6b is done, <see cref="LegacyAdapterHandler"/> serves the types no handler claims.
+    /// <see cref="IMessageHandler"/>. Two handlers for one type fail the build. A request type no
+    /// handler claims is answered with an unsupported message error by the dispatcher.
     /// </summary>
     public sealed class HandlerRegistry
     {
         private readonly Dictionary<WildCatMsgType, Entry> entries = new Dictionary<WildCatMsgType, Entry>();
 
-        public HandlerRegistry(IEnumerable<IMessageHandler> handlers, LegacyAdapterHandler legacy = null)
+        public HandlerRegistry(IEnumerable<IMessageHandler> handlers)
         {
             foreach (var handler in handlers ?? Enumerable.Empty<IMessageHandler>())
             {
@@ -29,31 +29,12 @@ namespace WildCat.Gateway
                     entries.Add(route.RequestType, new Entry(route, handler));
                 }
             }
-
-            if (legacy != null)
-            {
-                foreach (var route in legacy.Routes)
-                {
-                    if (!entries.ContainsKey(route.RequestType))
-                        entries.Add(route.RequestType, new Entry(route, legacy));
-                }
-            }
         }
 
         /// <summary>Every served route, in message id order.</summary>
         public IReadOnlyList<MessageRoute> Routes
         {
             get { return entries.Values.Select(e => e.Route).OrderBy(r => r.RequestType).ToList(); }
-        }
-
-        /// <summary>The request types still served by the legacy adapter.</summary>
-        public IReadOnlyList<WildCatMsgType> LegacyTypes
-        {
-            get
-            {
-                return entries.Values.Where(e => e.Handler is LegacyAdapterHandler)
-                    .Select(e => e.Route.RequestType).OrderBy(t => t).ToList();
-            }
         }
 
         public bool TryGet(WildCatMsgType requestType, out MessageRoute route, out IMessageHandler handler)

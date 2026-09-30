@@ -85,12 +85,11 @@ namespace WildCat.Tests
             foreach (var type in FriendRequests)
             {
                 Assert.True(host.Handlers.TryGet(type, out var route, out var handler), $"{type} has no handler");
-                Assert.IsNotType<LegacyAdapterHandler>(handler);
+                Assert.NotNull(handler);
                 Assert.Equal(type + 1, route.ResponseType);
                 Assert.Equal(SessionRequirement.Player, route.Session);
                 Assert.False(route.IsSignInAttempt);
             }
-            Assert.DoesNotContain(host.Handlers.LegacyTypes, t => FriendRequests.Contains(t));
         }
 
         [Fact]

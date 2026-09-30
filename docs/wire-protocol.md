@@ -139,8 +139,8 @@ player grain at most every 5 s per connection while requests arrive.
 Every `WildCatMsgType` member carries an explicit value; the ids that survived step 2 equal the
 ordinals the legacy code got by counting the enum, removed messages leave gaps, and new messages
 take the next free id (163 and 164 are the first). Do not reuse a gap. C = client, S = server.
-"Handler" names the class in `WildCat.Gateway/Handlers`; "adapter" means the message is still
-served by the old `FrontEndServer` code through `LegacyAdapterHandler` until roadmap step 6b.
+"Handler" names the class in `WildCat.Gateway/Handlers`; since step 6b every handled message has
+one (the old `FrontEndServer` code and its adapter are gone).
 
 Session and auth (handlers since step 6)
 

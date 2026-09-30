@@ -273,11 +273,10 @@ namespace WildCat.Tests
             foreach (var (type, session) in expected)
             {
                 Assert.True(host.Handlers.TryGet(type, out var route, out var handler), $"{type} has no handler");
-                Assert.IsNotType<LegacyAdapterHandler>(handler);
+                Assert.NotNull(handler);
                 Assert.Equal(type + 1, route.ResponseType);
                 Assert.Equal(session, route.Session);
                 Assert.False(route.IsSignInAttempt);
-                Assert.DoesNotContain(type, host.Handlers.LegacyTypes);
             }
         }
     }

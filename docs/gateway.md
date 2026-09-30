@@ -45,7 +45,6 @@ WildCat.Gateway/
                            Friends.cs (shared, also finds accounts for the challenge handlers)
     Challenges/            StartChallenge (17), AcceptChallenge (20), DenyChallenge (23),
                            GetPlayerChallenges (161), Challenges.cs (shared)
-  Legacy/                  temporary: FrontEndServer (old code) and LegacyAdapterHandler
 ```
 
 ## What happens to a frame
@@ -150,12 +149,9 @@ namespace WildCat.Gateway
   `context.Send(frame)`.
 - Never block (`.Result`, `.Wait()`) and never wait on a socket; `context.Send` and
   `GatewayConnection.TrySend` only queue.
-- Porting from `Legacy/FrontEndServer.cs` (roadmap step 6b): once your handler exists, the
-  registry routes the type to it instead of the adapter. In the same change delete the type's
-  line from `LegacyAdapterHandler.LegacyRoutes`, its `case` and its `Process...` method from
-  `FrontEndServer`, and keep the behavior, apart from the error rules above. Replace
-  `response.Fail(x.Message, -1)` catch-alls with `RequestFailedException` for the expected
-  failures and let the rest become internal errors. Retries of non-idempotent grain calls go.
+- Every request type the old `FrontEndServer` handled has its own handler since roadmap step 6b;
+  the temporary adapter that served the rest in between is gone. A request type without a
+  handler is answered with "Unsupported message type".
 
 ## Pushing to clients
 
@@ -214,5 +210,3 @@ public class GatewayProfileHandlerTests
   (`TestSetup.WaitUntilAsync`); never sleep without a limit.
 - Test the success path, each error code the handler can answer with, the session requirement
   (an ErrorMsg without a ticket or login), and the sign-in limit for sign-in attempts.
-  `GatewayAdapterTests` holds one smoke test per group still on the adapter; move the group's
-  cases to your handler tests when you port it.

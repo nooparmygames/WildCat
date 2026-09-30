@@ -41,8 +41,6 @@ namespace WildCat.Gateway
             services.TryAddSingleton<ConnectionRegistry>();
             services.TryAddSingleton<PushSubscriptions>();
             services.TryAddSingleton<LoginManager>();
-            services.TryAddSingleton<FrontEndServer>();
-            services.TryAddSingleton<LegacyAdapterHandler>();
             foreach (Type handler in HandlerTypes())
                 services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IMessageHandler), handler));
             services.TryAddSingleton<HandlerRegistry>();
@@ -51,15 +49,13 @@ namespace WildCat.Gateway
         }
 
         /// <summary>
-        /// Every concrete <see cref="IMessageHandler"/> in the gateway assembly except the legacy
-        /// adapter, which the <see cref="HandlerRegistry"/> takes separately as the fallback.
+        /// Every concrete <see cref="IMessageHandler"/> in the gateway assembly.
         /// </summary>
         internal static IEnumerable<Type> HandlerTypes()
         {
             return typeof(GatewayExtensions).Assembly.GetTypes()
                 .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition
-                            && typeof(IMessageHandler).IsAssignableFrom(t)
-                            && t != typeof(LegacyAdapterHandler))
+                            && typeof(IMessageHandler).IsAssignableFrom(t))
                 .OrderBy(t => t.FullName, StringComparer.Ordinal);
         }
 
