@@ -1,6 +1,5 @@
 using Collections;
 using FrontEnd;
-using Interfaces;
 using Orleans.Configuration;
 using SiloHost;
 
@@ -29,7 +28,6 @@ builder.UseOrleans(silo =>
     silo.AddStartupTask<StartupTasks>();
 });
 
-builder.Services.AddSingleton<IBackendStorageServer, PlayfabManager>();
 builder.Services.Configure<ConsoleLifetimeOptions>(options => { options.SuppressStatusMessages = true; });
 builder.Services.AddGameGateway();
 

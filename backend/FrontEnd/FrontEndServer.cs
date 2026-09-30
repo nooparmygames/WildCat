@@ -150,16 +150,8 @@ namespace FrontEnd
             {
                 ticket = Guid.Parse(msg.ticket);
 
-                if (msg.msgType > ApadanaMsgType.HighestInternal)
-                {
-                    session = (await orleansClient.GetGrain<ISession>(ticket).AddUserMessagesCheckSessionAndGetInfo(2));
-                    userId = session.UserID;
-                }
-                else //for normal messages add calls in accounting
-                {
-                    session = (await orleansClient.GetGrain<ISession>(ticket).AddUserCallCheckSessionAndGetInfo());
-                    userId = session.UserID;
-                }
+                session = await orleansClient.GetGrain<ISession>(ticket).TouchAndGetInfo();
+                userId = session.UserID;
 
                 player = orleansClient.GetGrain<IPlayer>(userId);
                 if ((DateTime.Now - playerInfo.lastSentHeartBeat).TotalSeconds > 5)
@@ -254,9 +246,6 @@ namespace FrontEnd
                     break;
                 case ApadanaMsgType.GetServerTimeRequest:
                     await ProcessGetServerTimeRequest(session, player, connectionId, channelId, msg, ticket);
-                    break;
-                case ApadanaMsgType.VerifyStoreReceiptRequest:
-                    await ProcessVerifyCafeReceiptRequest(session, player, connectionId, channelId, msg, ticket);
                     break;
                 case ApadanaMsgType.SetCloudDataRequest:
                     await ProcessSetCloudDataRequest(session, player, connectionId, channelId, msg, ticket);
@@ -754,8 +743,8 @@ namespace FrontEnd
             {
                 var result = await orleansClient.GetGrain<IDeveloper>(request.DeveloperKey)
                     .InitializeSession(request.GameKey);
-                //do not have authentication data so we should call accounting ourselves
-                orleansClient.GetGrain<ISession>(result).AddUserCall().Ignore();
+                //the request carries no ticket yet, so start the new session's idle clock here
+                orleansClient.GetGrain<ISession>(result).Touch().Ignore();
                 response.Succeed(new GuidMessage {value = result});
             }
             catch (InvalidOperationException x)
@@ -1042,7 +1031,7 @@ namespace FrontEnd
         {
             var request = msg.GetData<EmailActivationRequest>();
             Guid sessionKey = Guid.Parse(request.ticket);
-            await orleansClient.GetGrain<ISession>(sessionKey).AddUserCall(1);
+            await orleansClient.GetGrain<ISession>(sessionKey).Touch();
             OptionalResponse<EmptyMessage> response = new OptionalResponse<EmptyMessage>();
             try
             {
@@ -1401,11 +1390,6 @@ namespace FrontEnd
                             foundPlayer = orleansClient.GetGrain<IPlayer>(userBasedId);
                         }
 
-                        break;
-                    case InvitationType.PlayfabId:
-                        foundPlayer =
-                            orleansClient.GetGrain<IPlayer>(
-                                ResourcesUtility.GetPlayfabPlayerKey(playerInfo.titleId, request.value));
                         break;
                 }
 
@@ -1877,35 +1861,6 @@ namespace FrontEnd
             await Send(connectionId, returning.ToByteArray());
         }
 
-        private async Task ProcessVerifyCafeReceiptRequest(SessionGameInfo session, IPlayer player, int connectionId,
-            int channelId, ApadanaMessageBase msg, Guid ticket)
-        {
-            var request = msg.GetData<VerifyCafeReceiptRequest>();
-            OptionalResponse<VerifyCafeReceiptResponse> response = new OptionalResponse<VerifyCafeReceiptResponse>();
-            try
-            {
-                var result = await orleansClient
-                    .GetGrain<IIAPVerification>(session.GameKey, player.GetPrimaryKeyString(), null)
-                    .VerifyCafeBazaar(request.Product, request.Receipt);
-                response.Succeed(new VerifyCafeReceiptResponse
-                {
-                    Status = ((RealtimeServer.VerificationStatus) result.Item1),
-                    Data = result.Item2
-                });
-            }
-            catch (Exception x)
-            {
-                _Logger.LogError((int) msg.msgType, $"VerifyCafeReceipt Error: ", x);
-                response.Fail(x.Message, -1);
-            }
-            var returning = ApadanaMessageBase.CreateWithRequestID
-            (response,
-                ApadanaMsgType.VerifyStoreReceiptResponse,
-                msg.header,
-                msg.requestID);
-            await Send(connectionId, returning.ToByteArray());
-        }
-
         #endregion
 
 
@@ -1958,7 +1913,7 @@ namespace FrontEnd
             bool isNewlyCreated = false;
             var request = msg.GetData<AuthenticationRequest>();
             Guid sessionKey = Guid.Parse(request.ticket);
-            await orleansClient.GetGrain<ISession>(sessionKey).AddUserCall(1);
+            await orleansClient.GetGrain<ISession>(sessionKey).Touch();
             string account = null;
             OptionalResponse<AuthenticationResponse> response = new OptionalResponse<AuthenticationResponse>();
             try
@@ -1976,11 +1931,8 @@ namespace FrontEnd
                     case LoginType.Email:
                         account = await orleansClient.GetGrain<IEmailToAccountIdMap>(request.Id).GetAccountID();
                         break;
-                    case LoginType.Custom:
-                        account = ResourcesUtility.GetPlayfabPlayerKey(request.data["titleId"],
-                            request.data["playfabId"]);
-                        playerInfo.titleId = request.data["titleId"];
-                        break;
+                    default:
+                        throw new ArgumentException("Unsupported login type");
                 }
 
                 //If account didn't exist
@@ -2028,9 +1980,6 @@ namespace FrontEnd
                             break;
                         case LoginType.Email:
                             loginResponse = await p.LoginWithEmail(request.Id, request.PasswordHash, sessionKey, playerInfo.loginTimeRandomKey);
-                            break;
-                        case LoginType.Custom:
-                            loginResponse = await p.LoginWithProvider(request.Id, request.data, sessionKey, playerInfo.loginTimeRandomKey);
                             break;
                         default:
                             throw new ArgumentException("Unsupported login type");
@@ -2274,8 +2223,6 @@ namespace FrontEnd
         public string Host { get; set; }
         public int ConnectionId { get; set; }
         public DateTime lastSentHeartBeat;
-
-        public string titleId;
 
         public IAsyncStream<UNetConnectionDataTransferMessage> connectionStream;
         public IAsyncStream<ChallengeEventData> ChallengesStream;

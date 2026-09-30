@@ -13,12 +13,10 @@ namespace SiloHost
     {
         private const string CONFIG_PATH = "devsconfig.json";
         private readonly IGrainFactory grainFactory;
-        private readonly IBackendStorageServer storage;
 
-        public StartupTasks(IGrainFactory grainFactory, IBackendStorageServer storagemanager)
+        public StartupTasks(IGrainFactory grainFactory)
         {
             this.grainFactory = grainFactory;
-            this.storage = storagemanager;
         }
 
         public async Task Execute(CancellationToken cancellationToken)
@@ -43,7 +41,6 @@ namespace SiloHost
                 {
                     name = "n1",
                     email = "developer@example.com",
-                    playfabId = "",
                     key = Guid.NewGuid(),
                     games = new List<DeveloperConfig.GameInfo> { new DeveloperConfig.GameInfo { name = "g1", key = Guid.NewGuid() } }
                 });
@@ -80,10 +77,7 @@ namespace SiloHost
                 var developerKey = await grainFactory.GetGrain<IDeveloperManager>("main").AddDeveloper(CreateDeveloper(config), config.key);
                 developer = grainFactory.GetGrain<IDeveloper>(developerKey);
             }
-            
-            storage.SetTitleId(config.playfabId);
-            await storage.WaitForInitialization();
-            
+
             Guid gameKey = Guid.Empty;
             var allGames = await developer.GetGames();
             for (int i = 0; i < config.games.Count; ++i)
@@ -135,14 +129,12 @@ namespace SiloHost
     public class DeveloperConfigCollection
     {
         public List<DeveloperConfig> developers;
-        public bool isPlayfab;
     }
 
     public class DeveloperConfig
     {
         public Guid key;
         public string name;
-        public string playfabId;
         public string email;
         public List<GameInfo> games;
         public class GameInfo

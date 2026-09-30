@@ -161,32 +161,6 @@ namespace Collections
             return Task.FromResult(State.PasswordHash == Sha1edPassword);
         }
 
-
-
-        public async Task<AccountingCollection> GetAccountingInfo(DateTime StartDate, DateTime EndDate)
-        {
-            var accountingResult = new AccountingCollection
-            {
-                StartDate = StartDate,
-                EndDate = EndDate,
-                Games = new List<AccountingInfo>()
-            };
-            foreach (var g in State.GameInfos)
-            {
-                var gk = g.Key;
-                var data = await GrainFactory.GetGrain<IAccountingSystem>(gk, InvoiceUtility.GetInvoiceMonthKey(EndDate), null).GetData();
-                accountingResult.Games.Add(new AccountingInfo
-                {
-                    GameName = g.Name,
-                    GameKey = g.Key.ToString(),
-                    MessageCount = data.MessageCount,
-                    CallCount = (int)data.CallCount
-                });
-            }
-            //var dataList = await queryResult.ToListAsync();
-            return accountingResult;
-        }
-
         public Task ChangePassword(string newPassword)
         {
             State.PasswordHash = newPassword.ToSha1();

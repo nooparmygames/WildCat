@@ -16,25 +16,12 @@ namespace Collections
         private Guid gameKey;
         private IAsyncStream<FriendListEventData> friendListEvents;
         private string name;
-        private IBackendStorageServer storage;
-        private bool isPlayfabRun;
-        
-
-        public PlayerFriendList(IBackendStorageServer storage)
-        {
-            this.storage = storage;
-        }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             string playerId;
             gameKey = this.GetPrimaryKey(out playerId);
             player = GrainFactory.GetGrain<IPlayer>(playerId);
-            isPlayfabRun = await storage.IsPlayfabRun();
-            if(isPlayfabRun)
-            {
-                 
-            }
             var provider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
             friendListEvents = provider.GetStream<FriendListEventData>(StreamNames.FriendEvents(gameKey, playerId));
             State.Friends.RemoveAll(x => x.Player.GetPrimaryKeyString() == player.GetPrimaryKeyString());

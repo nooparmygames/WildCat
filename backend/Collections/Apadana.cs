@@ -41,7 +41,7 @@ namespace ScriptingAPI
         {
             return await (await Task.Factory.StartNew(async () =>
             {
-                await session.AddUserCall();
+                await session.Touch();
                 return (await grainFactory.GetGrain<IPlayer>(player).GetPlayerString(key)).Item2;
             }, CancellationToken.None, TaskCreationOptions.None, scheduler));
         }
@@ -57,7 +57,7 @@ namespace ScriptingAPI
         {
             await (await Task.Factory.StartNew(async () =>
             {
-                await session.AddUserCall();
+                await session.Touch();
                 return grainFactory.GetGrain<IPlayer>(player).SetPlayerString(key, value);
             }, CancellationToken.None, TaskCreationOptions.None, scheduler));
         }
@@ -70,7 +70,7 @@ namespace ScriptingAPI
         {
             return await (await Task.Factory.StartNew(async () =>
             {
-                await session.AddUserCall();
+                await session.Touch();
                 var time = await grainFactory.GetGrain<ITimeService>(Guid.Empty).GetServerTime();
                 //TODO fix the interface to return date and time
                 return DateTime.Parse(time);
@@ -88,7 +88,7 @@ namespace ScriptingAPI
         {
             await (await Task.Factory.StartNew(async () =>
             {
-                var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+                var sessionInfo = await session.TouchAndGetInfo();
                 IPlayer playerGrain = grainFactory.GetGrain<IPlayer>(player);
                 return grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard)).AddPlayerScore(playerGrain, score);
             },CancellationToken.None,TaskCreationOptions.None,scheduler));
@@ -106,7 +106,7 @@ namespace ScriptingAPI
             return await (await Task.Factory.StartNew(async () =>
             {
                 count = SanitizeCount(count);
-                var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+                var sessionInfo = await session.TouchAndGetInfo();
                 var leaderBoardGrain = grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard));
                 var topEntries = await leaderBoardGrain.GetTopEntries(count, offset);
                 GetLeaderBoardResponse resp = new GetLeaderBoardResponse();
@@ -128,7 +128,7 @@ namespace ScriptingAPI
             return await (await Task.Factory.StartNew(async () =>
            {
                count = SanitizeCount(count);
-               var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+               var sessionInfo = await session.TouchAndGetInfo();
                var leaderBoardGrain = grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard));
                IPlayer playerGrain = grainFactory.GetGrain<IPlayer>(player);
                var aroundMeEntries = await leaderBoardGrain.GetAroundMe(playerGrain, count);
@@ -150,7 +150,7 @@ namespace ScriptingAPI
             return await (await Task.Factory.StartNew(async () =>
             {
                 
-                var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+                var sessionInfo = await session.TouchAndGetInfo();
                 var leaderBoardGrain = grainFactory.GetGrain<ILeaderBoard>(ResourcesUtility.GetLeaderBoardKey(sessionInfo.GameKey.ToString(), leaderBoard));
                 IPlayer playerGrain = grainFactory.GetGrain<IPlayer>(player);
                 var rank = await leaderBoardGrain.GetPlayerRank(playerGrain);
@@ -204,7 +204,7 @@ namespace ScriptingAPI
         {
             return await (await Task.Factory.StartNew(async () =>
             {
-                var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+                var sessionInfo = await session.TouchAndGetInfo();
                 var readValue = await grainFactory.GetGrain<IDeveloperStorage>(sessionInfo.DeveloperKey).GetString(key);
                 return readValue;
             }, CancellationToken.None, TaskCreationOptions.None, scheduler));
@@ -214,7 +214,7 @@ namespace ScriptingAPI
         {
             await (await Task.Factory.StartNew(async () =>
             {
-                var sessionInfo = await session.AddUserCallCheckSessionAndGetInfo();
+                var sessionInfo = await session.TouchAndGetInfo();
                 var developerData = await grainFactory.GetGrain<IDeveloper>(sessionInfo.DeveloperKey).GetDeveloperData();
                 await grainFactory.GetGrain<IDeveloperStorage>(sessionInfo.DeveloperKey).SetString(key, value, developerData.DeveloperSecret);
             }, CancellationToken.None, TaskCreationOptions.None, scheduler));

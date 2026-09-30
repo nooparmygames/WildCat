@@ -21,37 +21,13 @@ namespace Collections
 
 
         private IGrainTimer timer;
-        private IBackendStorageServer storageManager;
-        private string entityType;
-        private string entityId;
-        private bool isPlayfabRun;
-        private string playfabId, titleId;
-        
+
         private IAsyncStream<UNetConnectionDataTransferMessage> connectionStream;
         private IStreamProvider streamProvider;
 
-
-        public Player(IBackendStorageServer storage)
-        {
-            storageManager = storage;
-        }
-
         public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            isPlayfabRun = await storageManager.IsPlayfabRun();
-            if (isPlayfabRun && entityId == null)
-            {
-                (titleId, playfabId) = ResourcesUtility.GetPlayfabIdFromPlayerKey(this.GetPrimaryKeyString());
-                var entityRes = await storageManager.GetPlayerEntityInfo(this.playfabId);
-                if (entityRes.code != 0)
-                {
-                    throw new Exception($"Could not load entity of the player {entityRes.code} {entityRes.msg}");
-                }
-
-                entityId = entityRes.entityId;
-                entityType = entityRes.entityType;
-            }
-            streamProvider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            streamProvider =this.GetStreamProvider(StreamNames.PROVIDER_NAME);
             connectionStream = streamProvider.GetStream<UNetConnectionDataTransferMessage>(StreamNames.PlayerConnection(this.GetPrimaryKeyString()));
             await base.OnActivateAsync(cancellationToken);
         }
@@ -373,73 +349,6 @@ namespace Collections
         public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerEmailAccounts()
         {
             return Task.FromResult(State.Emails);
-        }
-
-        public async Task<AdditionResult> AddPlayerProvider(string provider, Dictionary<string, string> data)
-        {
-            if (!provider.All(x => IsValidCharacter(x)))
-                throw new ArgumentException($"Provider name {provider} contains invalid characters");
-
-            if (State.Providers.ContainsKey(provider))
-                return AdditionResult.AlreadyExisting;
-
-            bool isMappingAdded = await AddMapping(UserMappingUtility.GetProviderMappingId(provider), provider);
-            if (isMappingAdded)
-            {
-                State.Providers.Add(provider, data);
-                await WriteStateAsync();
-                return AdditionResult.Success;
-            }
-            else
-            {
-                return AdditionResult.AlreadyExisting;
-            }
-        }
-
-        public async Task<AdditionResult> CreateAccountWithProvider(string provider, Dictionary<string, string> data)
-        {
-            if (State.IsCreated)
-            {
-                throw new InvalidOperationException("Already exists");
-            }
-
-            State.IsCreated = true;
-            State.Name = "";
-            State.Providers = new Dictionary<string, Dictionary<string, string>>();
-            return await AddPlayerProvider(provider, data);
-        }
-
-
-        public async Task<LoginResult> LoginWithProvider(string providerName, Dictionary<string, string> data,
-            Guid sessionKey, Guid sentLoginTimeTicket)
-        {
-            if (providerName == "playfab")
-            {
-                var (code, msg, playfabResult, playfabEntityId, playfabEntityType) =
-                    await storageManager.ValidateSessionTicket(data["ticket"]);
-                State.IsLoggedIn = code == 0;
-                if (State.IsLoggedIn)
-                {
-                    this.entityId = playfabEntityId;
-                    this.entityType = playfabEntityType;
-                }
-            }
-
-            return await CreateSessionOrFailBasedOnLoginCondition(sessionKey, sentLoginTimeTicket);
-        }
-
-        public Task<(string id, string type, string game)> GetPlayfabEntityAndGame()
-        {
-            if (isPlayfabRun && string.IsNullOrEmpty(entityId))
-            {
-            }
-
-            return Task.FromResult((entityId, entityType, State.lastGameKey.ToString()));
-        }
-
-        public Task<Dictionary<string, Dictionary<string, string>>> GetPlayerProviderAccounts()
-        {
-            return Task.FromResult(State.Providers);
         }
 
         #endregion

@@ -35,7 +35,7 @@ namespace GrainUnitTests
             var res = await player.LoginWithDeviceID(guid, sessionKey, t);
             var res2 = await player.LoginWithDeviceID("device02", sessionKey, t);
             var session = GrainFactory.GetGrain<ISession>(System.Guid.Parse(res.ticket));
-            var user = await session.AddUserCallCheckSessionAndGetInfo();
+            var user = await session.TouchAndGetInfo();
             Assert.True(res != null);
             Assert.False(res2 != null);
             Assert.Equal(res.userID, user.UserID);

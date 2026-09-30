@@ -1,6 +1,5 @@
 using Collections;
 using Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Xunit;
 
@@ -25,8 +24,6 @@ namespace Tests
                 silo.AddGameStreams();
                 silo.UseInMemoryReminderService();
                 silo.AddLegacyCallChainReentrancy();
-                silo.AddStartupTask<TestStartupTasks>();
-                silo.Services.AddSingleton<IBackendStorageServer, Collections.PlayfabManager>();
             });
             builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));
             Cluster = builder.Build();

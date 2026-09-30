@@ -18,45 +18,9 @@ namespace Interfaces
         Task<IEnumerable<GameInfo>> GetGames();
         Task<bool> IsPasswordCorrect(string passwordHash);
         Task<Guid> InitializeSession(Guid gameKey);
-        Task<AccountingCollection> GetAccountingInfo(DateTime StartDate, DateTime EndDate);
         Task UpdateDeveloperData(DeveloperState data);
         Task ChangePassword(string newPassword);
         Task<Guid> GenerateSecret();
-    }
-
-    [Serializable]
-    [GenerateSerializer]
-    [Alias("wildcat.AccountingCollection")]
-    public class AccountingCollection
-    {
-        [Id(0)] public DateTime StartDate { get; set; }
-        [Id(1)] public DateTime EndDate { get; set; }
-        [Id(2)] public List<AccountingInfo> Games { get; set; }
-
-        public AccountingCollection()
-        {
-
-        }
-    }
-
-    [Serializable]
-    [GenerateSerializer]
-    [Alias("wildcat.AccountingInfo")]
-    public class AccountingInfo
-    {
-        [Id(0)] public string GameName { get; set; }
-        [Id(1)] public int CallCount { get; set; }
-        [Id(2)] public ulong MessageCount { get; set; }
-        [Id(3)] public string GameKey { get; set; }
-
-        public AccountingInfo()
-        {
-
-        }
-        public override string ToString()
-        {
-            return $"CallCount: {CallCount} BytesCount:{MessageCount} {GameName}";
-        }
     }
 
     [Serializable]

@@ -11,32 +11,19 @@ namespace Collections
 {
     public class PlayerChallengeHandler : Grain<PlayerChallengesState>, IPlayerChallengeHandler
     {
-        private IBackendStorageServer storage;
-
-        private bool isPlayfabRun;
         private IPlayer player;
         private Guid gameKey;
         private IAsyncStream<ChallengeEventData> challengeEvents;
         private IStreamProvider provider;
 
-        public PlayerChallengeHandler(IBackendStorageServer storage)
-        {
-            this.storage = storage;
-        }
-
         public async override Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            isPlayfabRun = await storage.IsPlayfabRun();
             string playerId;
             gameKey = this.GetPrimaryKey(out playerId);
 
             player = GrainFactory.GetGrain<IPlayer>(playerId);
             provider = this.GetStreamProvider(StreamNames.PROVIDER_NAME);
             challengeEvents = provider.GetStream<ChallengeEventData>(StreamNames.ChallengeEvents(gameKey, playerId));
-            if (isPlayfabRun)
-            {
-                
-            }
             await base.OnActivateAsync(cancellationToken);
         }
         public async Task AcceptChallenge(IPlayer accepter, byte[] data)

@@ -17,8 +17,6 @@ namespace Interfaces
         Task<bool> ChangePasswordForUserId(string user, string newPassword);
         Task<AdditionResult> CreateAccountWithDevice(string device);
         Task<LoginResult> LoginWithDeviceID(string deviceID, Guid sessionKey, Guid sentLoginTimeTicket);
-        [AlwaysInterleave]
-        Task<(string id, string type, string game)> GetPlayfabEntityAndGame();
         Task Logout();
         Task<bool> IsLoggedIn();
         Task<AdditionResult> AddPlayerDevice(string deviceID);
@@ -29,15 +27,11 @@ namespace Interfaces
         Task<Dictionary<string, Dictionary<string, string>>> GetPlayerUserPassowrdPairs();
         Task<LoginResult> LoginWithEmail(string email, string password, Guid sessionKey, Guid sentLoginTimeTicket);
         Task<Dictionary<string, Dictionary<string, string>>> GetPlayerEmailAccounts();
-        Task<LoginResult> LoginWithProvider(string providerName, Dictionary<string, string> data, Guid sessionKey, Guid sentLoginTimeTicket);
-        Task<Dictionary<string, Dictionary<string, string>>> GetPlayerProviderAccounts();
         Task Disconnected(Guid sentLoginTimeTicket);
         Task<AdditionResult> AddPlayerUserAndPassword(string user, string password);
         Task<AdditionResult> CreateAccountWithUserAndPassword(string user, string password);
         Task<AdditionResult> AddPlayerEmail(string email, string password);
         Task<AdditionResult> CreateAccountWithEmail(string email, string password);
-        Task<AdditionResult> AddPlayerProvider(string provider, Dictionary<string, string> data);
-        Task<AdditionResult> CreateAccountWithProvider(string provider, Dictionary<string, string> data);
 
         Task<string> GetPlayerName();
         Task SetPlayerName(string name);
@@ -112,7 +106,6 @@ namespace Interfaces
         [Id(0)] public Guid lastGameKey { get; set; }
         [Id(1)] public List<IRelayServerGame> RunningGames { get; set; }
         [Id(2)] public List<string> Devices { get; set; }
-        [Id(3)] public Dictionary<string, Dictionary<string, string>> Providers { get; set; }
         [Id(4)] public Dictionary<string, Dictionary<string, string>> Emails { get; set; }
         [Id(5)] public Dictionary<string, Dictionary<string, string>> UserNamePasswordPairs { get; set; }
 
@@ -131,7 +124,6 @@ namespace Interfaces
         {
             RunningGames = new List<IRelayServerGame>();
             Devices = new List<string>();
-            Providers = new Dictionary<string, Dictionary<string, string>>();
             Emails = new Dictionary<string, Dictionary<string, string>>();
             UserNamePasswordPairs = new Dictionary<string, Dictionary<string, string>>();
             EloScore = 1500;

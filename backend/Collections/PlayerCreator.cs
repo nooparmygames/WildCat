@@ -56,11 +56,6 @@ namespace Collections
             return CreateAccount(x => GrainFactory.GetGrain<IPlayer>(x).CreateAccountWithEmail(email, password));
         }
 
-        public Task<AccountCreationResult> CreateAccountWithProvider(string providerName, Dictionary<string, string> data)
-        {
-            return CreateAccount(x => GrainFactory.GetGrain<IPlayer>(x).CreateAccountWithProvider(providerName, data));
-        }
-
         public Task<AccountCreationResult> CreateAccountWithUserAndPassword(string userName, string password)
         {
             return CreateAccount(x => GrainFactory.GetGrain<IPlayer>(x).CreateAccountWithUserAndPassword(userName, password));

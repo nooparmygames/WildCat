@@ -6,7 +6,6 @@
     <PackageReference Include="Microsoft.Orleans.Sdk" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
     <PackageReference Include="Newtonsoft.Json" />
-    <PackageReference Include="PlayFabAllSDK" />
   </ItemGroup>
 
   <ItemGroup>

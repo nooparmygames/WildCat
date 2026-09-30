@@ -134,17 +134,6 @@ namespace Interfaces
             return $"{gameKey}_P_{packaeName}";
         }
 
-        public static string GetPlayfabPlayerKey(string titleId, string playfabId)
-        {
-            return $"{titleId}|{playfabId}";
-        }
-
-        public static (string titleId,string playfabId) GetPlayfabIdFromPlayerKey(string playerKey)
-        {
-            var parts = playerKey.Split('|');
-            return (parts[0],parts[1]);
-        }
-
         public static string GetPlayPlayerStorageKey(string gameKey, string playerKey)
         {
             return $"{gameKey}_{playerKey}";

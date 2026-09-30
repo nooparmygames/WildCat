@@ -13,7 +13,6 @@ namespace Interfaces
         Task<AccountCreationResult> CreateAccountWithDevice(string deviceId);
         Task<AccountCreationResult> CreateAccountWithUserAndPassword(string userName,string password);
         Task<AccountCreationResult> CreateAccountWithEmail(string email, string password);
-        Task<AccountCreationResult> CreateAccountWithProvider(string providerName, Dictionary<string,string> data);
     }
 
     [GenerateSerializer]

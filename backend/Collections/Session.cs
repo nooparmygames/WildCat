@@ -9,14 +9,11 @@ namespace Collections
     public class Session : Grain, ISession
     {
         private bool IsLoggedIn { get { return !string.IsNullOrEmpty(State.UserID); } }
-        private ulong CallCount;
-        private ulong MessageCount;
         private SessionState State = new SessionState();
 
-        public async Task<SessionGameInfo> AddUserCallCheckSessionAndGetInfo()
+        public async Task<SessionGameInfo> TouchAndGetInfo()
         {
-            AssertSessionInitialized();
-            await AddUserCall();
+            await Touch();
             bool isExpired = await IsExpired();
             if (!isExpired)
             {
@@ -45,29 +42,6 @@ namespace Collections
             }
         }
 
-        public async Task<SessionGameInfo> CheckSessionAndGetInfo()
-        {
-            AssertSessionInitialized();
-            bool isExpired = await IsExpired();
-            if (!isExpired)
-            {
-                return GetSessionInfoSync();
-            }
-            throw new SessionExpiredException();
-        }
-
-        public async Task<SessionGameInfo> AddUserMessagesCheckSessionAndGetInfo(int messageCount)
-        {
-            AssertSessionInitialized();
-            await AddUserMessage(messageCount);
-            bool isExpired = await IsExpired();
-            if (!isExpired)
-            {
-                return GetSessionInfoSync();
-            }
-            throw new SessionExpiredException();
-        }
-
         private SessionGameInfo GetSessionInfoSync()
         {
             return new SessionGameInfo
@@ -92,7 +66,7 @@ namespace Collections
             return Task.CompletedTask;
         }
 
-        public async Task StartAuthenticatedUserSession(string ticket, string userId)
+        public Task StartAuthenticatedUserSession(string ticket, string userId)
         {
             AssertSessionInitialized();
             if (IsLoggedIn)
@@ -103,8 +77,7 @@ namespace Collections
             State.Ticket = ticket;
             State.StartTime = DateTime.Now;
             State.LastCallTime = DateTime.Now;
-            lastSaveTime = DateTime.Now;
-            await AddUserCall();//No cheating, this is for both initi and login
+            return Task.CompletedTask;
             //await WriteStateAsync();
         }
 
@@ -119,43 +92,11 @@ namespace Collections
                 throw new SessionNotInitializedException();
         }
 
-        private ushort countsAfterSave = 0;
-        private DateTime lastSaveTime;
-
-        public async Task AddUserCall(int count = 1)
+        public Task Touch()
         {
             AssertSessionInitialized();
             State.LastCallTime = DateTime.Now;
-            CallCount++;
-            countsAfterSave++;
-            await SendDataToAccountingIfNeeded();
-        }
-
-        private async Task SendDataToAccountingIfNeeded()
-        {
-            if (ShouldSaveForAccounting())
-            {
-                await GrainFactory.GetGrain<IAccountingSystem>(State.GameKey, InvoiceUtility.GetInvoiceMonthKey(DateTime.UtcNow), null).AddAccountingData(CallCount, MessageCount);
-                countsAfterSave = 0;
-                CallCount = 0;
-                MessageCount = 0;
-                lastSaveTime = DateTime.Now;
-            }
-        }
-
-        private bool ShouldSaveForAccounting()
-        {
-            return (countsAfterSave > 20 || (DateTime.Now - lastSaveTime).TotalSeconds > 60)
-                && (CallCount > 0 || MessageCount > 0);
-        }
-
-        public async Task AddUserMessage(int messageCount)
-        {
-            AssertSessionInitialized();
-            State.LastCallTime = DateTime.Now;
-            MessageCount += (ulong)messageCount;
-            countsAfterSave++;
-            await SendDataToAccountingIfNeeded();
+            return Task.CompletedTask;
         }
 
         public Task InitializeSession(Guid developerKey, Guid gameKey)

@@ -11,12 +11,20 @@ namespace Interfaces
     {
         Task StartAuthenticatedUserSession(string ticket, string userId);
         Task EndSession();
-        Task<SessionGameInfo> CheckSessionAndGetInfo();
-        Task AddUserCall(int count=1);
-        Task AddUserMessage(int messages);
+
+        /// <summary>
+        /// Marks the session as used now. A session expires after 60 idle minutes, and
+        /// InitializeSession does not start that clock, so the gateway touches a new session
+        /// right after creating it.
+        /// </summary>
+        Task Touch();
         Task<bool> IsExpired();
-        Task<SessionGameInfo> AddUserCallCheckSessionAndGetInfo();
-        Task<SessionGameInfo> AddUserMessagesCheckSessionAndGetInfo(int messageCount);
+
+        /// <summary>
+        /// Touches the session, then checks that it has not expired and returns its developer,
+        /// game and user. Touching first means a session that is in use never expires.
+        /// </summary>
+        Task<SessionGameInfo> TouchAndGetInfo();
 
         Task<SessionGameInfo> GetDeveloperKey();
         Task<bool> IsInitialized();
