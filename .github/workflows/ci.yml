@@ -1,4 +1,5 @@
-# Builds and tests the backend (with the PostgreSQL provider tests against a real database), checks
+# Builds and tests the backend (with the PostgreSQL provider tests against a real database) and the
+# engine-free part of the Unity SDK (against the real gateway, without Unity), checks
 # compose.yaml against the .env the README's quick start produces, lints, tests and builds the panel,
 # and checks that the host's Docker image still builds.
 
@@ -18,7 +19,7 @@ permissions:
 
 jobs:
   backend:
-    name: Backend build and tests
+    name: Backend and Unity SDK build and tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -57,11 +58,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'backend/**/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'backend/**/*.csproj', 'unity-sdk/Tests/**/*.csproj') }}
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # The solution includes unity-sdk/Tests: the SDK test project, and WildCat.Sdk.CoreCheck, which
+      # compiles the SDK core as Unity would (netstandard2.1, C# 9, warnings as errors).
       - name: Build
+        id: build
         run: dotnet build backend/WildCat.sln -c Release
 
       # The postgres image only runs /docker-entrypoint-initdb.d scripts from a mounted folder, and
@@ -86,6 +90,14 @@ jobs:
           dotnet test backend/WildCat.Tests/WildCat.Tests.csproj -c Release --no-build
           --blame-hang-timeout 4m --logger trx
 
+      # The SDK's Runtime/Protocol and Runtime/Core against an in-process server; no Unity needed.
+      # Runs even when the backend tests failed, as long as the build worked.
+      - name: Test the Unity SDK
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: >-
+          dotnet test unity-sdk/Tests/WildCat.Sdk.Tests/WildCat.Sdk.Tests.csproj -c Release --no-build
+          --blame-hang-timeout 4m --logger trx
+
       # Hang dumps from --blame-hang-timeout can be hundreds of megabytes, so only the results and
       # the blame sequence files (which name the test that was running) are kept.
       - name: Upload test results
@@ -96,6 +108,8 @@ jobs:
           path: |
             backend/WildCat.Tests/TestResults/**/*.trx
             backend/WildCat.Tests/TestResults/**/Sequence_*.xml
+            unity-sdk/Tests/WildCat.Sdk.Tests/TestResults/**/*.trx
+            unity-sdk/Tests/WildCat.Sdk.Tests/TestResults/**/Sequence_*.xml
           retention-days: 14
 
   # Follows quick start B in README.md up to `docker compose up`: copy .env.example and make the

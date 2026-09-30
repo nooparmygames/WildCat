@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Settings for the plain .NET projects that check the Unity package without Unity. They are
+    kept apart from backend/Directory.Build.props on purpose: no implicit usings, so a missing
+    using in the SDK sources fails here as it would in Unity.
+  -->
+  <PropertyGroup>
+    <PackageRoot>$(MSBuildThisFileDirectory)..\Packages\com.noopsoftworks.wildcat\</PackageRoot>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

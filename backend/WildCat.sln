@@ -17,6 +17,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Gateway", "WildCat.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Admin", "WildCat.Admin\WildCat.Admin.csproj", "{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "unity-sdk", "unity-sdk", "{8275AAF5-FA6B-7C43-F074-947E762A96A0}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Sdk.Tests", "..\unity-sdk\Tests\WildCat.Sdk.Tests\WildCat.Sdk.Tests.csproj", "{03074E35-97DF-416F-A30A-9EB0586793F3}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WildCat.Sdk.CoreCheck", "..\unity-sdk\Tests\WildCat.Sdk.CoreCheck\WildCat.Sdk.CoreCheck.csproj", "{B4454A93-2F7C-4645-9531-5AE1784AD0A3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,9 +57,21 @@ Global
 		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5E3B6A51-7C2D-4B8E-9F1A-2D4C6E8A0B13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{03074E35-97DF-416F-A30A-9EB0586793F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{03074E35-97DF-416F-A30A-9EB0586793F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{03074E35-97DF-416F-A30A-9EB0586793F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{03074E35-97DF-416F-A30A-9EB0586793F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4454A93-2F7C-4645-9531-5AE1784AD0A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4454A93-2F7C-4645-9531-5AE1784AD0A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4454A93-2F7C-4645-9531-5AE1784AD0A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4454A93-2F7C-4645-9531-5AE1784AD0A3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{03074E35-97DF-416F-A30A-9EB0586793F3} = {8275AAF5-FA6B-7C43-F074-947E762A96A0}
+		{B4454A93-2F7C-4645-9531-5AE1784AD0A3} = {8275AAF5-FA6B-7C43-F074-947E762A96A0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C2ADB293-208B-4C29-898E-68DF3240C6B0}

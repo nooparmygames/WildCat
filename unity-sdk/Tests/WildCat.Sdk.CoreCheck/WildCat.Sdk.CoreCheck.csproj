@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiles the package's Runtime/Core sources the way Unity 6 does: netstandard2.1, C# 9, no
+    nullable annotations, warnings as errors, against a separate WildCat.Protocol assembly (the
+    WildCat.Core asmdef references the WildCat.Protocol asmdef, so protocol internals are out of
+    reach there too). The backend protocol project is the same source as Runtime/Protocol
+    (ProtocolSyncTests enforces that). Nothing references this project; building it is the check.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <AssemblyName>WildCat.Core</AssemblyName>
+    <RootNamespace>WildCat</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Public members without XML docs are not an error; everything else is. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(PackageRoot)Runtime\Core\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\backend\WildCat.Protocol\WildCat.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

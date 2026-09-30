@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests the Unity package without Unity. The package's Runtime/Protocol and Runtime/Core sources
+    are compiled into this assembly as they are (the engine-free part of the SDK), and the tests
+    run them against the real gateway: an in-process Orleans test cluster plus the WildCat.Gateway
+    on Kestrel, configured like WildCat.Host with the memory providers.
+
+    The backend projects bring their own WildCat.Protocol.dll, whose types have the same names as
+    the SDK's copy compiled here. The AliasTheServerProtocol target below gives that assembly the
+    extern alias "server", so "WildCat.Protocol" in this project always means the SDK's copy.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>WildCat.Sdk.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(PackageRoot)Runtime\Protocol\**\*.cs" Link="Sdk\Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="$(PackageRoot)Runtime\Core\**\*.cs" Link="Sdk\Core\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Orleans.TestingHost" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" />
+    <PackageReference Include="Microsoft.Orleans.Reminders" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\backend\WildCat.Gateway\WildCat.Gateway.csproj" />
+    <ProjectReference Include="..\..\..\backend\WildCat.Grains\WildCat.Grains.csproj" />
+    <ProjectReference Include="..\..\..\backend\WildCat.Interfaces\WildCat.Interfaces.csproj" />
+  </ItemGroup>
+
+  <Target Name="AliasTheServerProtocol" AfterTargets="ResolveAssemblyReferences" BeforeTargets="FindReferenceAssembliesForReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(Filename)' == 'WildCat.Protocol'">
+        <Aliases>server</Aliases>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
+
+</Project>
