@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.AspNetCore.HttpOverrides;
 using WildCat.Grains;
 using WildCat.Gateway;
 using Orleans.Configuration;
@@ -29,7 +31,21 @@ builder.UseOrleans(silo =>
 });
 
 builder.Services.Configure<ConsoleLifetimeOptions>(options => { options.SuppressStatusMessages = true; });
-builder.Services.AddGameGateway();
+builder.Services.AddGameGateway(builder.Configuration.GetSection(GameGatewayOptions.SectionName));
+
+// There is deliberately no HTTPS redirection or HSTS here: TLS terminates at the reverse proxy in
+// front of the host, and clients reach it with wss://. The forwarded headers middleware takes the
+// client's scheme and IP address from the proxy's X-Forwarded-Proto and X-Forwarded-For headers so
+// they survive the hop. Only a proxy on loopback is trusted by default; list the address of any
+// other proxy under ForwardedHeaders:KnownProxies.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
+});
 
 var app = builder.Build();
 
@@ -41,6 +57,7 @@ if (!app.Environment.IsDevelopment())
         app.Environment.EnvironmentName);
 }
 
+app.UseForwardedHeaders();
 app.UseWebSockets();
 app.MapGameGateway("/ws");
 
