@@ -71,8 +71,9 @@ namespace WildCat.Tests
             var player = GrainFactory.GetGrain<IPlayer>(created.Account);
             var account = (await player.GetPlayerEmailAccounts())[email];
             Assert.StartsWith("pbkdf2-sha512$", account[PasswordKey]);
-            Assert.Matches("^[A-Z0-9]{6}$", account["code"]);
-            await player.Activate(account["code"]);
+            string activationCode = (await player.GetState()).ActivationCodes[email].Code;
+            Assert.Matches("^[A-Z0-9]{6}$", activationCode);
+            await player.Activate(activationCode);
 
             string resetCode = await player.SendPasswordChangeCodeToEmail(email);
             Assert.False(await player.ChangePasswordForEmailByCode("", "hijacked-password"));
@@ -144,6 +145,78 @@ namespace WildCat.Tests
             Assert.True(await player.IsLoggedIn());
             await player.Disconnected(currentLogin);
             Assert.False(await player.IsLoggedIn());
+        }
+
+        [Fact]
+        public async Task LoginOnANewSessionEndsThePreviousOne()
+        {
+            var (developerKey, gameKey, firstSession) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var secondSession = await GrainFactory.GetGrain<IDeveloper>(developerKey).InitializeSession(gameKey);
+            var player = await TestSetup.CreateLoggedInPlayer(GrainFactory, firstSession, Guid.NewGuid());
+            Assert.Equal(player.GetPrimaryKeyString(), (await GrainFactory.GetGrain<ISession>(firstSession).TouchAndGetInfo()).UserID);
+
+            Assert.NotNull(await player.LoginWithDeviceID(player.GetPrimaryKeyString(), secondSession, Guid.NewGuid()));
+
+            // The first ticket no longer acts as the player.
+            var error = await Assert.ThrowsAsync<SessionNotInitializedException>(
+                () => GrainFactory.GetGrain<ISession>(firstSession).TouchAndGetInfo());
+            Assert.Equal(SessionNotInitializedException.DefaultMessage, error.Message);
+            Assert.Equal(player.GetPrimaryKeyString(), (await GrainFactory.GetGrain<ISession>(secondSession).TouchAndGetInfo()).UserID);
+        }
+
+        [Fact]
+        public async Task LoggingInAgainOnTheSameSessionKeepsIt()
+        {
+            var (_, _, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var player = await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, Guid.NewGuid());
+
+            Assert.NotNull(await player.LoginWithDeviceID(player.GetPrimaryKeyString(), sessionKey, Guid.NewGuid()));
+
+            Assert.Equal(player.GetPrimaryKeyString(), (await GrainFactory.GetGrain<ISession>(sessionKey).TouchAndGetInfo()).UserID);
+        }
+
+        [Fact]
+        public async Task LoginAfterTheOldSessionEndedStillWorks()
+        {
+            var (developerKey, gameKey, firstSession) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var player = await TestSetup.CreateLoggedInPlayer(GrainFactory, firstSession, Guid.NewGuid());
+            await GrainFactory.GetGrain<ISession>(firstSession).EndSession();
+            var secondSession = await GrainFactory.GetGrain<IDeveloper>(developerKey).InitializeSession(gameKey);
+
+            Assert.NotNull(await player.LoginWithDeviceID(player.GetPrimaryKeyString(), secondSession, Guid.NewGuid()));
+            Assert.True(await player.IsLoggedIn());
+        }
+
+        [Fact]
+        public async Task LogoutLeavesASessionAnotherPlayerLoggedInOn()
+        {
+            var (_, _, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var first = await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, Guid.NewGuid());
+            // A socket that switches accounts logs the second player in on the same session.
+            var second = await TestSetup.CreateLoggedInPlayer(GrainFactory, sessionKey, Guid.NewGuid());
+
+            await first.Logout();
+
+            Assert.False(await first.IsLoggedIn());
+            Assert.Equal(second.GetPrimaryKeyString(), (await GrainFactory.GetGrain<ISession>(sessionKey).TouchAndGetInfo()).UserID);
+
+            // The second player's own logout still ends it.
+            await second.Logout();
+            await Assert.ThrowsAsync<SessionNotInitializedException>(
+                () => GrainFactory.GetGrain<ISession>(sessionKey).TouchAndGetInfo());
+        }
+
+        [Fact]
+        public async Task NewLoginDoesNotEndASessionAnotherPlayerTookOver()
+        {
+            var (developerKey, gameKey, sharedSession) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var first = await TestSetup.CreateLoggedInPlayer(GrainFactory, sharedSession, Guid.NewGuid());
+            var second = await TestSetup.CreateLoggedInPlayer(GrainFactory, sharedSession, Guid.NewGuid());
+            var newSession = await GrainFactory.GetGrain<IDeveloper>(developerKey).InitializeSession(gameKey);
+
+            Assert.NotNull(await first.LoginWithDeviceID(first.GetPrimaryKeyString(), newSession, Guid.NewGuid()));
+
+            Assert.Equal(second.GetPrimaryKeyString(), (await GrainFactory.GetGrain<ISession>(sharedSession).TouchAndGetInfo()).UserID);
         }
     }
 }

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using WildCat.Grains.Resources;
@@ -15,7 +17,6 @@ namespace WildCat.Grains
     public class Player : Grain<PlayerState>, IPlayer
     {
         private const string PASSWORD_KEY = "password";
-        private const string CODE_KEY = "code";
         private const string STATUS_KEY = "status";
         private const string STATUS_NOT_ACTIVE = "not active";
         private const int RANDOM_TOKEN_LENGTH = 6;
@@ -149,7 +150,28 @@ namespace WildCat.Grains
         {
             await SetPresenceStatus(OnlineStatus.Offline);
             State.IsLoggedIn = false;
-            await GrainFactory.GetGrain<ISession>(State.sessionToken).EndSession();
+            await EndOwnSession(State.sessionToken);
+        }
+
+        /// <summary>
+        /// Ends a session this player logged in with, unless another player has logged in on it
+        /// since (a socket that switches accounts keeps its session), and ignores a session that
+        /// is already gone.
+        /// </summary>
+        private async Task EndOwnSession(Guid sessionKey)
+        {
+            if (sessionKey == Guid.Empty)
+                return;
+            var session = GrainFactory.GetGrain<ISession>(sessionKey);
+            try
+            {
+                var info = await session.GetDeveloperKey();
+                if (info.UserID == this.GetPrimaryKeyString())
+                    await session.EndSession();
+            }
+            catch (SessionNotInitializedException)
+            {
+            }
         }
 
         public async Task SetPresenceStatus(OnlineStatus status)
@@ -168,6 +190,7 @@ namespace WildCat.Grains
             await session.StartAuthenticatedUserSession(State.sessionToken.ToString(), this.GetPrimaryKeyString());
             // Change the login state only once the session accepted the user, so a login on an
             // expired or unknown session leaves the current login and its ticket alone.
+            Guid previousSession = State.sessionToken;
             State.IsLoggedIn = true;
             State.LoginTicket = loginTicket;
             State.sessionToken = sessionKey;
@@ -191,6 +214,11 @@ namespace WildCat.Grains
                 Interleave = true
             });
             await WriteStateAsync();
+
+            // The new login replaces the previous one, so the ticket of the previous session must
+            // stop working instead of acting as this player until it idles out.
+            if (previousSession != sessionKey)
+                await EndOwnSession(previousSession);
         }
 
         private void AssertIsCreated()
@@ -257,8 +285,9 @@ namespace WildCat.Grains
                 .SetAccountID(this.GetPrimaryKeyString());
             if (isMappingAdded)
             {
+                string passwordHash = await PasswordHasher.HashAsync(password);
                 State.UserNamePasswordPairs.Add(user,
-                    new Dictionary<string, string> {{PASSWORD_KEY, PasswordHasher.Hash(password)}});
+                    new Dictionary<string, string> {{PASSWORD_KEY, passwordHash}});
                 await WriteStateAsync();
                 return AdditionResult.Success;
             }
@@ -286,7 +315,7 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             bool valid = State.UserNamePasswordPairs.TryGetValue(userName, out var account)
-                         && PasswordHasher.Verify(password, account[PASSWORD_KEY]);
+                         && await PasswordHasher.VerifyAsync(password, account[PASSWORD_KEY]);
             return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
         }
 
@@ -310,14 +339,15 @@ namespace WildCat.Grains
                 .SetAccountID(this.GetPrimaryKeyString());
             if (isMappingAdded)
             {
+                string passwordHash = await PasswordHasher.HashAsync(password);
                 string activationCode = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
                 State.Emails.Add(email,
                     new Dictionary<string, string>
                     {
-                        {PASSWORD_KEY, PasswordHasher.Hash(password)},
-                        {STATUS_KEY, STATUS_NOT_ACTIVE},
-                        {CODE_KEY, activationCode}
+                        {PASSWORD_KEY, passwordHash},
+                        {STATUS_KEY, STATUS_NOT_ACTIVE}
                     });
+                State.ActivationCodes[email] = NewEmailCode(activationCode);
                 await WriteStateAsync();
                 // The account exists once the state is written, so a failed send is logged rather
                 // than failing the call. A reset code (SendPasswordChangeCodeToEmail) also
@@ -368,7 +398,7 @@ namespace WildCat.Grains
             AssertIsCreated();
             bool valid = State.Emails.TryGetValue(email, out var account)
                          && account[STATUS_KEY] == STATUS_ACTIVE
-                         && PasswordHasher.Verify(password, account[PASSWORD_KEY]);
+                         && await PasswordHasher.VerifyAsync(password, account[PASSWORD_KEY]);
             return await CompleteLogin(valid, sessionKey, sentLoginTimeTicket);
         }
 
@@ -489,9 +519,9 @@ namespace WildCat.Grains
 
         public async Task<bool> ChangePasswordForEmail(string email, string newPassword)
         {
-            if (State.Emails.ContainsKey(email))
+            if (State.Emails.TryGetValue(email, out var account))
             {
-                State.Emails[email][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
+                account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
                 await WriteStateAsync();
                 return true;
             }
@@ -504,48 +534,125 @@ namespace WildCat.Grains
             if (!State.Emails.ContainsKey(email))
                 throw new ArgumentException("The email doesn't exist");
             string code = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
-            State.Emails[email][CODE_KEY] = code;
+            State.PasswordResetCodes[email] = NewEmailCode(code);
             await WriteStateAsync();
             // Unlike activation, a failed send fails the call: the caller asked for this email.
             await emailSender.SendAsync(email, EmailTexts.ResetSubject, EmailTexts.ResetBody(code));
             return code;
         }
 
+        /// <summary>
+        /// Activates the email whose activation code matches. The code is used up, so it cannot be
+        /// used again, and it was never valid as a password reset code. A wrong code counts
+        /// against the account's outstanding activation codes (see <see cref="MatchEmailCode"/>).
+        /// </summary>
         public async Task<string> Activate(string code)
         {
-            // A used reset code is stored as "", so an empty code must never match.
-            if (string.IsNullOrWhiteSpace(code))
-                throw new ArgumentException("The code doesn't exist");
-            var email = State.Emails.FirstOrDefault(x => x.Value.ContainsKey(CODE_KEY) && x.Value[CODE_KEY] == code);
-            if (string.IsNullOrEmpty(email.Key))
-                throw new ArgumentException("The code doesn't exist");
-            email.Value[STATUS_KEY] = STATUS_ACTIVE;
-            await WriteStateAsync();
-            return email.Key;
-        }
-
-        public async Task<bool> ChangePasswordForEmailByCode(string code, string newPassword)
-        {
-            // A used code is stored as "", so an empty code must never match.
-            if (string.IsNullOrWhiteSpace(code))
-                return false;
-            var emailKVP = State.Emails.FirstOrDefault(x => x.Value.ContainsKey(CODE_KEY) && x.Value[CODE_KEY] == code);
-            if (!string.IsNullOrEmpty(emailKVP.Key))
+            string email = MatchEmailCode(State.ActivationCodes, code, out bool codesChanged);
+            if (email == null)
             {
-                State.Emails[emailKVP.Key][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
-                State.Emails[emailKVP.Key][CODE_KEY] = "";
-                await WriteStateAsync();
-                return true;
+                if (codesChanged)
+                    await WriteStateAsync();
+                throw new ArgumentException("The code is wrong or has expired.");
             }
 
-            return false;
+            State.ActivationCodes.Remove(email);
+            if (State.Emails.TryGetValue(email, out var account))
+                account[STATUS_KEY] = STATUS_ACTIVE;
+            await WriteStateAsync();
+            return email;
+        }
+
+        /// <summary>
+        /// Sets a new password for the email whose reset code (from
+        /// <see cref="SendPasswordChangeCodeToEmail"/>) matches, and uses the code up. Returns false
+        /// for a wrong, used or expired code, which counts against the outstanding reset codes.
+        /// An unacceptable new password throws before the code is used up.
+        /// </summary>
+        public async Task<bool> ChangePasswordForEmailByCode(string code, string newPassword)
+        {
+            string email = MatchEmailCode(State.PasswordResetCodes, code, out bool codesChanged);
+            if (email == null || !State.Emails.TryGetValue(email, out var account))
+            {
+                if (email != null)
+                    codesChanged = State.PasswordResetCodes.Remove(email);
+                if (codesChanged)
+                    await WriteStateAsync();
+                return false;
+            }
+
+            account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
+            // The code arrived by email, which proves the address, so a reset also activates it.
+            // That is the way back for a player whose activation code expired or was used up.
+            account[STATUS_KEY] = STATUS_ACTIVE;
+            State.ActivationCodes.Remove(email);
+            State.PasswordResetCodes.Remove(email);
+            await WriteStateAsync();
+            return true;
+        }
+
+        /// <summary>
+        /// How long an activation or password reset code stays valid after it is sent.
+        /// </summary>
+        public static readonly TimeSpan EmailCodeLifetime = TimeSpan.FromMinutes(30);
+
+        /// <summary>
+        /// Wrong codes an account takes before its outstanding codes of that kind (activation or
+        /// password reset) are thrown away and a new one has to be sent.
+        /// </summary>
+        public const int MaxEmailCodeAttempts = 5;
+
+        private static EmailCode NewEmailCode(string code)
+        {
+            return new EmailCode { Code = code, IssuedAtUtc = DateTime.UtcNow };
+        }
+
+        /// <summary>
+        /// Returns the email whose code in <paramref name="codes"/> matches <paramref name="code"/>,
+        /// or null. Expired codes are removed first. The activation and reset calls carry only the
+        /// code, so a miss counts as a failed attempt against every code still outstanding, and a
+        /// code that reaches <see cref="MaxEmailCodeAttempts"/> is removed. Codes are compared in
+        /// constant time. <paramref name="codesChanged"/> tells the caller to write state.
+        /// </summary>
+        private static string MatchEmailCode(Dictionary<string, EmailCode> codes, string code, out bool codesChanged)
+        {
+            codesChanged = false;
+            DateTime now = DateTime.UtcNow;
+            foreach (var expired in codes.Where(x => now - x.Value.IssuedAtUtc > EmailCodeLifetime).Select(x => x.Key).ToList())
+            {
+                codes.Remove(expired);
+                codesChanged = true;
+            }
+
+            string match = null;
+            if (!string.IsNullOrEmpty(code))
+            {
+                byte[] given = Encoding.UTF8.GetBytes(code);
+                foreach (var entry in codes)
+                {
+                    bool equal = CryptographicOperations.FixedTimeEquals(given, Encoding.UTF8.GetBytes(entry.Value.Code ?? ""));
+                    if (equal && match == null)
+                        match = entry.Key;
+                }
+            }
+            if (match != null)
+                return match;
+
+            foreach (var entry in codes.ToList())
+            {
+                entry.Value.FailedAttempts++;
+                if (entry.Value.FailedAttempts >= MaxEmailCodeAttempts)
+                    codes.Remove(entry.Key);
+                codesChanged = true;
+            }
+            return null;
         }
 
         public async Task<bool> ChangePasswordForUserId(string user, string newPassword)
         {
-            if (State.UserNamePasswordPairs.ContainsKey(user))
+            if (State.UserNamePasswordPairs.TryGetValue(user, out var account))
             {
-                State.UserNamePasswordPairs[user][PASSWORD_KEY] = PasswordHasher.Hash(newPassword);
+                account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
                 await WriteStateAsync();
                 return true;
             }

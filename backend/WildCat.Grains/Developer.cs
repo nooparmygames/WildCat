@@ -93,16 +93,16 @@ namespace WildCat.Grains
         /// password on the way in and is replaced by its hash; an empty value creates a developer
         /// without a password (the seeded development accounts), who cannot log in with one.
         /// </summary>
-        public Task CreateDeveloper(DeveloperState data)
+        public async Task CreateDeveloper(DeveloperState data)
         {
-            data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : PasswordHasher.Hash(data.PasswordHash);
-            data.DeveloperSecret = Guid.NewGuid();
             if (data.GameInfos.Count > 0)
                 throw new ArgumentException();
+            data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : await PasswordHasher.HashAsync(data.PasswordHash);
+            data.DeveloperSecret = Guid.NewGuid();
             State = data;
             State.IsCreated = true;
             isCreated = true;
-            return WriteStateAsync();
+            await WriteStateAsync();
         }
 
         public Task<DeveloperState> GetDeveloperData()
@@ -163,16 +163,16 @@ namespace WildCat.Grains
                 throw new InvalidOperationException($"such developer {this.GetPrimaryKey()} is not created");
         }
 
-        public Task<bool> IsPasswordCorrect(string password)
+        public async Task<bool> IsPasswordCorrect(string password)
         {
-            return Task.FromResult(isCreated && PasswordHasher.Verify(password, State.PasswordHash));
+            return isCreated && await PasswordHasher.VerifyAsync(password, State.PasswordHash);
         }
 
-        public Task ChangePassword(string newPassword)
+        public async Task ChangePassword(string newPassword)
         {
             AssertIsCreated();
-            State.PasswordHash = PasswordHasher.Hash(newPassword);
-            return WriteStateAsync();
+            State.PasswordHash = await PasswordHasher.HashAsync(newPassword);
+            await WriteStateAsync();
         }
 
         public Task<bool> IsSecretValid(Guid secret)

@@ -34,7 +34,28 @@ Message types above 1023 are "user messages": they must carry auth, and with `Ha
 the gateway relays the frame to the other players in the match. Since step 4 it rebuilds the
 relayed frame without the ticket (`HasAuthData` cleared); message type, request id, game
 target and payload bytes stay exactly as sent. Before that the raw frame, sender's ticket
-included, went out, which let any player hijack an opponent's session.
+included, went out, which let any player hijack an opponent's session. The rebuilt frame also
+drops `HasPlayerTarget` and the player list: the relay always goes to every other player in
+the match, and the list's count is written as int32 but read as int16 (see the bugs below), so
+passing it on would hand the receivers a frame they cannot parse. A user message without
+`HasGameTarget` has nowhere to go and is dropped without a response.
+
+Only ids above 1023 are ever relayed. Since step 4 an id up to 1023 that the gateway has no
+handler for (a request it does not serve yet, and every server event and response id such as 10
+GameFinishedEvent, 128 MatchPropertyChangedEvent or a response with a guessed request id) is
+answered with an ErrorMsg (error code 1, "Unsupported message type", request id echoed) and never
+relayed, with or without a game target. Before that the gateway relayed any such frame that had
+a game target, so a player could send forged server events and responses to the rest of the
+match.
+
+ErrorMsg (8) is the gateway's answer to a request it refuses before any handler runs: a missing
+session ticket on a message that needs one, a ticket that is not a Guid, a session that does not
+exist, has ended or has expired, a valid session no player has logged in on, and an unsupported
+message id. Since step 4 its payload is `OptionalResponse<EmptyMessage>` with `isSuccessful`
+false, the error code (1 for these client errors, -1 when the session could not be checked) and
+a message, and it echoes the request id when the request carried one, so a client can match it
+to the request. Before step 4 the missing-ticket error was a bare string published to a stream
+nobody subscribed to, and the other cases threw inside the gateway and sent nothing.
 
 Responses and forwarded events are wrapped in `OptionalResponse<T>`: `bool isSuccessful`, then
 either `int32 errorCode, string errorMessage` or `T` inline. Error codes: -1 any exception (the
@@ -61,12 +82,25 @@ Session and auth
 | 80/81 | EmailActivationRequest / Response | {ticket, email, code} / empty | `IPlayer.Activate` |
 | 82/83 | AddAuthMechanismToAccountRequest / Response | {LoginType, Id, PasswordHash, dict} / empty | `IPlayer.AddPlayer*` |
 | 100/101 | HeartBeatRequest / Response | empty | `IPlayer.HeartBeat` |
-| 8 | ErrorMsg (S) | {string} | never actually delivered (published to an unsubscribed stream) |
+| 8 | ErrorMsg (S) | OptionalResponse<EmptyMessage>, always failed, request id echoed | refusals before dispatch (see above); a bare string that never arrived before step 4 |
 
 Passwords: since step 4 the `PasswordHash` fields of 76, 78 and 82 carry the plain password
 (the misleading name stays until step 6). The server stores only a salted PBKDF2 hash and
 checks logins against it, so the connection must use TLS (wss://; TLS terminates at the proxy
 in front of the host). Before step 4 the SDK sent an unsalted MD5 of the password.
+
+Sign-in limit: 76, 78, 80 and 82 share a per-connection allowance, a token bucket of
+`Gateway:AuthAttemptBurst` attempts (default 5) that refills at `Gateway:AuthAttemptsPerMinute`
+(default 6, one every 10 seconds). An attempt over the limit gets its normal response type (77,
+79, 81 or 83) with error code 1 and "Too many attempts, try again later", and reaches no grain.
+
+Email codes (80 and the grain-only password reset): since step 4 the activation code and the
+password reset code are stored apart, so an activation code never resets a password. Each code
+is used up when it works, expires 30 minutes after it was sent (`Player.EmailCodeLifetime`),
+and is thrown away after 5 wrong codes (`Player.MaxEmailCodeAttempts`); codes are compared in
+constant time. There is no message to send a new activation code yet (86/87 ResendActivation
+is unhandled), so an activation code that expired or was guessed at five times cannot be
+replaced from a client.
 
 Profile and cloud data
 
@@ -119,7 +153,7 @@ Leaderboards, inventory, scripting, time
 | 28/29 | SetLeaderboard | {name, int score} / empty | rejected from clients since step 4 (see below); scripts call `SetScoreInLeaderBoard` |
 | 109/110 | GetInventory | {invName} / {(name, count)[]} | `IPlayerInventory.GetInventory` |
 | 111..114 | AddItemToInventory, SetItemToInventory | {invName, (item, count)[]} / inventory list | rejected from clients since step 4 (see below); scripts call `AddInventoryItems`, `SetInventoryItems` |
-| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveItem` (players may spend their own items) |
+| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveItem` (players may spend their own items); error code 1 when the player does not hold that many (step 4; before that it threw on the item lookup every time and never removed anything) |
 | 119..122 | UnlockInventory, GetInventoryUnlockTime | {invName} | `Unlock`, `GetUnlocktime` |
 | 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `IScriptEventRunner.Run` |
 | 42/43 | GetServerTime | none / {string} | `ITimeService` |
@@ -129,10 +163,12 @@ response (`isSuccessful` false, error code 1, "Not allowed from clients. Grant i
 scores from a server script event."). Before that any client could post its own score and
 grant itself items.
 
-Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dropped without a
-response): 84-87 RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem,
-123/124 ConsumeItem. The grain logic behind them exists; only the gateway handlers are missing.
-44/45 CreateEnvironment falls to `default` too: step 4 deleted its unauthenticated handler (the
+Defined but unhandled (answered with ErrorMsg "Unsupported message type" since step 4, never
+relayed; before that relayed if HasGameTarget, otherwise dropped without a response): 84-87
+RecoverPassword and ResendActivation, 107/108 GetDefinedItems, 117/118 BuyItem, 123/124
+ConsumeItem. The grain logic behind them exists, except for resending an activation code; only
+the gateway handlers are missing.
+44/45 CreateEnvironment gets the same ErrorMsg: step 4 deleted its unauthenticated handler (the
 SDK never sent it) and the host seeds developers and games from the `WildCat:Seed` configuration
 section (`devsconfig.json` before step 5).
 The ConsumeItem payload class (`ConsumeItemInventoryRequestMessage`) was removed in step 2 because

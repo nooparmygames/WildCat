@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WildCat.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />
     <ProjectReference Include="..\WildCat.Protocol\WildCat.Protocol.csproj" />
   </ItemGroup>

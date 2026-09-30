@@ -63,7 +63,7 @@ namespace WildCat.Tests
             var creationResult = await GrainFactory.GetGrain<IPlayerCreator>(0).CreateAccountWithEmail("player1@example.com", "pass");
             Assert.True(!string.IsNullOrWhiteSpace(creationResult.Account));
             var state = await GrainFactory.GetGrain<IPlayer>(creationResult.Account).GetState();
-            string code = state.Emails["player1@example.com"]["code"];
+            string code = state.ActivationCodes["player1@example.com"].Code;
             Assert.True(state.IsCreated);
             Assert.False(state.IsLoggedIn);
             Guid t = Guid.NewGuid();
@@ -83,7 +83,7 @@ namespace WildCat.Tests
             Assert.True(!string.IsNullOrWhiteSpace(creationResult.Account));
             IPlayer player = GrainFactory.GetGrain<IPlayer>(creationResult.Account);
             var state = await player.GetState();
-            string code = state.Emails["player1@example.com"]["code"];
+            string code = state.ActivationCodes["player1@example.com"].Code;
             Assert.True(state.IsCreated);
             Assert.False(state.IsLoggedIn);
             Guid t = Guid.NewGuid();
@@ -105,7 +105,7 @@ namespace WildCat.Tests
             loginResult = await player.LoginWithEmail("player2@example.com", "pass", sessionKey, t);
             Assert.Null(loginResult);
             state = await player.GetState();
-            code = state.Emails["player2@example.com"]["code"];
+            code = state.ActivationCodes["player2@example.com"].Code;
             await player.Activate(code);
             loginResult = await player.LoginWithEmail("player2@example.com", "pass", sessionKey, t);
             Assert.NotNull(loginResult);

@@ -160,7 +160,14 @@ Security:
    Fixed in step 4: passwords (client MD5, then unsalted SHA1) now travel plain over TLS and
    are stored as salted PBKDF2-SHA512; activation and reset codes use `RandomNumberGenerator`;
    PlayerStorage no longer sets `TypeNameHandling.All` process wide, and PlayerInventory has
-   its own grain storage (items survive reactivation).
+   its own grain storage (items survive reactivation). After review: the PBKDF2 work runs on
+   the thread pool (`PasswordHasher.HashAsync`/`VerifyAsync`) instead of holding the Player or
+   Developer grain for about 200 ms per call, and `IDeveloper.IsPasswordCorrect` is read only;
+   the gateway limits sign-in requests (76, 78, 80, 82) per connection with a token bucket
+   (`Gateway:AuthAttemptBurst`, `Gateway:AuthAttemptsPerMinute`); and the activation code, which
+   used to stay in place after activation and also worked as a permanent password reset code,
+   is now kept apart from the reset code, used up on success, expires after 30 minutes and is
+   dropped after 5 wrong codes (no message re-sends an activation code yet).
 7. Gateway: no origin check, `AllowedHosts *`, HTTPS redirection commented out, a fixed 2 MB
    reassembly buffer per connection that throws above 2 MB.
    Fixed in step 4 (limits and origins): `Gateway:MaxMessageBytes` (default 1 MiB) closes the
@@ -173,6 +180,12 @@ Correctness:
    lookup, and an abrupt close skipped the callback); `ReceiveMessages` now always runs it, and
    `PlayerDisconnected` unsubscribes the player's streams, clears the player mapping only if it
    still points at this connection, and tells the player grain with that login's ticket.
+   After review: a login and the disconnect cleanup of the same socket take a per-connection
+   lock, so a socket that closes while a login is in flight no longer leaves that login bound
+   to the dead socket (the login sees the socket gone and tells the player grain it
+   disconnected); logging in as another player on the same socket tells the first player it
+   disconnected; and `Player.Logout` ends its session only while that session is still bound
+   to the player, since a socket that switches players keeps its session.
 9. Fixed in step 4: `Session` was never persisted, so any deactivation or restart dropped every
    session; it now writes state on initialize, user binding and end, and touches at most once a
    minute.
@@ -207,7 +220,8 @@ Correctness:
     removed `CalculateELO`, which treated a draw as a loss, and `AddPlayerProvider`, which
     allowed one account per provider name.) Fixed in step 4: `Disconnected` ignored the login
     ticket, so a stale connection logged out a newer session; it now ignores a ticket that is
-    not the current login's.
+    not the current login's. A login on a new session also ends the player's previous session,
+    whose ticket used to keep acting as the player until it idled out.
 17. `PlayerInventory`: rollback copies a reference (no-op); `Unlock()` on the main inventory
     calls itself; `throw ex` loses stacks.
 18. `PlayerFriendList`: `GetSentInvitations` returns received; `InvitationAccepted` calls
@@ -225,7 +239,23 @@ Correctness:
     delay on non-idempotent operations; unawaited `OnDataReceived` so messages from one socket
     run concurrently and out of order. Fixed in step 4: the email activation and authenticate
     handlers call `Touch()` inside their try, so a bad ticket gets an error response instead of
-    an escaping exception.
+    an escaping exception. After review, the SessionRequired error and every failed check of the
+    header ticket (not a Guid, unknown, ended or expired session, no player logged in) are
+    answered with an ErrorMsg on the connection, with the request id, instead of throwing out of
+    the dispatcher and sending nothing; expected session errors are logged at Information
+    without a stack trace. `SessionExpiredException`, `SessionNotInitializedException` and
+    `InvalidGameException` moved from `WildCat.Grains/Session.cs` to `WildCat.Interfaces` so the
+    gateway can catch them by type, and carry real messages. `RemoveInventoryItemRequest` looked
+    the items up with `GetGrain<IInventoryItem>`, which two grain classes implement, so it threw
+    every time; it now names the item class and answers error code 1 when the player does not
+    hold the items instead of reporting success.
+22. Fixed in step 4: the gateway's default branch handed every message id without a handler to
+    the relay, which forwarded it to the other players whenever it had a game target and a
+    session. A match participant could therefore send ids up to `HighestInternal`, such as 10
+    GameFinishedEvent, 128 MatchPropertyChangedEvent or a response carrying a guessed request
+    id, and the opponents' SDKs would take them as coming from the server. Only ids above
+    `HighestInternal` are relayed now; any other unhandled id is answered with an ErrorMsg
+    (error code 1, "Unsupported message type") and dropped.
 
 Fixed in step 3 (old -> new; enum values did not change):
 - Files: `iPlayer.cs` -> `IPlayer.cs`, `iLeaderBoard.cs` -> `ILeaderBoard.cs`,

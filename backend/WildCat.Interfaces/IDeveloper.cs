@@ -19,7 +19,10 @@ namespace WildCat.Interfaces
         Task<IEnumerable<GameInfo>> GetGames();
         /// <summary>
         /// Checks a plain password against the stored hash (see <see cref="PasswordHasher"/>).
+        /// Read only, so password checks and <see cref="IsSecretValid"/> calls run while the
+        /// hashing waits on the thread pool.
         /// </summary>
+        [ReadOnly]
         Task<bool> IsPasswordCorrect(string password);
         Task<Guid> InitializeSession(Guid gameKey);
         Task UpdateDeveloperData(DeveloperState data);

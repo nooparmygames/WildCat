@@ -95,7 +95,7 @@ namespace WildCat.Grains
             if (IsIdleTooLong())
             {
                 await Clear();
-                throw new SessionExpiredException("The session expired after being idle too long.");
+                throw new SessionExpiredException();
             }
         }
 
@@ -197,60 +197,4 @@ namespace WildCat.Grains
             GameKey = DeveloperKey = Guid.Empty;
         }
     }
-
-    [Serializable]
-    [GenerateSerializer]
-    [Alias("wildcat.SessionExpiredException")]
-    public class SessionExpiredException : Exception
-    {
-        public SessionExpiredException()
-        {
-        }
-
-        public SessionExpiredException(string message) : base(message)
-        {
-        }
-
-        public SessionExpiredException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-    }
-
-    [Serializable]
-    [GenerateSerializer]
-    [Alias("wildcat.SessionNotInitializedException")]
-    public class SessionNotInitializedException : Exception
-    {
-        public SessionNotInitializedException()
-        {
-        }
-
-        public SessionNotInitializedException(string message) : base(message)
-        {
-        }
-
-        public SessionNotInitializedException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-    }
-
-    [Serializable]
-    [GenerateSerializer]
-    [Alias("wildcat.InvalidGameException")]
-    public class InvalidGameException : Exception
-    {
-        public InvalidGameException()
-        {
-        }
-
-        public InvalidGameException(string message) : base(message)
-        {
-        }
-
-        public InvalidGameException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-    }
-
 }
-

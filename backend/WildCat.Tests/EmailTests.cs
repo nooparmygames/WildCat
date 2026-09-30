@@ -15,7 +15,6 @@ namespace WildCat.Tests
     [Collection(ClusterCollection.Name)]
     public class EmailTests
     {
-        private const string CodeKey = "code";
         private readonly ClusterFixture fixture;
         private IGrainFactory GrainFactory => fixture.Cluster.Client;
 
@@ -31,12 +30,17 @@ namespace WildCat.Tests
             var created = await GrainFactory.GetGrain<IPlayerCreator>(0).CreateAccountWithEmail(email, "a-password");
             Assert.Equal(AdditionResult.Success, created.result);
             var player = GrainFactory.GetGrain<IPlayer>(created.Account);
-            string code = (await player.GetPlayerEmailAccounts())[email][CodeKey];
 
+            // The grain keeps only its own record of the code, so read it back from the email the
+            // way a player would, using the template to find where the code sits.
             var sent = Assert.Single(fixture.Emails.SentTo(email));
             Assert.Equal(EmailTexts.ActivationSubject, sent.Subject);
-            Assert.Contains(code, sent.Body);
             Assert.DoesNotContain("{0}", sent.Body);
+            string pattern = System.Text.RegularExpressions.Regex.Escape(EmailTexts.ActivationBody("CODEPLACEHOLDER"))
+                .Replace("CODEPLACEHOLDER", "([A-Z0-9]{6})");
+            var match = System.Text.RegularExpressions.Regex.Match(sent.Body, pattern);
+            Assert.True(match.Success, "The activation email does not contain a code in the expected place.");
+            string code = match.Groups[1].Value;
 
             Assert.Equal(email, await player.Activate(code));
         }

@@ -26,5 +26,20 @@ namespace WildCat.Gateway
         /// player's browser.
         /// </summary>
         public string[] AllowedOrigins { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Sign-in attempts one connection may make back to back: 76 Authenticate,
+        /// 78 CreateNewAccount, 80 EmailActivation and 82 AddAuthMechanismToAccount share the
+        /// allowance. Each attempt checks a password or a code, so this caps guessing per socket.
+        /// Defaults to 5.
+        /// </summary>
+        public int AuthAttemptBurst { get; set; } = 5;
+
+        /// <summary>
+        /// How fast a connection earns sign-in attempts back after using up
+        /// <see cref="AuthAttemptBurst"/>. Defaults to 6 a minute, one every 10 seconds. An attempt
+        /// over the limit is answered with error code 1 and nothing else happens.
+        /// </summary>
+        public double AuthAttemptsPerMinute { get; set; } = 6;
     }
 }

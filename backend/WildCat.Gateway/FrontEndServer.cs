@@ -6,9 +6,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WildCat.Protocol;
 
 namespace WildCat.Gateway
@@ -23,6 +23,8 @@ namespace WildCat.Gateway
         public ConcurrentDictionary<IPlayer, int> playerConnectionMapper;
         private readonly IClusterClient orleansClient;
         private IStreamProvider streamProvider;
+        private readonly GameGatewayOptions options;
+        private readonly TimeProvider timeProvider;
         private const int MaxTrycount = 5;
 
         /// <summary>
@@ -31,24 +33,58 @@ namespace WildCat.Gateway
         public const string ClientGrantRejectedMessage =
             "Not allowed from clients. Grant items and set scores from a server script event.";
 
-        public FrontEndServer(ILogger<FrontEndServer> logger, IClusterClient clusterClient)
+        /// <summary>
+        /// ErrorMsg text for a message id up to HighestInternal that the gateway has no handler for.
+        /// </summary>
+        public const string UnsupportedMessageTypeMessage = "Unsupported message type";
+
+        /// <summary>
+        /// Error text for a sign-in attempt over the per-connection limit
+        /// (<see cref="GameGatewayOptions.AuthAttemptBurst"/>).
+        /// </summary>
+        public const string TooManyAuthAttemptsMessage = "Too many attempts, try again later";
+
+        /// <summary>ErrorMsg text for a message that needs a session ticket but carries none.</summary>
+        public const string SessionRequiredMessage = "This message needs a session ticket.";
+
+        /// <summary>ErrorMsg text for a session ticket that is not a Guid.</summary>
+        public const string InvalidTicketMessage = "The session ticket is not valid.";
+
+        /// <summary>ErrorMsg text for a valid session on which no player has logged in.</summary>
+        public const string NotLoggedInMessage = "Log in before sending this message.";
+
+        /// <summary>
+        /// The sign-in requests limited per connection, with the response type each is answered
+        /// with when the limit is reached.
+        /// </summary>
+        private static readonly Dictionary<WildCatMsgType, WildCatMsgType> AuthAttemptResponses = new()
+        {
+            [WildCatMsgType.AuthenticateRequest] = WildCatMsgType.AuthenticateResponse,
+            [WildCatMsgType.CreateNewAccountRequest] = WildCatMsgType.CreateNewAccountResponse,
+            [WildCatMsgType.EmailActivationRequest] = WildCatMsgType.EmailActivationResponse,
+            [WildCatMsgType.AddAuthMechanismToAccountRequest] = WildCatMsgType.AddAuthMechanismToAccountResponse,
+        };
+
+        public FrontEndServer(ILogger<FrontEndServer> logger, IClusterClient clusterClient,
+            IOptions<GameGatewayOptions> options, TimeProvider timeProvider)
         {
             clientConnections = new ConcurrentDictionary<int, PlayerInfo>();
             playerConnectionMapper = new ConcurrentDictionary<IPlayer, int>();
             orleansClient = clusterClient;
             streamProvider = orleansClient.GetStreamProvider(StreamNames.PROVIDER_NAME);
+            this.options = options.Value;
+            this.timeProvider = timeProvider;
             this._Logger = logger;
-        }
-
-        private string GetConnectionGrainId(int connectionId)
-        {
-            return $"{Dns.GetHostName()}|{connectionId}";
         }
 
         public async Task PlayerConnected(ConnectionProcessor connection, int id)
         {
             connection.OnDataReceived += OnDataReceived;
-            clientConnections[id] = new PlayerInfo(connection);
+            clientConnections[id] = new PlayerInfo(connection)
+            {
+                AuthAttempts = new TokenBucket(options.AuthAttemptBurst,
+                    TimeSpan.FromMinutes(1) / options.AuthAttemptsPerMinute, timeProvider)
+            };
         }
 
         /// <summary>
@@ -117,7 +153,9 @@ namespace WildCat.Gateway
         /// Runs once when a socket closes, however it closed. Takes the connection out of the map
         /// (keeping its PlayerInfo for the cleanup), releases the login it held and tells the player
         /// grain, passing the ticket of that login so the grain can ignore a stale disconnect after
-        /// the player logged in again elsewhere.
+        /// the player logged in again elsewhere. It takes the connection's login lock, so a login
+        /// still being set up on this socket finishes first (and is released here) or sees the
+        /// connection gone and undoes itself (see <see cref="ChangeConnectionStateToLoggedIn"/>).
         /// </summary>
         public async Task PlayerDisconnected(ConnectionProcessor connection, int id)
         {
@@ -126,19 +164,38 @@ namespace WildCat.Gateway
                 return;
             _Logger.LogInformation("Connection {ConnectionId} disconnected", id);
 
-            var player = playerInfo.IsLoggedIn ? playerInfo.Player : null;
-            if (player == null)
-                return;
-            var loginTicket = playerInfo.loginTimeRandomKey;
+            IPlayer player;
+            Guid loginTicket;
+            await playerInfo.LoginLock.WaitAsync();
             try
             {
-                await ChangeConnectionStateToLoggedOut(playerInfo, id);
+                player = playerInfo.IsLoggedIn ? playerInfo.Player : null;
+                if (player == null)
+                    return;
+                loginTicket = playerInfo.loginTimeRandomKey;
+                try
+                {
+                    await ChangeConnectionStateToLoggedOut(playerInfo, id);
+                }
+                catch (Exception ex)
+                {
+                    _Logger.LogError(ex, "Releasing the streams of connection {ConnectionId} failed", id);
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                _Logger.LogError(ex, "Releasing the streams of connection {ConnectionId} failed", id);
+                playerInfo.LoginLock.Release();
             }
 
+            await TellPlayerDisconnected(player, loginTicket, id);
+        }
+
+        /// <summary>
+        /// Tells a player grain that the login identified by <paramref name="loginTicket"/> no
+        /// longer has a socket. Failures are logged, not thrown.
+        /// </summary>
+        private async Task TellPlayerDisconnected(IPlayer player, Guid loginTicket, int connectionId)
+        {
             try
             {
                 await player.Disconnected(loginTicket);
@@ -146,8 +203,17 @@ namespace WildCat.Gateway
             catch (Exception ex)
             {
                 _Logger.LogError(ex, "Telling player {PlayerId} that connection {ConnectionId} closed failed",
-                    player.GetPrimaryKeyString(), id);
+                    player.GetPrimaryKeyString(), connectionId);
             }
+        }
+
+        /// <summary>
+        /// True while <paramref name="playerInfo"/> is still the registered state of an open
+        /// connection, that is, PlayerDisconnected has not taken it out of the map.
+        /// </summary>
+        private bool IsConnectionOpen(int connectionId, PlayerInfo playerInfo)
+        {
+            return clientConnections.TryGetValue(connectionId, out var current) && ReferenceEquals(current, playerInfo);
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -161,48 +227,41 @@ namespace WildCat.Gateway
             var playerInfo = GetPlayerInfo(id);
             if(playerInfo == null)
                 return;
-            // await GetClientConnectionGrain(id).DataReceived(id, 0, message, true);
             var connectionId = id;
             var isReliable = true;
             var channelId = 0;
-            var connectionStream =
-                streamProvider.GetStream<PlayerConnectionMessage>(
-                    StreamNames.PlayerConnection(GetConnectionGrainId(connectionId)));
 
             WildCatMessageBase msg = new WildCatMessageBase(message);
-            try
+
+            // Sign-in requests check a password or a code, so each connection gets a small
+            // allowance of them. The check runs before any grain call.
+            if (AuthAttemptResponses.TryGetValue(msg.msgType, out var authResponseType)
+                && !playerInfo.AuthAttempts.TryTake())
             {
-                AssertSessionIfRequired(msg);
+                _Logger.LogInformation("Refused {MessageType} from connection {ConnectionId}: too many sign-in attempts",
+                    msg.msgType, connectionId);
+                await SendFailure(connectionId, msg, authResponseType, 1, TooManyAuthAttemptsMessage);
+                return;
             }
-            catch (SessionRequiredException ex)
+
+            if (MessageTypeRequiresSession(msg) && !msg.hasAuthData)
             {
-                _Logger.LogError((int) msg.msgType, "request without required session ticket");
-                var returning = WildCatMessageBase.Create
-                (new StringMessage {value = ex.Message},
-                    WildCatMsgType.ErrorMsg,
-                    WildCatMsgHeader.normal);
-                if (msg.hasRequestID)
-                    returning.SetRequestID(msg.requestID);
-                await connectionStream.OnNextAsync(new PlayerConnectionMessage
-                {
-                    player = null, connectionId = connectionId, channelId = channelId, data = returning.ToByteArray(),
-                    eventType = PlayerConnectionMessage.EventType.DataTransfer
-                });
+                _Logger.LogInformation("Refused {MessageType} from connection {ConnectionId}: it carries no session ticket",
+                    msg.msgType, connectionId);
+                await SendError(connectionId, msg, 1, SessionRequiredMessage);
                 return;
             }
 
             IPlayer player = null;
-            string userId;
             SessionGameInfo session = null;
             Guid ticket = Guid.Empty;
             if (msg.hasAuthData)
             {
-                ticket = Guid.Parse(msg.ticket);
+                (ticket, session) = await CheckSession(connectionId, msg);
+                if (session == null)
+                    return;
 
-                session = await orleansClient.GetGrain<ISession>(ticket).TouchAndGetInfo();
-                userId = session.UserID;
-
-                player = orleansClient.GetGrain<IPlayer>(userId);
+                player = orleansClient.GetGrain<IPlayer>(session.UserID);
                 if ((DateTime.Now - playerInfo.lastSentHeartBeat).TotalSeconds > 5)
                     player.HeartBeat().Ignore();
                 playerInfo.lastSentHeartBeat = DateTime.Now;
@@ -338,12 +397,97 @@ namespace WildCat.Gateway
                 case WildCatMsgType.ExecuteScriptEventRequest:
                     await ProcessExecuteScriptEventRequest(session, player, connectionId, channelId, msg, ticket);
                     break;
-                default: //user messages
-                    // The other players get a copy of the frame without the sender's session ticket.
-                    await ProcessUserMessage(session, player, channelId, msg,
-                        msg.HasGameTarget ? RelayFrame.WithoutTicket(message) : message, ticket, isReliable, 0);
+                default:
+                    if (msg.msgType > WildCatMsgType.HighestInternal)
+                    {
+                        // User messages. With a game target the other players get a copy of the
+                        // frame without the sender's session ticket; without one there is nowhere
+                        // to relay to and the frame is dropped, as before.
+                        if (msg.HasGameTarget)
+                            await ProcessUserMessage(session, player, channelId, msg,
+                                RelayFrame.WithoutTicket(message), isReliable, 0);
+                    }
+                    else
+                    {
+                        // Ids up to HighestInternal are the server's own: requests the gateway does
+                        // not serve and every server event and response. Relaying them would let a
+                        // player send forged server events or responses to the rest of the match.
+                        _Logger.LogInformation("Refused message type {MessageType} from connection {ConnectionId}: no handler",
+                            msg.msgType, connectionId);
+                        await SendError(connectionId, msg, 1, UnsupportedMessageTypeMessage);
+                    }
                     break;
             }
+        }
+
+        /// <summary>
+        /// Checks the session ticket in the frame header. Returns the ticket and the session, or
+        /// answers the request with an ErrorMsg and returns a null session. A malformed, unknown,
+        /// ended or expired ticket and a session no player has logged in on are client errors,
+        /// logged at Information without a stack trace; anything else is logged as an error.
+        /// </summary>
+        private async Task<(Guid Ticket, SessionGameInfo Session)> CheckSession(int connectionId, WildCatMessageBase msg)
+        {
+            string refusal;
+            try
+            {
+                if (!Guid.TryParse(msg.ticket, out Guid ticket))
+                {
+                    refusal = InvalidTicketMessage;
+                }
+                else
+                {
+                    var session = await orleansClient.GetGrain<ISession>(ticket).TouchAndGetInfo();
+                    if (!string.IsNullOrEmpty(session.UserID))
+                        return (ticket, session);
+                    refusal = NotLoggedInMessage;
+                }
+            }
+            catch (Exception ex) when (ex is SessionNotInitializedException || ex is SessionExpiredException)
+            {
+                refusal = ex.Message;
+            }
+            catch (Exception ex)
+            {
+                _Logger.LogError(ex, "Checking the session of {MessageType} from connection {ConnectionId} failed",
+                    msg.msgType, connectionId);
+                await SendError(connectionId, msg, -1, "The session could not be checked. Try again.");
+                return (Guid.Empty, null);
+            }
+
+            _Logger.LogInformation("Refused {MessageType} from connection {ConnectionId}: {Reason}",
+                msg.msgType, connectionId, refusal);
+            await SendError(connectionId, msg, 1, refusal);
+            return (Guid.Empty, null);
+        }
+
+        /// <summary>
+        /// Sends an ErrorMsg (8) for a request the gateway refuses before any handler runs. The
+        /// payload is an OptionalResponse&lt;EmptyMessage&gt; that is never successful, so it carries
+        /// the error code and message; the frame echoes the request id when the request had one.
+        /// </summary>
+        private Task<bool> SendError(int connectionId, WildCatMessageBase request, int errorCode, string errorMessage)
+        {
+            var response = new OptionalResponse<EmptyMessage>();
+            response.Fail(errorMessage, errorCode);
+            var returning = WildCatMessageBase.Create(response, WildCatMsgType.ErrorMsg, WildCatMsgHeader.normal);
+            if (request.hasRequestID)
+                returning.SetRequestID(request.requestID);
+            return Send(connectionId, returning.ToByteArray());
+        }
+
+        /// <summary>
+        /// Answers a request with its own response type carrying a failed OptionalResponse, so
+        /// the client's callback for that request gets the error.
+        /// </summary>
+        private Task<bool> SendFailure(int connectionId, WildCatMessageBase request, WildCatMsgType responseType,
+            int errorCode, string errorMessage)
+        {
+            // A failed response carries no payload, so the payload type does not matter on the wire.
+            var response = new OptionalResponse<EmptyMessage>();
+            response.Fail(errorMessage, errorCode);
+            var returning = WildCatMessageBase.CreateWithRequestID(response, responseType, request.header, request.requestID);
+            return Send(connectionId, returning.ToByteArray());
         }
 
         #region Proccessors
@@ -511,17 +655,29 @@ namespace WildCat.Gateway
                 var inv = orleansClient.GetGrain<IPlayerInventory>(
                     ResourcesUtility.GetPlayerInventoryKey(playerInfo.GameKey.ToString(), player.GetPrimaryKeyString(),
                         req.inventoryName));
-                await inv.RemoveItem(
+                // IInventoryItem has two grain classes (items and packages), so the class has to be
+                // named; without it the lookup threw and no removal ever worked.
+                bool removed = await inv.RemoveItem(
                     req.items.Select(x =>
                         orleansClient.GetGrain<IInventoryItem>(
-                            ResourcesUtility.GetItemKey(playerInfo.GameKey.ToString(), x.Item1))).ToArray(),
+                            ResourcesUtility.GetItemKey(playerInfo.GameKey.ToString(), x.Item1),
+                            ResourcesUtility.GetGameItemsClassName())).ToArray(),
                     req.items.Select(x => x.Item2).ToArray());
-                (string, int)[] stuff = await GetInventoryItems(inv);
-                GetInventoryResponseMessage responseData = new GetInventoryResponseMessage
+                if (removed)
                 {
-                    items = stuff
-                };
-                response.Succeed(responseData);
+                    (string, int)[] stuff = await GetInventoryItems(inv);
+                    GetInventoryResponseMessage responseData = new GetInventoryResponseMessage
+                    {
+                        items = stuff
+                    };
+                    response.Succeed(responseData);
+                }
+                else
+                {
+                    // RemoveItem changes nothing when a count is not positive or more than the
+                    // player holds.
+                    response.Fail("The inventory does not hold these items in these amounts.", 1);
+                }
             }
             catch (Exception x)
             {
@@ -623,7 +779,7 @@ namespace WildCat.Gateway
 
         //Only game messages are supported for now
         private async Task ProcessUserMessage(SessionGameInfo session, IPlayer player, int channelId,
-            WildCatMessageBase msg, byte[] data, Guid ticket, bool reliable, int count)
+            WildCatMessageBase msg, byte[] data, bool reliable, int count)
         {
             // Without a session there is no game key to find the match by.
             if (msg.HasGameTarget && session != null)
@@ -646,7 +802,7 @@ namespace WildCat.Gateway
                     {
                         _Logger.LogTrace((int) msg.msgType, "Retrying user message {0}", count);
                         await Task.Delay(MaxTrycount * 10);
-                        await ProcessUserMessage(session, player, channelId, msg, data, ticket, reliable, count + 1);
+                        await ProcessUserMessage(session, player, channelId, msg, data, reliable, count + 1);
                         return;
                     }
                     else
@@ -1699,34 +1855,12 @@ namespace WildCat.Gateway
         #endregion
 
 
-        private void AssertSessionIfRequired(WildCatMessageBase msg)
-        {
-            if (MessageTypeRequiresSession(msg))
-            {
-                if (!msg.hasAuthData)
-                    throw new SessionRequiredException();
-            }
-        }
-
         private static bool MessageTypeRequiresSession(WildCatMessageBase msg)
         {
             return msg.msgType == WildCatMsgType.FindMatchRequest
                    || msg.msgType == WildCatMsgType.SetNameRequest
                    || msg.msgType == WildCatMsgType.GetNameRequest
                    || msg.msgType > WildCatMsgType.HighestInternal;
-        }
-
-        [Serializable]
-        public class SessionRequiredException : ArgumentException
-        {
-            public SessionRequiredException()
-            {
-            }
-
-            public SessionRequiredException(System.Runtime.Serialization.SerializationInfo info,
-                System.Runtime.Serialization.StreamingContext ctx)
-            {
-            }
         }
 
         private async Task ProcessAuthenticationRequest(SessionGameInfo session, IPlayer player, int connectionId,
@@ -1823,7 +1957,7 @@ namespace WildCat.Gateway
                     else
                     {
                         var gk = (await orleansClient.GetGrain<ISession>(sessionKey).GetDeveloperKey()).GameKey;
-                        await ChangeConnectionStateToLoggedIn(p, connectionId, gk, "UNET", loginTicket);
+                        await ChangeConnectionStateToLoggedIn(playerInfo, p, connectionId, gk, "UNET", loginTicket);
                         response.Succeed(new AuthenticationResponse
                         {
                             name = loginResponse.name, userId = loginResponse.userID, ticket = loginResponse.ticket,
@@ -1849,36 +1983,73 @@ namespace WildCat.Gateway
             await Send(connectionId, returning.ToByteArray());
         }
 
-        private async Task ChangeConnectionStateToLoggedIn(IPlayer p, int connectionId, Guid gameKey, string host,
-            Guid loginTicket)
+        /// <summary>
+        /// Binds a successful login to the connection it arrived on (<paramref name="playerInfo"/>,
+        /// read when the request came in): the player to connection mapping and the stream
+        /// subscriptions. It runs under the connection's login lock, which PlayerDisconnected also
+        /// takes, and checks under that lock that the connection is still open. So a socket that
+        /// closes while the login is in flight either is seen here, and the login is undone by
+        /// telling the player grain it disconnected with this login's ticket, or waits and finds a
+        /// finished login to release; it can no longer slip between the check and the commit and
+        /// leave a login bound to a dead socket. Logging in as another player on the same socket
+        /// releases the first player's streams and then tells that player it was disconnected.
+        /// </summary>
+        private async Task ChangeConnectionStateToLoggedIn(PlayerInfo playerInfo, IPlayer p, int connectionId,
+            Guid gameKey, string host, Guid loginTicket)
         {
-            _Logger.LogInformation(
-                $"Connection state changed to logged in connectionId: {connectionId} gameKey: {gameKey} host:{host}");
-            var playerInfo = GetPlayerInfo(connectionId);
-            if (playerInfo == null)
+            _Logger.LogInformation("Connection {ConnectionId} logged in to game {GameKey} from {Host}",
+                connectionId, gameKey, host);
+            IPlayer previousPlayer = null;
+            Guid previousLoginTicket = Guid.Empty;
+            bool connectionClosed;
+            await playerInfo.LoginLock.WaitAsync();
+            try
             {
-                // The socket closed while this login was in flight, so the disconnect cleanup ran
-                // without it. Tell the player grain now instead of leaving it logged in.
-                await p.Disconnected(loginTicket);
+                connectionClosed = !IsConnectionOpen(connectionId, playerInfo);
+                if (!connectionClosed)
+                {
+                    // Logging in as someone else on the same socket gives up the first player's
+                    // streams, or that player's events would keep arriving on this socket.
+                    if (playerInfo.IsLoggedIn && playerInfo.Player != null && !playerInfo.Player.Equals(p))
+                    {
+                        previousPlayer = playerInfo.Player;
+                        previousLoginTicket = playerInfo.loginTimeRandomKey;
+                        await ChangeConnectionStateToLoggedOut(playerInfo, connectionId);
+                    }
+                    playerInfo.Player = p;
+                    playerConnectionMapper[p] = connectionId;
+                    playerInfo.IsLoggedIn = true;
+                    playerInfo.loginTimeRandomKey = loginTicket;
+                    playerInfo.Host = host;
+                    playerInfo.ConnectionId = connectionId;
+                    playerInfo.GameKey = gameKey;
+                    playerInfo.connectionStream =
+                        streamProvider.GetStream<PlayerConnectionMessage>(
+                            StreamNames.PlayerConnection(p.GetPrimaryKeyString()));
+                    await UnRegisterConnectionStream(playerInfo.connectionStream, playerInfo.ConnectionId);
+                    playerInfo.connectionHandle = await RegisterConnectionStream(playerInfo.connectionStream);
+                    await SubscribeForStreams(playerInfo);
+                }
+            }
+            finally
+            {
+                playerInfo.LoginLock.Release();
+            }
+
+            if (connectionClosed)
+            {
+                // The socket closed while this login was in flight and the disconnect cleanup had
+                // nothing to release. Tell the player grain now instead of leaving it logged in.
+                _Logger.LogInformation("Connection {ConnectionId} closed while player {PlayerId} was logging in",
+                    connectionId, p.GetPrimaryKeyString());
+                await TellPlayerDisconnected(p, loginTicket, connectionId);
                 return;
             }
-            // Logging in as someone else on the same socket gives up the first player's streams,
-            // or that player's events would keep arriving on this socket.
-            if (playerInfo.IsLoggedIn && playerInfo.Player != null && !playerInfo.Player.Equals(p))
-                await ChangeConnectionStateToLoggedOut(playerInfo, connectionId);
-            playerInfo.Player = p;
-            playerConnectionMapper[p] = connectionId;
-            playerInfo.IsLoggedIn = true;
-            playerInfo.loginTimeRandomKey = loginTicket;
-            playerInfo.Host = host;
-            playerInfo.ConnectionId = connectionId;
-            playerInfo.GameKey = gameKey;
-            playerInfo.connectionStream =
-                streamProvider.GetStream<PlayerConnectionMessage>(
-                    StreamNames.PlayerConnection(p.GetPrimaryKeyString()));
-            await UnRegisterConnectionStream(playerInfo.connectionStream, playerInfo.ConnectionId);
-            playerInfo.connectionHandle = await RegisterConnectionStream(playerInfo.connectionStream);
-            await SubscribeForStreams(playerInfo);
+
+            // The first player's login no longer has a socket. Its own ticket makes the grain log it
+            // out, unless it has logged in again somewhere else since.
+            if (previousPlayer != null)
+                await TellPlayerDisconnected(previousPlayer, previousLoginTicket, connectionId);
         }
 
         /// <summary>
@@ -2093,6 +2264,16 @@ namespace WildCat.Gateway
         public string Host { get; set; }
         public int ConnectionId { get; set; }
         public DateTime lastSentHeartBeat;
+
+        /// <summary>
+        /// Serializes binding a login to this connection with the disconnect cleanup.
+        /// </summary>
+        public SemaphoreSlim LoginLock { get; } = new SemaphoreSlim(1, 1);
+
+        /// <summary>
+        /// Sign-in attempts this connection has left (see <see cref="GameGatewayOptions.AuthAttemptBurst"/>).
+        /// </summary>
+        internal TokenBucket AuthAttempts { get; set; }
 
         public IAsyncStream<PlayerConnectionMessage> connectionStream;
         public IAsyncStream<ChallengeEventData> ChallengesStream;

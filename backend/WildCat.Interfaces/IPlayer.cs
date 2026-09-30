@@ -101,6 +101,22 @@ namespace WildCat.Interfaces
         }
     }
 
+    /// <summary>
+    /// A code sent to an email address for activation or a password reset.
+    /// </summary>
+    [GenerateSerializer]
+    [Alias("wildcat.EmailCode")]
+    public class EmailCode
+    {
+        [Id(0)] public string Code { get; set; } = "";
+
+        /// <summary>UTC time the code was sent; it expires after Player.EmailCodeLifetime.</summary>
+        [Id(1)] public DateTime IssuedAtUtc { get; set; }
+
+        /// <summary>Wrong codes tried while this one was outstanding.</summary>
+        [Id(2)] public int FailedAttempts { get; set; }
+    }
+
     [Serializable]
     [GenerateSerializer]
     [Alias("wildcat.PlayerState")]
@@ -132,8 +148,22 @@ namespace WildCat.Interfaces
         /// </summary>
         [Id(15)] public Guid LoginTicket { get; set; }
 
+        /// <summary>
+        /// Outstanding email activation codes by email address. A code is removed when it is used,
+        /// when it expires and after too many wrong tries.
+        /// </summary>
+        [Id(16)] public Dictionary<string, EmailCode> ActivationCodes { get; set; }
+
+        /// <summary>
+        /// Outstanding password reset codes by email address, kept apart from the activation codes
+        /// so an activation email cannot be used to reset the password.
+        /// </summary>
+        [Id(17)] public Dictionary<string, EmailCode> PasswordResetCodes { get; set; }
+
         public PlayerState()
         {
+            ActivationCodes = new Dictionary<string, EmailCode>();
+            PasswordResetCodes = new Dictionary<string, EmailCode>();
             RunningGames = new List<IRelayServerGame>();
             Devices = new List<string>();
             Emails = new Dictionary<string, Dictionary<string, string>>();

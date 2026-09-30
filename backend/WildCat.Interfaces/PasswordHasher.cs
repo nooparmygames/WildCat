@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace WildCat.Interfaces
 {
@@ -55,6 +56,26 @@ namespace WildCat.Interfaces
                 Iterations.ToString(CultureInfo.InvariantCulture),
                 Convert.ToBase64String(salt),
                 Convert.ToBase64String(hash));
+        }
+
+        /// <summary>
+        /// Runs <see cref="Hash"/> on the thread pool. PBKDF2 takes a few hundred milliseconds by
+        /// design, and a grain that hashed inline would hold its turn (and every queued call) for
+        /// that long. Awaiting this from a grain returns to the grain's scheduler afterwards; the
+        /// hashing itself touches no grain state.
+        /// </summary>
+        public static Task<string> HashAsync(string password)
+        {
+            return Task.Run(() => Hash(password));
+        }
+
+        /// <summary>
+        /// Runs <see cref="Verify"/> on the thread pool, for the same reason as <see cref="HashAsync"/>.
+        /// Read the stored hash from grain state before calling, as the argument does.
+        /// </summary>
+        public static Task<bool> VerifyAsync(string password, string storedHash)
+        {
+            return Task.Run(() => Verify(password, storedHash));
         }
 
         /// <summary>

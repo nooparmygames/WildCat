@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
@@ -29,7 +30,10 @@ namespace WildCat.Gateway
                 options.Bind(configuration);
             options
                 .Validate(o => o.MaxMessageBytes > 0, "Gateway:MaxMessageBytes must be greater than zero.")
+                .Validate(o => o.AuthAttemptBurst > 0, "Gateway:AuthAttemptBurst must be greater than zero.")
+                .Validate(o => o.AuthAttemptsPerMinute > 0, "Gateway:AuthAttemptsPerMinute must be greater than zero.")
                 .ValidateOnStart();
+            services.TryAddSingleton(TimeProvider.System);
             services.AddSingleton<IFrontEndServer, FrontEndServer>();
             return services;
         }

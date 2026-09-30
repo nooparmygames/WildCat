@@ -104,6 +104,26 @@ namespace WildCat.Tests
             Assert.False((await ReadStoredState(session)).RecordExists);
         }
 
+        [Fact]
+        public async Task SessionErrorsAreInterfaceTypesWithRealMessages()
+        {
+            // The gateway catches these by type, so they live next to ISession.
+            Assert.Equal("WildCat.Interfaces", typeof(SessionNotInitializedException).Namespace);
+            Assert.Equal("WildCat.Interfaces", typeof(SessionExpiredException).Namespace);
+            Assert.Equal("WildCat.Interfaces", typeof(InvalidGameException).Namespace);
+            Assert.DoesNotContain("Exception of type", new InvalidGameException().Message);
+
+            var unknown = GrainFactory.GetGrain<ISession>(Guid.NewGuid());
+            var notInitialized = await Assert.ThrowsAsync<SessionNotInitializedException>(() => unknown.TouchAndGetInfo());
+            Assert.Equal(SessionNotInitializedException.DefaultMessage, notInitialized.Message);
+
+            var (_, _, sessionKey) = await TestSetup.CreateDeveloperGameAndSession(GrainFactory);
+            var session = GrainFactory.GetGrain<ISession>(sessionKey);
+            await SetStoredLastCallTime(session, DateTime.UtcNow - TimeSpan.FromMinutes(61));
+            var expired = await Assert.ThrowsAsync<SessionExpiredException>(() => session.Touch());
+            Assert.Equal(SessionExpiredException.DefaultMessage, expired.Message);
+        }
+
         private IGrainStorage GetStorage()
         {
             var services = cluster.GetSiloServiceProvider(cluster.Silos[0].SiloAddress);
