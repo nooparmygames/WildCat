@@ -4,7 +4,9 @@
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
-ENV ASPNETCORE_URLS=http://+:5000
+# The .NET 8+ aspnet images listen on 8080 by default; HTTP_PORTS moves that to 5000
+# (setting ASPNETCORE_URLS instead works too but logs an override warning at startup).
+ENV ASPNETCORE_HTTP_PORTS=5000
 EXPOSE 5000
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
