@@ -143,7 +143,9 @@ namespace WildCat.Interfaces
             int index = IndexOf(item);
             if (index != -1)
             {
-                items[index] = new InInventoryItemState { Count = items[index].Count + count, Item = items[index].Item };
+                // checked: a stack that would pass int.MaxValue throws OverflowException, and the
+                // grain rolls the whole change back instead of storing a negative count.
+                items[index] = new InInventoryItemState { Count = checked(items[index].Count + count), Item = items[index].Item };
             }
             else
             {

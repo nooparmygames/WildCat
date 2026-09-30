@@ -321,10 +321,10 @@ namespace WildCat.Tests
             Assert.Contains("other", rejectedNew.GetProperty("errors")[0].GetString());
             var rejectedEdit = await AdminApiHost.ReadProblemAsync(await host.PutAsync($"{events}/add",
                 new { parameters, script = "async Task<int> sum(int a, int b) { return a + b; }" }, token), HttpStatusCode.BadRequest);
-            Assert.Contains("No method", rejectedEdit.GetProperty("errors")[0].GetString());
+            Assert.Contains("WC1007", rejectedEdit.GetProperty("errors")[0].GetString());
             var forbiddenType = await AdminApiHost.ReadProblemAsync(await host.PutAsync($"{events}/add",
                 new { parameters, script = "async Task<int> add(int a, int b) { System.IO.File.Delete(\"x\"); return a + b; }" }, token), HttpStatusCode.BadRequest);
-            Assert.Contains("Invalid type", forbiddenType.GetProperty("detail").GetString());
+            Assert.Contains("System.IO.File", forbiddenType.GetProperty("detail").GetString());
 
             await AdminApiHost.ReadProblemAsync(await host.PutAsync($"{events}/add",
                 new { parameters = new[] { new { name = "a", type = 9 } }, script = "async Task add(decimal a) { }" }, token), HttpStatusCode.BadRequest);

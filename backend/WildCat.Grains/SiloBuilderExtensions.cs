@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using WildCat.Interfaces;
 using Orleans.Configuration;
+using WildCat.Scripting;
 using Orleans.Hosting;
 
 namespace WildCat.Grains
@@ -125,6 +126,16 @@ namespace WildCat.Grains
             builder.AddMemoryStreams(StreamNames.PROVIDER_NAME, streams =>
                 streams.ConfigurePullingAgent(options => options.Configure(o =>
                     o.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(10))));
+            return builder;
+        }
+
+        /// <summary>
+        /// Changes the script event limits (<see cref="ScriptOptions"/>). Optional: without it
+        /// the defaults apply (3 second runs, call depth 256, 500 cached scripts per silo).
+        /// </summary>
+        public static ISiloBuilder ConfigureScriptEvents(this ISiloBuilder builder, Action<ScriptOptions> configure)
+        {
+            builder.Configure(configure);
             return builder;
         }
 

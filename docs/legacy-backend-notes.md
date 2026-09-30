@@ -55,8 +55,8 @@ Key column: G = Guid, S = string, I = integer, G+S = Guid compound key.
 | LeaderBoardStorage | ILeaderBoardStorage, S | LeaderBoardStorageState | one chunk of entries |
 | Item, PackageContainer | IItem, IPackageContainer, S | ItemState, PackageContainerState | catalog definitions; random drops not implemented |
 | ResourceManager | IResourceManager, S | ResourceManagerState | registry of named resources per game (leaderboards, scripts); can emit a C# constants class for SDKs |
-| ScriptEventCompiler | IScriptEventCompiler, S "{gameKey}_G_{event}" | ScriptEventState | stores and compiles a developer's C# event script (Roslyn) into a per-silo static cache |
-| ScriptEventRunner | IScriptEventRunner, G+S | stateless | runs a compiled script with `Globals { args, WildCat }` |
+| ScriptEventCompiler | IScriptEventCompiler, S "{gameKey}_G_{event}" | ScriptEventState | validates and stores a developer's C# event script and the diagnostics of the last Initialize or Edit (`GetDiagnostics`) |
+| ScriptEventRunner | IScriptEventRunner, G+S | stateless | runs a script for the player in its key with `Globals { args, WildCat }`, compiling through the silo's `ScriptCache` |
 | TimeService | ITimeService, G | stateless worker, reentrant | server time as a culture-dependent string |
 | CustomIDToAccountIDMap, EmailToAccountIdMap, UserIdToAccountIdMap, NameToAccountIdMap | S | small state each | first-writer-wins uniqueness claims mapping device id, email, user name and display name to an account |
 
@@ -104,14 +104,22 @@ either finishes the game (`FinishGameWithOneDisconnect`) or marks the player Dis
 they can rejoin through `GetPendingMatches` and `RejoinMatch`.
 
 Script events: a developer stores a C# method per event. `ScriptCompilationUtility` prepends a
-generated call line, compiles with Roslyn against the WildCat.Grains and WildCat.Protocol
-assemblies, and validates that every referenced type is a whitelisted primitive, declared in the
-script, `WildCatScriptApi`, or `GetLeaderBoardResponse`. Scripts get `args` and a `WildCat`
-object (a `WildCatScriptApi`, so scripts write `WildCat.GetPlayerData(...)`) with player data
-get/set, time, leaderboard read/write (count clamped to 20), inventory grants
-(`AddInventoryItems`, `SetInventoryItems`, step 4), publisher data, and JSON helpers; each call
-touches the session and is marshalled back onto the grain scheduler. Runs are limited to 3 s
-(but see bugs).
+generated call line and compiles with Roslyn (C# 12, globals type `Globals`). Since step 9:
+`ScriptValidator` binds every node with the semantic model and rejects any type or member off
+its whitelist (primitives, script-declared types, `WildCatScriptApi`, the leaderboard result
+types, basic collections, LINQ, `StringBuilder`, `Math`, `Random`, message-only exceptions,
+awaiting tasks) plus lock, async void, static fields, records, anonymous types, finalizers,
+unsafe code and `#r`/`#load`; diagnostics come back as `ScriptDiagnostic` with lines relative
+to the developer's script. `ScriptGuardRewriter` then inserts `ScriptGuard` calls into every
+loop body, goto, method, lambda, accessor and instance field initializer, so a run stops itself
+with `ScriptTimeoutException` at its deadline (`ScriptOptions.Timeout`, 3 s) and with
+`ScriptRecursionLimitException` before the stack runs out. Compiled scripts are cached per silo
+by (game, event, script hash), bounded to 500 entries. Scripts get `args` (from the client,
+untrusted) and a `WildCat` object (a `WildCatScriptApi`) with private data of the calling player
+only, public data of any player (read only), time, leaderboard read/write (count clamped to 20),
+inventory grants (`AddInventoryItems`, `SetInventoryItems`, at most 1,000,000 per item per
+call), publisher data, and JSON helpers; each call checks that the session belongs to the
+calling player and the event's game, and is marshalled back onto the grain scheduler.
 
 ## External dependencies
 
@@ -146,7 +154,9 @@ Security:
    `CreateEnvironmentRequest` was unauthenticated; account creation now validates the session
    and the CreateEnvironment handler is gone (the host seeds developers and games from the
    `WildCat:Seed` configuration section, which replaced `devsconfig.json` in step 5).
-6. Scripts can read and write any player's private data by id (open, step 9).
+6. Fixed in step 9: scripts could read and write any player's private data by id; private data
+   is now limited to the player the script runs for, and the session must belong to that player
+   and the event's game.
    Fixed in step 4: passwords (client MD5, then unsalted SHA1) now travel plain over TLS and
    are stored as salted PBKDF2-SHA512; activation and reset codes use `RandomNumberGenerator`;
    PlayerStorage no longer sets `TypeNameHandling.All` process wide, and PlayerInventory has
@@ -179,12 +189,16 @@ Correctness:
     instead of `TotalSeconds` (waits capped at 60 s), never resolves the parked task on
     `RemoveDisconnectedPlayer`, and holds the grain call open longer than the 30 s response
     timeout. It also throws when the first criterion start time is not 0.
-15. `ScriptCompilationUtility.RunScript` called `Thread.Abort` (PlatformNotSupported on .NET 5+;
-    the port abandons the thread instead, so a runaway script keeps running). It races on the
-    placeholder task so every call waits the full 3 s, keeps a non-thread-safe static per-silo
-    cache (multi-silo clusters get KeyNotFound), and ignores compile diagnostics.
-    `WildCatScriptApi.SetPlayerData` and `SetScoreInLeaderBoard` return the inner task without
-    awaiting.
+15. Fixed in step 9: `ScriptCompilationUtility.RunScript` called `Thread.Abort`
+    (PlatformNotSupported on .NET 5+; the port abandoned the thread, so a runaway script kept
+    running), raced on a placeholder task so every call waited the full 3 s, kept a
+    non-thread-safe static per-silo cache (multi-silo clusters got KeyNotFound) and ignored
+    compile diagnostics. Scripts now stop themselves through the inserted guard calls, a fast
+    run returns at once, the cache is thread safe and filled from the compiler grain on any
+    silo, and compile errors reject the script. Limits that remain: CPU time inside a single
+    library call (for example `Enumerable.Range(0, int.MaxValue).Count()`) is not interrupted
+    until the call returns, memory is not capped, and Roslyn script assemblies are never
+    unloaded.
 16. `Player.RejoinMatch` calls `game.PlayerRejoined`, which calls back into the same player.
     That worked on 3.4.3 only because call chain reentrancy was on by default there
     (`SchedulingOptions.AllowCallChainReentrancy = true`); Orleans 10 dropped the option, so the

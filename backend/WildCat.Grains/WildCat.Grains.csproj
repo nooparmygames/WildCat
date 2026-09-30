@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The script sandbox tests drive the compiler, guard and cache directly. -->
+    <InternalsVisibleTo Include="WildCat.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />
     <ProjectReference Include="..\WildCat.Protocol\WildCat.Protocol.csproj" />
   </ItemGroup>

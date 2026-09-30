@@ -1,53 +1,97 @@
-﻿using WildCat.Interfaces;
-using Microsoft.CodeAnalysis.Scripting;
+using WildCat.Interfaces;
+using Microsoft.Extensions.Options;
 using Orleans;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
-using WildCat.Grains;
 
 namespace WildCat.Scripting
 {
+    /// <summary>
+    /// Stores one script event and its diagnostics. Initialize and Edit validate and compile the
+    /// new source before anything is stored, so a rejected script never replaces a working one;
+    /// the compiled result goes into this silo's <see cref="ScriptCache"/>, and other silos compile
+    /// from <see cref="GetInfo"/> on their first run.
+    /// </summary>
     public class ScriptEventCompiler : Grain<ScriptEventState>, IScriptEventCompiler
     {
-        private bool _isCreated;
-        private Script<object> _script;
+        private readonly ScriptOptions options;
 
-        public override async Task OnActivateAsync(CancellationToken cancellationToken)
+        public ScriptEventCompiler(IOptions<ScriptOptions> options)
         {
-            _isCreated = State.IsCreated;
-            if (_isCreated)
-            {
+            this.options = options.Value;
+            ScriptCache.Shared.Capacity = this.options.CacheCapacity;
+        }
 
-                var validationResult = await Validate(State.Script);
-                if (!validationResult.IsValid)
-                    throw new InvalidOperationException("The script is not valid");
-                await Compile(validationResult.HasReturnValue);
-                await WriteStateAsync();
-            }
-
-            await base.OnActivateAsync(cancellationToken);
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
+        {
+            // Compiling happens on demand in the cache, so a script the current rules reject can
+            // still be read and edited.
+            if (State.IsCreated && string.IsNullOrEmpty(State.ScriptHash))
+                State.ScriptHash = ScriptCompilationUtility.ComputeScriptHash(State.Name, State.Parameters, State.Script);
+            return base.OnActivateAsync(cancellationToken);
         }
 
         private void AssertIsCreated()
         {
-            if (!_isCreated)
-                throw new InvalidOperationException();
+            if (!State.IsCreated)
+                throw new InvalidOperationException($"The script event {this.GetPrimaryKeyString()} does not exist.");
         }
 
-        public async Task Edit(List<EventParameter> parameters, string script)
+        public Task Initialize(string name, List<EventParameter> parameters, string script)
+        {
+            return Store(name, parameters, script);
+        }
+
+        public Task Edit(List<EventParameter> parameters, string script)
         {
             AssertIsCreated();
+            return Store(State.Name, parameters, script);
+        }
+
+        private async Task Store(string name, List<EventParameter> parameters, string script)
+        {
+            parameters ??= new List<EventParameter>();
+            var source = new ScriptSource(GetGameKey(), name, parameters, script);
+            var compiled = await ScriptCompilationUtility.CompileAsync(source);
+            State.LastValidation = compiled.Validation;
+            if (!compiled.IsValid)
+            {
+                await WriteStateAsync();
+                throw new InvalidOperationException($"The script is not valid: {compiled.Validation.Summarize()}");
+            }
+
+            ScriptCache.Shared.Set(source.CacheKey, compiled);
+            State.Name = name;
             State.Script = script;
             State.Parameters = parameters;
-
-            var validationResult = await Validate(State.Script);
-            if (!validationResult.IsValid)
-                throw new InvalidOperationException("The script is not valid");
+            State.GameKey = source.GameKey;
+            State.HasReturnValue = compiled.Validation.HasReturnValue;
+            State.ScriptHash = source.Hash;
             State.Version++;
-            await Compile(validationResult.HasReturnValue);
+            State.IsCreated = true;
             await WriteStateAsync();
+        }
+
+        /// <summary>
+        /// The event name: the stored one once the event exists, otherwise the part of the grain key
+        /// after "_G_", so a script for a new event can be validated before Initialize succeeds.
+        /// </summary>
+        private string GetEventName()
+        {
+            if (!string.IsNullOrEmpty(State.Name))
+                return State.Name;
+            string key = this.GetPrimaryKeyString();
+            int separator = key.IndexOf("_G_", StringComparison.Ordinal);
+            return separator < 0 ? key : key.Substring(separator + 3);
+        }
+
+        private string GetGameKey()
+        {
+            string key = this.GetPrimaryKeyString();
+            int separator = key.IndexOf("_G_", StringComparison.Ordinal);
+            return separator < 0 ? key : key.Substring(0, separator);
         }
 
         public Task<string> GetKey()
@@ -60,61 +104,36 @@ namespace WildCat.Scripting
             return Task.FromResult(State.Name);
         }
 
-        public async Task Initialize(string name, List<EventParameter> parameters, string script)
-        {
-            State.Name = name;
-            State.Script = script;
-            State.Parameters = parameters;
-            State.IsCreated = true;
-            _isCreated = true;
-            string pk = this.GetPrimaryKeyString();
-            State.GameKey = pk.Substring(0, pk.IndexOf("_G_"));
-            var validationResult = await Validate(State.Script);
-            if (!validationResult.IsValid)
-                throw new InvalidOperationException("The script is not valid");
-            if (!State.IsCreated)
-                State.Version = 0;
-            else
-                State.Version++;
-            await Compile(validationResult.HasReturnValue);
-            State.IsCreated = true;
-            _isCreated = true;
-            await WriteStateAsync();
-        }
-
         public async Task Compile(bool hasReturnType)
         {
             AssertIsCreated();
-            _script = await ScriptCompilationUtility.CompileScript(State.Script, State.Name, State.Parameters, hasReturnType, State.GameKey, State.Version);
+            var source = ScriptSource.FromState(State);
+            await ScriptCache.Shared.GetOrAdd(source.CacheKey, () => ScriptCompilationUtility.CompileAsync(source));
         }
 
-        public async Task<object> Run(ISession session, string player, params object[] args)
+        public Task<object> Run(ISession session, string player, params object[] args)
         {
             AssertIsCreated();
-            try
-            {
-                WildCatScriptApi api = new WildCatScriptApi(this.GrainFactory, session, player, TaskScheduler.Current);
-                Globals globals = new Globals { args = args, WildCat = api };
-                return await ScriptCompilationUtility.RunScript(_script, globals);
-            }
-            catch 
-            {
-                throw;
-            }
-
+            return ScriptSandbox.RunEventAsync(GrainFactory, State, session, player, args, options, TaskScheduler.Current);
         }
-
-
 
         public async Task<ValidationResult> Validate(string scriptText)
         {
-            ValidationResult result =
-             await ScriptCompilationUtility.ValidateEventScript(scriptText, State.Name);
-            State.HasReturnValue = result.HasReturnValue;
-            return result;
+            var result = await ScriptCompilationUtility.ValidateAsync(
+                new ScriptSource(GetGameKey(), GetEventName(), State.Parameters, scriptText));
+            return new ValidationResult
+            {
+                IsValid = result.Success,
+                ErrorMsg = result.Success ? null : result.Summarize(),
+                HasReturnValue = result.HasReturnValue,
+                Diagnostics = result.Diagnostics
+            };
         }
 
-
+        public Task<ScriptValidationResult> GetDiagnostics()
+        {
+            return Task.FromResult(State.LastValidation ?? new ScriptValidationResult { Success = State.IsCreated });
+        }
 
         public Task<ScriptEventState> GetInfo()
         {
