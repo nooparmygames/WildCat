@@ -1,0 +1,27 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Orleans;
+
+namespace WildCat.Interfaces
+{
+    [System.Serializable]
+    [GenerateSerializer]
+    [Alias("wildcat.PlayerConnectionMessage")]
+    public class PlayerConnectionMessage
+    {
+        [Id(0)] public EventType eventType;
+        [Id(1)] public IPlayer player;
+        [Id(2)] public int connectionId;
+        [Id(3)] public int channelId;
+        [Id(4)] public byte[] data;
+        // Ids 5 and 6 held gameKey and matchId for the removed GameCreated event; do not reuse.
+        [GenerateSerializer, Alias("wildcat.PlayerConnectionMessage.EventType")]
+        public enum EventType
+        {
+            DataTransfer
+        }
+    }
+}

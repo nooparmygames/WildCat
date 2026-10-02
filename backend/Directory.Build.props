@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The legacy code has no nullable annotations yet; enable per project once it is cleaned up. -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,461 @@
+{
+  "app": {
+    "name": "WildCat",
+    "pageTitle": "{page} - WildCat panel",
+    "loading": "Loading...",
+    "skipToContent": "Skip to main content",
+    "menu": "Menu",
+    "closeMenu": "Close menu",
+    "mainNavigation": "Main",
+    "footer": "WildCat game backend, developer panel"
+  },
+  "nav": {
+    "games": "Games",
+    "publisherData": "Publisher data",
+    "developers": "Developers",
+    "account": "Account",
+    "signOut": "Sign out",
+    "adminBadge": "Admin"
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving...",
+    "create": "Create",
+    "cancel": "Cancel",
+    "close": "Close",
+    "done": "Done",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "deleteWhat": "Delete {what}",
+    "edit": "Edit",
+    "editWhat": "Edit {what}",
+    "remove": "Remove",
+    "working": "Working...",
+    "copy": "Copy",
+    "copyWhat": "Copy {what}",
+    "copied": "Copied",
+    "copiedWhat": "Copied the {what} to the clipboard.",
+    "copyFailed": "Could not copy. Select the text and copy it yourself.",
+    "copyFailedShort": "Copy failed",
+    "show": "Show",
+    "hide": "Hide",
+    "retry": "Try again",
+    "actions": "Actions",
+    "moveUp": "Up",
+    "moveDown": "Down",
+    "search": "Search",
+    "pagination": "Pages",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {page} of {pages}"
+  },
+  "errors": {
+    "network": "Could not reach the server. Check your connection and try again.",
+    "unauthorized": "Your session has ended. Please sign in again.",
+    "forbidden": "You do not have permission to do that.",
+    "notFound": "That could not be found. It may have been deleted.",
+    "conflict": "That clashes with something that already exists.",
+    "server": "Something went wrong on the server. Please try again in a moment.",
+    "validation": "The server did not accept this. Please check the following:",
+    "unknown": "Something went wrong. Please try again."
+  },
+  "validation": {
+    "required": "Please fill this in.",
+    "email": "Enter an email address like name@example.com.",
+    "minLength": "Use at least {min} characters.",
+    "passwordMismatch": "The two passwords do not match.",
+    "identifier": "Use letters, digits and underscores only, and start with a letter or an underscore.",
+    "url": "Enter a full web address that starts with http:// or https://.",
+    "integer": "Enter a whole number.",
+    "range": "Enter a whole number from {min} to {max}.",
+    "min": "Enter {min} or more.",
+    "max": "Enter {max} or less.",
+    "duplicate": "This name is already taken.",
+    "duration": "Enter zero or a positive number.",
+    "durationPositive": "Enter a time longer than zero.",
+    "maxBelowMin": "This has to be at least the minimum number of players.",
+    "criteriaOrder": "Each step has to start later than the step before it.",
+    "fixErrors": "Some fields need attention."
+  },
+  "duration": {
+    "amount": "{label}, amount",
+    "unit": "{label}, unit",
+    "units": {
+      "seconds": "seconds",
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days"
+    }
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Type the password again",
+    "passwordHint": "At least {min} characters.",
+    "backToSignIn": "Back to sign in",
+    "login": {
+      "title": "Sign in",
+      "intro": "Manage your games, their leaderboards, items, script events and game modes.",
+      "submit": "Sign in",
+      "submitting": "Signing in...",
+      "failed": "That email and password do not match an active account.",
+      "notActivated": "This account is not active yet. Use the code from the activation email first.",
+      "forgot": "Forgot your password?",
+      "noAccount": "New to WildCat?",
+      "register": "Create an account",
+      "sessionExpired": "Your session has ended. Please sign in again.",
+      "activated": "Your account is active. You can sign in now.",
+      "passwordReset": "Your password has been changed. Sign in with the new one."
+    },
+    "register": {
+      "title": "Create an account",
+      "intro": "Register as a developer to create games and get the keys your games need.",
+      "submit": "Create account",
+      "submitting": "Creating your account...",
+      "haveAccount": "Already registered?",
+      "signIn": "Sign in",
+      "doneTitle": "Check your email",
+      "doneBody": "We sent an activation code to {email}. Follow the link in that email, or enter the code on the activation page.",
+      "goToActivation": "Enter the activation code"
+    },
+    "activate": {
+      "title": "Activate your account",
+      "intro": "Enter the email you registered with and the code we sent to it.",
+      "code": "Activation code",
+      "submit": "Activate",
+      "submitting": "Activating...",
+      "working": "Activating your account...",
+      "doneTitle": "Your account is active",
+      "doneBody": "Thanks for confirming your email. You can sign in now.",
+      "signIn": "Go to sign in"
+    },
+    "forgot": {
+      "title": "Reset your password",
+      "intro": "Enter your email and we will send you a code for choosing a new password.",
+      "submit": "Send the code",
+      "submitting": "Sending...",
+      "doneTitle": "Check your email",
+      "doneBody": "If there is an account for {email}, we just sent it a code for resetting the password.",
+      "haveCode": "I have the code"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "intro": "Enter the code from the email and pick a new password.",
+      "code": "Reset code",
+      "submit": "Change password",
+      "submitting": "Changing password..."
+    }
+  },
+  "games": {
+    "title": "Games",
+    "intro": "Every game has its own key. A game connects with its game key and your developer key.",
+    "new": "New game",
+    "empty": "You have no games yet. Create one to get the keys for the SDK.",
+    "columns": {
+      "name": "Name",
+      "genre": "Genre",
+      "platform": "Platform",
+      "key": "Game key"
+    },
+    "credentials": "Keys",
+    "credentialsFor": "Keys for {name}",
+    "createTitle": "New game",
+    "editTitle": "Edit {name}",
+    "create": "Create game",
+    "createdNotice": "{name} is ready. These are the values the game needs.",
+    "deleteTitle": "Delete {name}?",
+    "deleteBody": "Game clients will no longer be able to connect to this game. This cannot be undone.",
+    "deleteConfirm": "Delete game",
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "studioName": "Studio",
+      "website": "Website",
+      "genre": "Genre",
+      "region": "Region",
+      "platform": "Platform",
+      "platformHint": "For example Android, iOS or Windows.",
+      "ageRating": "Age rating"
+    },
+    "genres": {
+      "action": "Action",
+      "arcade": "Arcade",
+      "strategy": "Strategy",
+      "puzzle": "Puzzle",
+      "casual": "Casual",
+      "sports": "Sports"
+    },
+    "regions": {
+      "domestic": "Domestic",
+      "international": "International"
+    },
+    "ageRatings": {
+      "everyone": "Everyone",
+      "children": "Children",
+      "teens": "Teens",
+      "adults": "Adults"
+    }
+  },
+  "credentials": {
+    "title": "Keys for {name}",
+    "intro": "Put these values in the WildCat settings of your game project.",
+    "gameKey": "Game key",
+    "developerKey": "Developer key",
+    "developerSecret": "Developer secret",
+    "secretHint": "The secret belongs to your account and is the same for all your games. Treat it like a password and keep it out of public code.",
+    "regenerate": "Replace the secret",
+    "regenerateTitle": "Replace the developer secret?",
+    "regenerateBody": "The current secret stops working right away, for every game and tool that uses it.",
+    "regenerateConfirm": "Replace secret",
+    "keepSecret": "Keep the current one",
+    "regenerated": "The secret has been replaced. Update any game or tool that used the old one."
+  },
+  "game": {
+    "back": "All games",
+    "keyLabel": "Game key",
+    "sections": "Game sections",
+    "tabs": {
+      "leaderboards": "Leaderboards",
+      "items": "Items",
+      "events": "Script events",
+      "gameModes": "Game modes"
+    }
+  },
+  "leaderboards": {
+    "intro": "Leaderboards rank players by score. Games submit scores to a leaderboard by its name.",
+    "new": "New leaderboard",
+    "empty": "This game has no leaderboards yet.",
+    "columns": {
+      "name": "Name",
+      "keeps": "Keeps",
+      "key": "Key"
+    },
+    "keepsBest": "Best score",
+    "keepsLatest": "Latest score",
+    "createTitle": "New leaderboard",
+    "fields": {
+      "name": "Name",
+      "nameHint": "Your game uses this name to submit and read scores.",
+      "scoreRule": "Which score to keep for each player",
+      "best": "Best score",
+      "bestHint": "A new score only counts when it beats the player's current one.",
+      "latest": "Latest score",
+      "latestHint": "Every new score replaces the player's current one."
+    },
+    "deleteTitle": "Delete the leaderboard {name}?",
+    "deleteBody": "All scores on it will be lost. This cannot be undone."
+  },
+  "items": {
+    "intro": "Items are the virtual goods players can own, such as currencies, power-ups or keys.",
+    "new": "New item",
+    "empty": "This game has no items yet.",
+    "columns": {
+      "name": "Name",
+      "description": "Description",
+      "traits": "Kind",
+      "price": "Price"
+    },
+    "traits": {
+      "stackable": "stackable",
+      "consumable": "consumable",
+      "regenerating": "regenerating"
+    },
+    "free": "Free",
+    "priceEntry": "{count} x {item}",
+    "createTitle": "New item",
+    "editTitle": "Edit {name}",
+    "deleteTitle": "Delete the item {name}?",
+    "deleteBody": "Anything that refers to this item, such as the price of another item, will no longer find it. This cannot be undone.",
+    "sections": {
+      "holding": "Holding",
+      "using": "Using",
+      "regeneration": "Regeneration",
+      "metaData": "Metadata",
+      "price": "Price"
+    },
+    "fields": {
+      "name": "Name",
+      "nameFixed": "The name is the item's id and cannot be changed.",
+      "description": "Description",
+      "stackable": "Stackable",
+      "stackableHint": "Several of this item share one inventory slot.",
+      "maxAllowedToHave": "Most a player can hold",
+      "maxAllowedToHaveHint": "Leave at 0 for no limit.",
+      "isConsumable": "Consumable",
+      "isConsumableHint": "The item is used up when a player uses it.",
+      "automaticallyConsumed": "Used up automatically",
+      "automaticallyConsumedHint": "Consumed as soon as a player receives it.",
+      "effectTime": "Effect lasts",
+      "effectTimeHint": "How long the effect of using the item lasts. Leave at 0 for items without a timed effect.",
+      "isRegenerating": "Regenerates over time",
+      "isRegeneratingHint": "Players get more of it back on a schedule, like lives or energy.",
+      "regenerationAmount": "Amount each time",
+      "regenerationPeriod": "Every",
+      "metaDataHint": "Extra name and value pairs your game reads, such as a sprite name or a color.",
+      "metaName": "Name {n}",
+      "metaValue": "Value {n}",
+      "priceHint": "What a player pays for one of this item, in other items. Leave empty for a free item.",
+      "priceItem": "Paid with (item {n})",
+      "priceCount": "How many (item {n})"
+    },
+    "addMeta": "Add a metadata value",
+    "removeMeta": "Remove metadata value {n}",
+    "addPrice": "Add a price item",
+    "removePrice": "Remove price item {n}"
+  },
+  "events": {
+    "intro": "Script events are C# methods that run on the server when a game triggers them by name.",
+    "new": "New event",
+    "empty": "This game has no script events yet.",
+    "columns": {
+      "name": "Name",
+      "parameters": "Parameters"
+    },
+    "noParameters": "No parameters",
+    "backToList": "All script events",
+    "createTitle": "New script event",
+    "editTitle": "Edit {name}",
+    "fields": {
+      "name": "Event name",
+      "nameHint": "The name games call the event by. It is also the name of the method in the script.",
+      "nameFixed": "The name cannot be changed. Create a new event to use another name.",
+      "parameters": "Parameters",
+      "parametersHint": "The values a game sends with the event, in order.",
+      "parameterName": "Name of parameter {n}",
+      "parameterType": "Type of parameter {n}",
+      "script": "Script"
+    },
+    "types": {
+      "Bool": "Bool (bool)",
+      "Byte": "Byte (byte)",
+      "Short": "Short (short)",
+      "Int": "Int (int)",
+      "Long": "Long (long)",
+      "Float": "Float (float)",
+      "Double": "Double (double)",
+      "String": "String (string)",
+      "ByteArray": "ByteArray (byte[])"
+    },
+    "addParameter": "Add a parameter",
+    "removeParameter": "Remove parameter {n}",
+    "moveUp": "Move parameter {n} up",
+    "moveDown": "Move parameter {n} down",
+    "signatureTitle": "Method to define",
+    "signatureHint": "The script needs a method with this name and these parameters. Return Task<T> instead of Task to send a value back to the game. The WildCat object gives access to the server.",
+    "insertTemplate": "Insert this method",
+    "editorKeyboardHint": "In the editor, Tab indents. To move on with the keyboard, press Escape and then Tab.",
+    "save": "Check and save",
+    "saving": "Checking and saving...",
+    "saved": "Saved. The script passed the server checks.",
+    "invalidTitle": "The script was not saved",
+    "deleteTitle": "Delete the script event {name}?",
+    "deleteBody": "Games that trigger this event will no longer run any script. This cannot be undone.",
+    "leaveTitle": "Leave without saving?",
+    "leaveBody": "Your changes to this event have not been saved.",
+    "leaveConfirm": "Leave and discard"
+  },
+  "gameModes": {
+    "intro": "Game modes control matchmaking: how many players a match needs and how picky the matching is while players wait.",
+    "new": "New game mode",
+    "empty": "This game has no game modes yet.",
+    "columns": {
+      "name": "Name",
+      "players": "Players",
+      "schedule": "Matching steps"
+    },
+    "playersExact": "{n} players",
+    "playersRange": "{min} to {max} players",
+    "scheduleEntry": "from {seconds} s, gap up to {threshold}",
+    "createTitle": "New game mode",
+    "editTitle": "Edit {name}",
+    "deleteTitle": "Delete the game mode {name}?",
+    "deleteBody": "Games can no longer start matchmaking in this mode. This cannot be undone.",
+    "fields": {
+      "name": "Name",
+      "nameHint": "Games ask for matchmaking in a mode by this name.",
+      "nameFixed": "The name cannot be changed.",
+      "minPlayers": "Minimum players",
+      "maxPlayers": "Maximum players",
+      "startTime": "Starts after (seconds of waiting)",
+      "firstStepHint": "The first step always starts right away.",
+      "threshold": "Largest skill gap allowed",
+      "minPlayersEnough": "Start with the minimum number of players"
+    },
+    "criteriaTitle": "Matching steps",
+    "criteriaHint": "The longer a player waits, the less picky matching gets. Each step applies from its start time until the next step begins.",
+    "step": "Step {n}",
+    "addStep": "Add a step",
+    "removeStep": "Remove step {n}"
+  },
+  "publisherData": {
+    "title": "Publisher data",
+    "intro": "Values shared by all your games, such as settings or announcements. Games can read them by key; only you can change them.",
+    "new": "New value",
+    "empty": "You have not stored any values yet.",
+    "emptyValue": "(empty)",
+    "columns": {
+      "key": "Key",
+      "value": "Value"
+    },
+    "createTitle": "New value",
+    "editTitle": "Edit {key}",
+    "fields": {
+      "key": "Key",
+      "keyHint": "Games read the value by this key.",
+      "value": "Value"
+    },
+    "deleteTitle": "Delete {key}?",
+    "deleteBody": "Games that read this key will get nothing back. This cannot be undone."
+  },
+  "developers": {
+    "title": "Developers",
+    "intro": "Everyone who has registered as a developer.",
+    "searchLabel": "Search developers",
+    "searchPlaceholder": "Search by name or email",
+    "clearSearch": "Clear search",
+    "total": "Total: {total}",
+    "empty": "No developers have registered yet.",
+    "noMatches": "No developers match \"{search}\".",
+    "noName": "No name given",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "status": "Status",
+      "key": "Developer key"
+    },
+    "active": "Active",
+    "notActivated": "Not activated",
+    "keyOf": "developer key of {email}"
+  },
+  "account": {
+    "title": "Account",
+    "intro": "Your name and password.",
+    "profileTitle": "Profile",
+    "developerKey": "Developer key",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "saveProfile": "Save profile",
+    "profileSaved": "Your profile has been saved.",
+    "passwordTitle": "Password",
+    "changePassword": "Change password",
+    "passwordChanged": "Your password has been changed.",
+    "passwordRejected": "The current password is not correct."
+  },
+  "noPermission": {
+    "title": "No access",
+    "body": "Your account does not have permission to see this page.",
+    "back": "Go to your games"
+  },
+  "notFound": {
+    "title": "Nothing here",
+    "body": "There is no page at this address. It may have moved or been deleted.",
+    "back": "Go to your games"
+  },
+  "crash": {
+    "title": "Something broke",
+    "body": "The panel ran into an unexpected problem. Reloading usually helps.",
+    "reload": "Reload the panel"
+  }
+}

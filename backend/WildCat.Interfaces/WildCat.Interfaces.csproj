@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Sdk" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WildCat.Protocol\WildCat.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

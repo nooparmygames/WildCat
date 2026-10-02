@@ -1,0 +1,19 @@
+{
+    "name": "WildCat.Editor",
+    "rootNamespace": "WildCat.EditorTools",
+    "references": [
+        "WildCat.Unity",
+        "WildCat.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The WebSocket gateway. A class library hosted inside the silo process (see WildCat.Host/Program.cs). -->
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Sdk" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WildCat.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WildCat.Interfaces\WildCat.Interfaces.csproj" />
+    <ProjectReference Include="..\WildCat.Protocol\WildCat.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

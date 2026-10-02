@@ -1,139 +1,368 @@
 # Wire protocol between the Unity SDK and the gateway
 
-Defined in `backend/Messages/uNetMessages.cs` (server copy) and
-`unity-sdk/Assets/Backend/Plugins/LowLevelAPI/uNetMessages.cs` (client copy, diverged: the
-server copy defaults strings to ""). Documented from the code on 2026-09-30. The two copies must
-become one shared source.
+One source, `backend/WildCat.Protocol` (netstandard2.1, C# 9, no Orleans, ASP.NET or Newtonsoft
+references, namespace `WildCat.Protocol`), shared by the server and the Unity SDK. The SDK's copy
+in the Unity package's `Runtime/Protocol` (`unity-sdk/Packages/com.noopsoftworks.wildcat`) is
+generated from it (see "The SDK copy" below);
+until roadmap step 6 the SDK kept its own diverged `LowLevelAPI/Messages.cs`. Documented from the
+code on 2026-09-30 and updated after roadmap steps 2 (removed messages), 3 (the WildCat rename:
+namespace `RealtimeServer`, `ApadanaMessageBase` and `ApadanaMsgType` became `WildCat.Protocol`,
+`WildCatMessageBase` and `WildCatMsgType`), 4 (security fixes) and 6 (this format, the codec and
+the split gateway; `docs/gateway.md` describes the gateway side).
+
+## Source layout
+
+```
+backend/WildCat.Protocol/
+  Codec/         WireCodec (the only entry point), WireWriter, WireReader, WireFormatException,
+                 WireLimits (collection counts and string lengths clients may send)
+  Envelope/      WildCatMessageBase (the frame), WildCatMsgType, WildCatMsgHeader, MessageBase,
+                 OptionalResponse<T>
+  Common/        EmptyMessage, StringMessage, IntegerMessage, GuidMessage, RawMessage,
+                 StringAndByteArrayMessage
+  Session/ Auth/ CloudData/ Friends/ Challenges/ Matches/ Leaderboards/ Inventory/ Scripts/ Time/
+                 the payloads of each feature, one public type per file
+  ServerOnly/    payloads that carry a developer secret or serve server tools (62-65 publisher data,
+                 44/45 CreateEnvironment); never copied into the SDK
+```
+
+## The codec boundary
+
+Everything that turns messages into bytes goes through `WireCodec`; nothing outside
+`WildCat.Protocol` touches `BinaryWriter` or `BinaryReader`, so the format can be replaced in one
+place later (the owner wants to, and judged MessagePack too large a payload):
+
+```csharp
+byte[]             WireCodec.Encode(WildCatMessageBase frame)
+WildCatMessageBase WireCodec.Decode(byte[] frame)                       // also (buffer, offset, count)
+byte[]             WireCodec.EncodePayload<T>(T payload)
+T                  WireCodec.DecodePayload<T>(byte[] payload)           // also (payload, out int consumed)
+T                  frame.GetPayload<T>()     void frame.SetPayload<T>(T payload)   // the same, on a frame
+```
+
+Frames are built with `WildCatMessageBase.Create`, `CreateWithRequestID`,
+`CreateWithAuthData[AndRequestID]`, `CreateWithGameTarget`, `CreateWithPlayerTargets` and, for
+answers, `CreateResponse(payload, responseType, request)`. Payload classes derive from
+`MessageBase` and write their fields in `Serialize(WireWriter)` and read them back in the same
+order in `Deserialize(WireReader)`; the writer and reader hold the value encodings below. Before
+step 6 the payloads wrote to `BinaryWriter` directly and the frame had `ToByteArray()`,
+`new WildCatMessageBase(byte[])`, `CreateMessageFromByteArray`, `GetData` and `SetData`.
+
+Decoding checks every length against the bytes that are left before it allocates, and throws
+only `WireFormatException` for bad input: a frame cut short, bytes after the payload, a negative
+length, a count larger than the rest of the frame can hold, a count above its limit, a Guid that
+is not 16 bytes, a DateTime out of range, an unknown script value type. A count is checked against
+the smallest size its items can have (one byte a string, two a string map entry or a script
+argument, five a bytes map entry or an inventory pair), collections are pre-sized for at most 64
+items and grow as items actually arrive, and the collections clients send have fixed limits
+(`WireLimits`): 64 player targets in a frame, 64 public data keys in GetFriends (88), 64 script
+arguments (66), 64 entries in the extra data map of 76, 78 and 82, and 256 items in an inventory
+request (111, 113, 115, 117). So decoding a hostile frame allocates about as much as the frame
+(before the review of step 6 a 1 MiB AuthenticationRequest could make the reader pre-size a
+dictionary of about 32 MB, and a GetFriends request of empty strings decoded into an 8 MB array).
+Collections the server sends have no count limit. A payload that reads fewer bytes than it was given is
+accepted (a failed response of any type reads as `OptionalResponse<EmptyMessage>`); a frame is
+not.
 
 ## Framing
 
-One WebSocket binary message carries exactly one `ApadanaMessageBase`. Fragmented messages are
-reassembled by the gateway up to 2 MB. Everything is written with .NET `BinaryWriter`
-(little-endian; strings are 7-bit-varint length plus UTF-8; Guid is int32 16 plus
-`Guid.ToByteArray()`; DateTime is `ToString()`/`Parse` and therefore culture dependent;
-TimeSpan is a double of milliseconds).
+One WebSocket binary message carries exactly one frame. Fragmented messages are reassembled by
+the gateway up to `Gateway:MaxMessageBytes` (default 1 MiB); a larger message closes the socket
+with MessageTooBig. Text messages are ignored.
 
 ```
-int16  msgType            ApadanaMsgType (implicit enum ordinals 0..162, HighestInternal = 1023)
+int16  msgType            WildCatMsgType (explicit values 6..164 with gaps, HighestInternal = 1023)
 byte   header flags       HasGameTarget=1, HasPlayerTarget=2, HasAuthData=4, (8 reserved),
                           HasRequestID=16, stored=32, buffered=64, hasTime=128 (last three unused)
-[uint32 requestID]        if HasRequestID   (client sets it; server echoes it on the response)
-[string ticket]           if HasAuthData    (session Guid as string)
-[string game]             if HasGameTarget  (match Guid as string)
-[count + string[]]        if HasPlayerTarget (BUG: written as int32, read as int16)
-int32 len + payload       one MessageBase subclass, no type tag
+[uint32 requestID]        if HasRequestID   (client sets it; the server echoes it on the answer)
+[string ticket]           if HasAuthData    (session Guid as a string)
+[string game]             if HasGameTarget  (match Guid as a string)
+[int32 count + strings]   if HasPlayerTarget (at most 64; the server ignores them)
+int32 length + payload    one MessageBase subclass, no type tag; nothing may follow it
 ```
 
-Message types above 1023 are "user messages": they must carry auth, and with `HasGameTarget`
-the gateway relays the raw frame to the other players in the match (including the sender's
-ticket, which is the session hijack bug).
+Value encodings (`WireWriter`, `WireReader`):
 
-Responses and forwarded events are wrapped in `OptionalResponse<T>`: `bool isSuccessful`, then
-either `int32 errorCode, string errorMessage` or `T` inline. Error codes: -1 any exception (the
-raw exception message is sent to the client), 1 domain failure, 2 already exists or "requested
-you as well". Relay events built by `RelayServerGame` are raw `T`, unwrapped. `EmptyMessage`
-still writes one `true` byte.
+| Type | Encoding |
+|---|---|
+| numbers | little-endian: byte, int16, int32, uint32, int64, float, double; bool is one byte (0 or 1) |
+| string | UTF-8 byte count as a 7-bit varint, then the bytes; null is written as "" and strings never read back as null (except `MatchPropertyChangeData.Player`, which has a presence flag) |
+| byte[] | int32 length, then the bytes; null is written as empty |
+| Guid | a 16-byte array (int32 16, then `Guid.ToByteArray()`) |
+| DateTime | int64 tick count of the UTC instant. Local values are converted to UTC, Unspecified values are taken as UTC; values read back have Kind Utc. Never text, so no culture or calendar is involved |
+| TimeSpan | double of milliseconds, rounded to the nearest tick when read |
+| collections | int32 count, then the items; null is written as empty, null items as empty items. Maps (string to string, string to bytes) write key then value; a repeated key keeps the last value |
+| nested payload | inline, no length or tag |
 
-The client sends `HeartBeatRequest` after 10 s without any send; the gateway also pings the
-player grain at most every 5 s per connection.
+Answers are `OptionalResponse<T>`: `bool isSuccesful`, then either `int32 errorCode, string
+errorMsg` or `T` inline. An answer frame carries only its type, the request id (when the request
+had one) and the payload: no ticket, game or player targets, whatever the request carried.
+Server events pushed from streams (friends, challenges) are `OptionalResponse<T>` without a
+request id; match events built by `RelayServerGame` are the raw payload. `EmptyMessage` writes one
+`true` byte.
+
+Error codes: 1 a refused or failed request (a client error or an expected outcome), 2 already
+exists or "requested you as well", -1 an internal error, answered with the text "Internal error"
+while the details go to the server log (before step 6 the raw exception message went to the
+client), and other values where a message documents them.
+
+## Refusals before a handler runs
+
+ErrorMsg (8) is the gateway's answer to a request it refuses before any handler runs. Its payload
+is an `OptionalResponse<EmptyMessage>` that is never successful, and it echoes the request id when
+the request had one (the step 8 SDK fails the waiting request with a `WildCatException` whose
+`IsGatewayRefusal` is set; the old SDK ignored ErrorMsg and left the request pending):
+
+- code 1, "The message could not be read.": the frame does not decode (no request id then);
+- code 1, "Unsupported message type": no handler for an id up to 1023. This covers requests the
+  server does not serve and every server event and response id, so a player cannot send forged
+  events or answers to the rest of a match (before step 4 such frames with a game target were
+  relayed);
+- code 1, session refusals for requests that need a session: "This message needs a session
+  ticket.", "The session ticket is not valid.", the unknown, ended or expired session texts, and
+  "Log in before sending this message."; code -1, "The session could not be checked. Try again."
+  when the session grain failed.
+
+A payload that does not decode as the request's type is answered on the request's own response
+type with code 1 and "The message could not be read.".
+
+Sign-in limit: 76, 78, 80, 82, 84, 86 and 163 share a per-connection allowance, a token bucket of
+`Gateway:AuthAttemptBurst` attempts (default 5) that refills at `Gateway:AuthAttemptsPerMinute`
+(default 6, one every 10 seconds), and a per-address allowance shared by all the sockets of one
+client address on a gateway node, `Gateway:AuthAttemptsPerAddressBurst` (default 30, 0 turns it
+off) refilling at `Gateway:AuthAttemptsPerAddressPerMinute` (default 30). The address is the one
+the forwarded headers middleware reports (list a reverse proxy in ForwardedHeaders:KnownProxies);
+IPv6 addresses count per /64 and loopback addresses are not limited. An attempt over either limit
+gets its normal response type with error code 1 and "Too many attempts, try again later", and
+reaches no grain. On top of that the Player grain refuses password logins (76 by user name or
+email) for 30 seconds after 5 wrong passwords in a row, twice as long after each further wrong
+one, up to 15 minutes; a refused login answers like a wrong password ("The login failed."), so
+the lock does not tell anyone that the account exists. The count is kept in the grain activation.
+
+String limits: ids, names, keys and values clients send become grain keys or stored data, so the
+gateway answers a request with a longer one with code 1 and "The {what} is longer than {n}
+characters." before any grain call: player (account) ids, device ids and user names 128
+characters, email addresses 254, display names and the names of leaderboards, inventories,
+items, game modes and script events 128, cloud data and publisher data keys 128, cloud data values
+65,536 (`WireLimits`; the SDK refuses to send longer ones). Match property keys are limited by the
+match itself.
+
+## Game messages and relay
+
+Message types above 1023 are game (user) messages. They need a session with a logged in player
+(the ErrorMsg refusals above apply), and with `HasGameTarget` the gateway relays them to the
+other players of that match: one relay worker per connection handles them in arrival order, so
+they arrive in the order they were sent. The relayed copy is rebuilt without the ticket
+(`HasAuthData` cleared since step 4; before that the raw frame, sender's ticket included, went
+out, which let any player hijack an opponent's session) and without the player targets (the relay
+always goes to every other player); message type, request id, game target and payload bytes stay
+exactly as sent. A game message without `HasGameTarget` has nowhere to go and is dropped without
+an answer, and so is one for a match that is not running.
+
+The SDK sends a heartbeat every 10 s (`HeartBeatRequest` with the ticket once a player is logged
+in, `GetServerTime` before that), measures its round trip, and drops and reconnects the socket
+when one gets no answer in 15 s; the old SDK sent `HeartBeatRequest` after 10 s without any send.
+The gateway also pings the player grain at most every 5 s per connection while requests arrive.
 
 ## Handled messages
 
-Ids come from counting the enum; pin them with explicit values before publishing this as a
-spec. C = client, S = server.
+Every `WildCatMsgType` member carries an explicit value; the ids that survived step 2 equal the
+ordinals the legacy code got by counting the enum, removed messages leave gaps, and new messages
+take the next free id (163 and 164 are the first). Do not reuse a gap. C = client, S = server.
+"Handler" names the class in `WildCat.Gateway/Handlers`; since step 6b every handled message has
+one (the old `FrontEndServer` code and its adapter are gone).
 
-Session and auth
+Session and auth (handlers since step 6)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 6/7 | InitializeSessionRequest / Response | {Guid DeveloperKey, Guid GameKey} / {Guid session} | `IDeveloper.InitializeSession` |
-| 76/77 | AuthenticateRequest / Response | {ticket, byte LoginType (Device, UserWithPassword, Email, Custom), Id, PasswordHash (client MD5), bool AutoCreate, dict} / {userId, name, ticket, bool isNewlyCreated} | id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*` |
-| 78/79 | CreateNewAccountRequest / Response | {ticket, LoginType, Id, PasswordHash, dict} / {accountId} | `IPlayerCreator(0)` (no session check) |
-| 80/81 | EmailActivationRequest / Response | {ticket, email, code} / empty | `IPlayer.Activate` |
-| 82/83 | AddAuthMechanismToAccountRequest / Response | {LoginType, Id, PasswordHash, dict} / empty | `IPlayer.AddPlayer*` |
-| 100/101 | HeartBeatRequest / Response | empty | `IPlayer.HeartBeat` |
-| 8 | ErrorMsg (S) | {string} | never actually delivered (published to an unsubscribed stream) |
+| 6/7 | InitializeSession | {Guid DeveloperKey, Guid GameKey} / GuidMessage (the ticket) | `InitializeSessionHandler`, `IDeveloper.InitializeSession`; no session needed; code 1 for a game that is not the developer's |
+| 100/101 | HeartBeat | empty | `HeartBeatHandler`, `IPlayer.HeartBeat`; needs a logged in player |
+| 42/43 | GetServerTime | empty / DateTimeMessage (UTC ticks; a culture dependent string before step 6) | `GetServerTimeHandler`, `ITimeService`; no session needed, a ticket is ignored |
+| 76/77 | Authenticate | {ticket, byte LoginType (Device, UserWithPassword, Email), Id, PasswordHash (plain password), bool AutoCreate, map} / {userId, name, ticket, bool isNewlyCreated} | `AuthenticateHandler`: id-map grains, `IPlayerCreator(0)`, `IPlayer.LoginWith*`; ticket in the payload; code 1 for a failed login |
+| 78/79 | CreateNewAccount | {ticket, LoginType, Id, PasswordHash, map} / StringMessage (account id) | `CreateNewAccountHandler`, `IPlayerCreator(0)`; code 2 taken, 1 bad input |
+| 80/81 | EmailActivation | {ticket, email, code} / empty | `EmailActivationHandler`, `IPlayer.Activate`; code 1 unknown address or wrong code |
+| 82/83 | AddAuthMechanismToAccount | {LoginType, Id, PasswordHash, map} / empty | `AddAuthMechanismToAccountHandler`, `IPlayer.AddPlayer*`; needs a logged in player; code 1 taken ("Already exists") or bad input |
+| 84/85 | RecoverPassword | {email} / empty | `RecoverPasswordHandler`, `IPlayer.SendPasswordChangeCodeToEmail`; needs a session; always succeeds |
+| 86/87 | ResendActivation | {email} / empty | `ResendActivationHandler`, `IPlayer.ResendActivationCode`; needs a session; always succeeds |
+| 163/164 | ResetPasswordWithCode | {email, code, newPassword} / empty | `ResetPasswordWithCodeHandler`, `IPlayer.ChangePasswordForEmailByCode`; needs a session; code 1 for a bad password and, with one text, for an unknown address or a wrong code |
+| 8 | ErrorMsg (S) | OptionalResponse<EmptyMessage>, always failed | refusals before dispatch (see above) |
 
-Profile and cloud data
+Authenticate, CreateNewAccount and EmailActivation carry the session ticket in the payload and
+check it themselves (a malformed ticket is code 1 "The session ticket is not valid."); the newer
+messages carry it in the frame header. Email addresses are compared in lower case.
 
-| Id | Message | Payload | Grain path |
+Passwords: since step 4 the `PasswordHash` fields of 76, 78 and 82 carry the plain password (the
+misleading name stays until the SDK rewrite), and so does `newPassword` of 163. The server stores
+only a salted PBKDF2 hash and checks logins against it, so the connection must use TLS (wss://;
+TLS terminates at the proxy in front of the host). Before step 4 the SDK sent an unsalted MD5.
+
+Email codes: the activation code and the password reset code are stored apart, so an activation
+code never resets a password. Each code is used up when it works, expires 30 minutes after it was
+sent (`Player.EmailCodeLifetime`), and is thrown away after 5 wrong codes
+(`Player.MaxEmailCodeAttempts`); codes are compared in constant time. RecoverPassword (84) sends
+a reset code, ResetPasswordWithCode (163) uses it (a reset also activates the address), and
+ResendActivation (86) replaces the activation code of an address that is not activated yet.
+RecoverPassword and ResendActivation answer success whatever the address, so they do not reveal
+which addresses are registered.
+
+Profile, cloud data, publisher data and script events (handlers since step 6b)
+
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 36..39 | GetName, SetName | {string} | `IPlayer.Get/SetPlayerName` |
-| 68/69 | GetPlayerName | {playerId} / {name} | `IPlayer(id).GetPlayerName` |
-| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `IPlayer.Get/SetPlayerString` |
-| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, value} | `IPlayer.*PublicString` |
-| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, value} | `IPlayer(player).GetPlayerPublicString` |
-| 34/35 | GetPublisherData | {key} / {value} | `IDeveloperStorage(devKey).GetString` |
-| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `IDeveloperStorage` (Get ignores the secret) |
+| 36..39 | GetName, SetName | {string} | `GetNameHandler`, `SetNameHandler`: `IPlayer.Get/SetPlayerName`; any name up to 128 characters, "" included |
+| 68/69 | GetPlayerName | {playerId} / {name} | `GetPlayerNameHandler`: `IPlayer(id).GetPlayerName`; "" for an unknown player; code 1 for an empty id |
+| 30..33 | GetCloudData, SetCloudData | {key} / {value}; {key, value} | `GetCloudDataHandler`, `SetCloudDataHandler`: `IPlayerStorage("{session's game}_{player}").Get/SetPlayerString`; a missing key reads as "" |
+| 72..75 | SetPublicCloudData, GetPublicCloudData | {key, value}; {key} / {bool hasValue, [value]} | `SetPublicCloudDataHandler`, `GetPublicCloudDataHandler`: the same storage, `*PlayerPublicString` |
+| 70/71 | GetPlayerPublicCloudData | {player, key} / {hasValue, [value]} | `GetPlayerPublicCloudDataHandler`: `IPlayerStorage("{session's game}_{player}").GetPlayerPublicString`; code 1 for an empty id |
+| 34/35 | GetPublisherData | {key} / {value} | `GetPublisherDataHandler`: `IDeveloperStorage(session's devKey).GetString`; a missing key reads as "" |
+| 62..65 | Set/GetPublisherData_S | {devKey, devSecret, key[, value]} | `SetPublisherDataServerHandler`, `GetPublisherDataServerHandler`: `IDeveloperStorage.SetString`, `GetStringForDeveloper` (both check the secret); server to server, no session (a header ticket is ignored); code 1 "The developer key or secret is wrong." ("Secret is wrong" before step 6b); payloads in ServerOnly/ |
+| 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `ExecuteScriptEventHandler`: `IScriptEventRunner(gameKey, player).Run`; see below |
 
-Friends
+All of these but 62..65 need a logged in player. Player data belongs to the game of the request's
+session: the player's own private and public data, the public data another player reads with 70,
+and the friends' public data in GetFriends (88), where the game's script events see it too. Until
+the review of step 6 these went through the Player grain, which used the game the account last
+logged in to (`Player.lastGameKey`): one account playing games of two developers could have one
+game's data written into the other's storage, and others read the public data of whichever game
+the player had played last.
 
-| Id | Message | Payload | Grain path |
+ExecuteScriptEvent answers with the script's return value, or `has` false for an event that returns
+nothing or null. It fails with code 1 and a text meant for the client when the event does not exist
+("The script event 'name' does not exist."), the arguments do not fit (wrong count, or a value of
+the wrong type), the script ran past its time limit or call depth, the game has too many runs still
+going past their limit, the stored script is no longer valid or returned a type events may not
+return, the script API refused a call (another player's private data), the event name is longer
+than 128 characters, or the script threw
+`Exception`, `InvalidOperationException` or `ArgumentException` (the only exceptions a script can
+create; the message is the script's own, so scripts can refuse a request with a reason). The
+script runner wraps those failures in `ScriptFailedException` and the gateway forwards only that
+type and the time, depth and throttling exceptions. Any other failure, such as a
+`NullReferenceException` in the script or an exception of a grain the script called through the
+API (even an `InvalidOperationException` or `ArgumentException`, unless the script caught it and
+threw its own), is code -1 "Internal error" and is logged. Before step 6b every failure sent the
+raw exception message with code -1, and until the review of step 6 the message of any
+`InvalidOperationException` or `ArgumentException`, grains' and Orleans' included, reached the
+client.
+
+Friends (handlers since step 6b; all need a logged in player and use the session's game)
+
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 88/89 | GetFriends | {string[] publicKeys} / {friends: {userId, name, status, dict}[], sent[], received[]} | `IPlayerFriendList.GetFriends` |
-| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId, PlayfabId), bytes} / empty | resolves id maps then `Invite` |
-| 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptInvitation`, `DenyInvitation` |
-| 92, 95, 98, 99 | FriendshipInvitationEvent, FriendshipAcceptedEvent, FriendshipDeniedEvent, FriendStatusChangedEvent (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream |
+| 88/89 | GetFriends | {string[] publicKeys (at most 64)} / {friends: {userId, name, status, map}[], sent, received} | `GetFriendsHandler`, `IPlayerFriendList.GetFriends` for the list and statuses; the map holds the asked keys the friend has in the session's game (read from the friends' `IPlayerStorage`) |
+| 90/91 | InviteFriend | {value, byte InvitationType (AccountId, playerName, Email, UserId), bytes} / empty | `InviteFriendHandler`: account id (must exist), email (lower case) or user name map, then `Invite`; player names never match (bug 20); code 1 "Player not found." for an account id or player name nobody has, yourself, or already friends. An email address or user name nobody has succeeds and does nothing (it answered "Player not found." before the review of step 6, which told anyone which addresses had accounts) |
+| 93/94, 96/97 | AcceptFriend, DenyFriend | {otherPlayerId, bytes} / empty | `AcceptFriendHandler`, `DenyFriendHandler`: `AcceptInvitation`, `DenyInvitation`; code 1 when accepting without an invitation or for an empty id; denying without one succeeds silently |
+| 92, 95, 98, 99 | FriendshipInvitationEvent (to the invitee), FriendshipAcceptedEvent, FriendshipDeniedEvent (to the inviter), FriendStatusChangedEvent (to each friend on login and logout) (S) | OptionalResponse<{status, friend, friendName, bytes}> | from the FriendEvents stream (`Push/FriendEventFrames.cs`) |
 
-Challenges
+Challenges (handlers since step 6b; all need a logged in player and use the session's game)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 17/18 | StartChallenge | {uint TimeOut, Player, PlayerName, bytes, Guid GameKey} / empty (1 disconnected, 2 requested you as well) | `IPlayerChallengeHandler.SendChallengeRequest` |
-| 20/21, 23/24 | AcceptChallenge, DenyChallenge | ChallengeMessage / empty (1 timeout) | `AcceptChallenge`, `DenyChallenge` on the challenger's handler |
-| 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetChallengeRequests` (bug: received lands in sent) |
-| 19, 22, 25 | StartChallengeRequestedEvent, ChallengeAcceptedEvent, ChallengeDeniedEvent (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept) | from the ChallengeEvents stream |
+| 17/18 | StartChallenge | {uint TimeOut (seconds), Player, PlayerName, bytes, Guid GameKey} / empty | `StartChallengeHandler`, `IPlayerChallengeHandler.SendChallengeRequest` (offline players too); code 1 unknown player or yourself, 2 the other player has an open challenge to you; a new challenge replaces the pending one |
+| 20/21, 23/24 | AcceptChallenge, DenyChallenge | ChallengeMessage (Player = challenger) / empty | `AcceptChallengeHandler`, `DenyChallengeHandler`: `AcceptChallenge`, `DenyChallenge` on the challenger's handler; accept: code 1 timed out or no pending challenge; deny without one succeeds silently |
+| 161/162 | GetPlayerChallenges | empty / {sent[], received[]} of {status, Guid gameId, Player, PlayerName, bytes} | `GetPlayerChallengesHandler`, `GetChallengeRequests` (received ones were listed under sent before step 6b) |
+| 19, 22, 25 | StartChallengeRequestedEvent (to the challengee), ChallengeAcceptedEvent (to both), ChallengeDeniedEvent (to the challenger) (S) | OptionalResponse<ChallengeMessage> (GameKey carries the match id on accept; TimeOut the seconds the challenger gave, which was always 15 before the review of step 6) | from the ChallengeEvents stream (`Push/ChallengeEventFrames.cs`) |
 
-Matchmaking, match state and relay
+Matchmaking, match state and relay (handlers since step 6b)
 
-| Id | Message | Payload | Grain path |
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 15/16 | FindMatch | {matchType, uint skill, uint waitTime} / {Guid gameId, bytes, string[] players} | `ICustomMatchMaker(gameKey, matchType).FindMatch`, then `PlayerStarted` |
-| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `IRelayServerGame.SetPlayer/GameProperty` |
-| 133/134 | RejoinMatch | {Guid} / empty | `IPlayer.RejoinMatch` |
-| 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `IPlayer.GetPendingMatches` |
-| 13/14 | LeaveGame | header game / empty | `IRelayServerGame.PlayerFinished` (response currently throws) |
-| >1023 | user messages | raw frame with HasGameTarget | `SendToAllBut(player, 0, frame)` retried 5x |
-| 9, 10 | GamePlayerAddedEvent {Player, Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
+| 15/16 | FindMatch | {matchType, uint skill, uint waitTime} / {Guid gameId, string, string[] players} | `FindMatchHandler`: `ICustomMatchMaker(gameKey, matchType).FindMatch` (a mode the game does not define plays by the default two player rules), then `PlayerStarted` joins the player; the wait is capped at 20 s; code 1 "Match not found" when it runs out and for an empty mode name. Other requests and the relay of the connection go on while it waits |
+| 129/130 | SetMatchProperty | {Guid game, bool isPlayerProperty, key, bytes} / empty | `SetMatchPropertyHandler`, `IRelayServerGame.SetPlayer/GameProperty`; code 1 when the match's keys and values would reach 10240 bytes in total or the key is longer than 128 characters, and for a match the player is not in |
+| 133/134 | RejoinMatch | {Guid} / empty | `RejoinMatchHandler`, `IRelayServerGame.PlayerRejoined`; code 1 for a match the player is not in or one that has finished, and for a player who did not drop out of it |
+| 131/132 | GetPlayerPendingMatches | empty / {matchId, startTime, players[]}[] | `GetPlayerPendingMatchesHandler`, `IPlayer.GetPendingMatches` |
+| 13/14 | LeaveGame | header game / empty | `LeaveGameHandler`, `IRelayServerGame.PlayerFinished`; code 1 without a game target, with one that is not a Guid, and for a match the player is not in |
+| >1023 | game messages | frame with HasGameTarget, relayed without the ticket, in order | dispatcher relay worker, `SendToAllBut(player, 0, frame)` (retried up to 5 times before step 6) |
+| 9, 10 | GamePlayerAddedEvent {Player (the account id; the display name before the step 6 review), Game}, GameFinishedEvent {bool FinishedWithDisconnect, Game} (S) | | from RelayServerGame |
 | 125..128 | GamePlayerRemovedEvent, GamePlayerRejoinedEvent, MatchRejoinSyncEvent {Game, gameProps, playerProps}, MatchPropertyChangedEvent {Game, Player?, key, bytes} (S) | | from RelayServerGame |
 
-Leaderboards, inventory, scripting, time, dev
+Match events are built by RelayServerGame and reach the client through the player's
+PlayerConnection stream (`IPlayer.SendDataToConnection`, `Push/PushSubscriptions.cs`); a match
+property change goes to every player in the match, a player property change to the others only.
+Answers go straight to the connection. Before step 6b FindMatch and LeaveGame answered through the
+stream too, so an answer can now arrive before the events its own request caused (FindMatch's own
+GamePlayerAddedEvent, LeaveGame's GameFinishedEvent).
 
-| Id | Message | Payload | Grain path |
+Leaderboards, inventory (handlers since step 6b)
+
+| Id | Message | Payload | Handler, grain path |
 |---|---|---|---|
-| 26/27 | GetLeaderboard | {byte type Top/Around/Me, name, [count], [offset]} / {playerRank, count, entries: {playerId, userName, score, entryTime}[]} | `ILeaderBoard` |
-| 28/29 | SetLeaderboard | {name, int score} / empty | `ILeaderBoard.AddPlayerScore` (client-chosen score) |
-| 109/110 | GetInventory | {invName} / {(name, count)[]} | `IPlayerInventory.GetInventory` |
-| 111..116 | AddItemToInventory, SetItemToInventory, RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `AddItem`, `SetItem`, `RemoveItem` (client-chosen grants) |
-| 119..122 | UnlockInventory, GetInventoryUnlockTime | {invName} | `Unlock`, `GetUnlocktime` |
-| 40/41 | VerifyStoreReceipt | {Product, Receipt} / {byte Status, Data} | CafeBazaar. Dropped. |
-| 66/67 | ExecuteScriptEvent | {bool isTypeSafe, eventName, (byte ParamType, value)[]} / {bool has, [type, value]} | `IScriptEventRunner.Run` |
-| 42/43 | GetServerTime | none / {string} | `ITimeService` |
-| 44/45 | CreateEnvironment (not in MASTER builds) | developer profile / {DeveloperKey, GameKey} | seeds developer, game "game1", leaderboard "global", mode "multi", script "Test" |
+| 26/27 | GetLeaderboard | {byte type Top/Around/Me, name, [count], [offset]} / {byte type, playerRank, count, entries: {playerId, userName, score, entryTime}[]} | `GetLeaderboardHandler`, `ILeaderBoard("{gameKey}_L_{name}")`: Me fills playerRank, Around playerRank and entries, Top count (entries on the board) and entries; ranks count from 0, -1 for a player without a score; count is capped at 100 entries; code 1 for a negative count or offset and an unknown type. The answer repeats the query type (step 6b; the SDK used to guess it from the fields, which failed for empty results) |
+| 28/29 | SetLeaderboard | {name, int score} / empty | `RefusedClientGrantsHandler`: refused from clients, with or without a session (code 1, "Not allowed from clients. Grant items and set scores from a server script event."); scripts call `SetScoreInLeaderBoard` |
+| 109/110 | GetInventory | {invName} / {(name, count)[]} | `GetInventoryHandler`, `IPlayerInventory("{gameKey}_{playerId}_[{invName}_]inv").GetInventory`; an empty name is the main inventory |
+| 111..114 | AddItemToInventory, SetItemToInventory | {invName, (item, count)[]} / inventory list | refused from clients like 28; scripts call `AddInventoryItems`, `SetInventoryItems` |
+| 115/116 | RemoveInventoryItem | {invName, (item, count)[]} / inventory list | `RemoveInventoryItemHandler`, `RemoveItem`, all or nothing; code 1 when the player does not hold that many or a count is not positive |
+| 119/120 | UnlockInventory | {invName} / the items moved | `UnlockInventoryHandler`, `Unlock`: moves a named inventory into the main one; code 1 while a timed chest (an inventory with a size) is still locked |
+| 121/122 | GetInventoryUnlockTime | {invName} / TimeSpan | `GetInventoryUnlockTimeHandler`, `GetUnlocktime`; zero when it can be unlocked now (it could be negative before step 6b) |
 
-Defined but unhandled (fall to `default`; relayed if HasGameTarget, otherwise dropped without a
-response): 0-5 (old CreateAccount/Login/Logout), 11/12 JoinGame, 46-61 developer and CafeBazaar
-admin ids, 84-87 RecoverPassword and ResendActivation, 102-108 guild and defined items, 117/118
-BuyItem, 123/124 ConsumeItem, 135-160 achievements, store data, league, quests, Mulligan,
-BuyUBCItem, SetDeck, SetUBCMatchResult, GetMainData, RegisterInTournament.
+Leaderboards and inventories belong to the game of the request's session (before step 6b the
+inventory used the game of the socket's login, which is empty when the ticket was logged in on
+another socket).
 
-## Protocol-level bugs
+Defined but unhandled (answered with ErrorMsg "Unsupported message type", never relayed): 107/108
+GetDefinedItems, 117/118 BuyItem, 123/124 ConsumeItem, and 44/45 CreateEnvironment (step 4
+deleted its unauthenticated handler; the host seeds developers and games from the `WildCat:Seed`
+configuration section). The ConsumeItem payload class was removed in step 2; a future handler
+defines its own payload.
 
-- Player-target count int32 vs int16 mismatch.
-- `GetFriendsRequestMessage.Deserialize` writes into an empty array (throws for any non-zero
-  count); `GetPlayerStoreDataMessage` and `SetDeckRequestMessage` deserialize into null lists.
-- `GetPublicCloudDataResponse` writes a null string when the key is missing (throws, no
-  response).
-- `FindMatchResponse(string gameId, ...)` ignores its `gameId`.
-- `MatchSyncEventData` writes the full count but skips empty bags.
-- Culture-dependent DateTime text.
-- Response frames copy the request header, so they carry `HasAuthData` with an empty ticket;
-  a request with `HasPlayerTarget` makes the response serialization throw.
+Removed in step 2 (the ids are now gaps): 0-5 old CreateAccount/Login/Logout, 11/12 JoinGame,
+40/41 VerifyStoreReceipt (CafeBazaar), 46-61 developer and CafeBazaar admin ids, 102-106 guild,
+and 135-160 achievements, store data, league, quests, Mulligan, BuyUBCItem, SetDeck,
+SetUBCMatchResult, GetMainData, RegisterInTournament. `LoginType.Custom` and
+`InvitationType.PlayfabId` went with PlayFab; both were the last members of their byte enums, so
+the other values did not move.
 
-## Direction for the rewrite
+## Protocol bugs fixed in step 6
 
-Keep the transport shape (one binary WebSocket message per request, request id echo, typed
-error envelope) because the Unity SDK is built around it, but pin explicit message ids, strip
-the ticket from relayed frames, serialize DateTime as ticks or ISO 8601, split the file per
-feature area, and consider generating both copies from one schema (MessagePack or protobuf are
-the obvious candidates).
+Wire format changes, made on both sides at once since the SDK now gets the same source:
+
+- The player target count was written as int32 and read as int16; it is int32 both ways.
+- `GetFriendsRequestMessage.Deserialize` wrote into an empty array (any key threw); it allocates.
+- `GetPublicCloudDataResponse` and `GetPlayerPublicCloudDataResponse` wrote the value even when
+  missing, and a missing value was null, so the write threw and no answer went out; the value is
+  now written only with `hasValue`, and null strings are written as "" everywhere.
+- `FindMatchResponse(string gameId, ...)` dropped its id; the constructor takes the Guid.
+- `MatchSyncEventData` wrote the count of all player bags but skipped the empty ones; every bag
+  is written.
+- DateTime went out as culture dependent text (`ToString`/`Parse`); it is the UTC tick count.
+  GetServerTime (43) answers with a `DateTimeMessage` instead of a string.
+- Answers copied the request header, so they carried `HasAuthData` with an empty ticket, and a
+  request with `HasPlayerTarget` made the answer throw; answers now carry only the request id.
+  The LeaveGame answer, built with an empty ticket, threw every time.
+- The string maps of 76, 78 and 82 wrote their count as one byte; it is int32 like every count.
+- Null strings, arrays, lists and payloads threw when written; they are written as empty.
+- Lengths and counts from the wire were trusted, so a small frame could make the reader allocate
+  gigabytes or silently read short arrays; they are checked against the bytes left.
+- Step 6b: `GetLeaderBoardResponse` starts with the query type (one byte, the
+  `GetLeaderBoardRequest.RequestType` value), and `IsPlayerRank`, `IsAroundMeResult` and
+  `IsTopResult` read it. They used to guess from which fields were filled, so a Me or Around
+  query for a player without a score and any query on an empty board matched none of them and
+  the SDK never completed the call.
+
+## The SDK copy
+
+`unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol` (the Unity package's
+`WildCat.Protocol` assembly; `Assets/Backend/Plugins/Protocol` before step 8) is generated, never
+edited: change `backend/WildCat.Protocol`, then run from anywhere
+
+```bash
+tools/sync-protocol.sh          # or, on Windows: pwsh tools/sync-protocol.ps1
+```
+
+The script deletes the copy and writes it again from every `.cs` file of the protocol project
+except `ServerOnly/`, `obj/` and `bin/`, adds a README saying so and the assembly definition
+`WildCat.Protocol.asmdef` (from `tools/protocol-copy-asmdef.json`, no engine references), and
+writes Unity `.meta` files whose GUIDs are the MD5 of `wildcat-protocol:` plus the path relative
+to the copy (`""` for the folder itself), so running it twice changes nothing. `WildCat.Tests/ProtocolSyncTests` fails when
+the copy's files or contents differ from the source (ignoring line endings and BOMs), when a
+`.meta` GUID is not the expected one, when `ServerOnly/` leaks into the copy, or when the copy does
+not compile on its own as C# 9. The protocol project itself targets netstandard2.1 with
+`LangVersion` 9 so the server build catches anything Unity 6 would not compile; keep assembly
+attributes in the `.csproj`, not in `.cs` files.
+
+## Direction
+
+Keep the transport shape (one binary WebSocket message per frame, request id echo, typed error
+envelope) because the Unity SDK is built around it, keep the pinned message ids and the
+ticket-free relayed frames. A different encoding goes behind `WireCodec`, `WireWriter` and
+`WireReader`; the payload classes and everything outside the protocol project stay as they are.

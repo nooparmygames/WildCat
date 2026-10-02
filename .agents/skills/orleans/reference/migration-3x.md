@@ -4,22 +4,24 @@ The code in `backend/` is Orleans 3.4.3 on net5.0 with `Orleans.Providers.MongoD
 `Microsoft.Orleans.CodeGenerator.MSBuild`, `AddSimpleMessageStreamProvider("SMS")`,
 `UseTransactions()`, `Grain<TState>` + `[StorageProvider]`, `ClientBuilder` in the gateway and
 `TestClusterBuilder` in tests. This is the ordered checklist. Items are (docs) unless marked.
+Project names follow the WildCat rename from roadmap step 3; the legacy names were Interfaces,
+Collections, Messages, Silo, FrontEnd and Tests.
 
 ## 1. Projects and packages
 
-- Target `net10.0` everywhere (Messages was netstandard2.0 so Unity could share it; keep the
-  wire types Unity-compatible by hand instead of sharing the assembly, or split a netstandard
+- Target `net10.0` everywhere (WildCat.Protocol was netstandard2.0 so Unity could share it; keep
+  the wire types Unity-compatible by hand instead of sharing the assembly, or split a netstandard
   2.1 project that references no Orleans packages).
-- Interfaces and Collections: replace `Microsoft.Orleans.Core.Abstractions` and
+- WildCat.Interfaces and WildCat.Grains: replace `Microsoft.Orleans.Core.Abstractions` and
   `Microsoft.Orleans.CodeGenerator.MSBuild` with `Microsoft.Orleans.Sdk`.
-- Silo: `Microsoft.Orleans.Server` plus `Microsoft.Orleans.Reminders`, `Microsoft.Orleans.Streaming`
-  (or `Microsoft.Orleans.BroadcastChannel`) and the chosen provider packages. Drop the unused
-  Azure clustering/persistence/reminder packages and `Microsoft.Orleans.Transactions` unless a
-  grain adopts transactional state.
-- Gateway (FrontEnd): drop the project reference to Silo and the separate client. Either co-host
-  the silo in the ASP.NET Core process (recommended, see hosting.md) or reference
+- WildCat.Host: `Microsoft.Orleans.Server` plus `Microsoft.Orleans.Reminders`,
+  `Microsoft.Orleans.Streaming` (or `Microsoft.Orleans.BroadcastChannel`) and the chosen provider
+  packages. Drop the unused Azure clustering/persistence/reminder packages and
+  `Microsoft.Orleans.Transactions` unless a grain adopts transactional state.
+- Gateway (WildCat.Gateway): drop the project reference to WildCat.Host and the separate client.
+  Either co-host the silo in the ASP.NET Core process (recommended, see hosting.md) or reference
   `Microsoft.Orleans.Client`.
-- Tests: `Microsoft.Orleans.TestingHost` 10.x, move to `InProcessTestClusterBuilder`.
+- WildCat.Tests: `Microsoft.Orleans.TestingHost` 10.x, move to `InProcessTestClusterBuilder`.
 - Remove every `ConfigureApplicationParts(...)` call; the source generator covers it. Remove
   `KnownAssembly` attributes in favor of `[GenerateCodeForDeclaringAssembly(typeof(X))]` when a
   referenced assembly holds types without attributes.
@@ -28,7 +30,7 @@ The code in `backend/` is Orleans 3.4.3 on net5.0 with `Orleans.Providers.MongoD
 ## 2. Serialization (the largest mechanical change)
 
 - Every state class (`DeveloperState`, `PlayerState`, `RelayServerGameState`, `LeaderBoardState`,
-  `PlayerInventoryState`, `GameModeManagerState`, `IAPState`, ...), every DTO in Interfaces
+  `PlayerInventoryState`, `GameModeManagerState`, `IAPState`, ...), every DTO in WildCat.Interfaces
   (`GameInfo`, `LeaderBoardEntry`, `GameMode`, `ChallengeRequestState`, `FoundMatchResult`, ...),
   every enum used in state is fine as is, and every custom exception (`ChallengeTimeoutException`,
   `GameNotRunningException`) gets `[GenerateSerializer]`, `[Alias]` and `[Id(n)]` on each member.
@@ -46,7 +48,7 @@ The code in `backend/` is Orleans 3.4.3 on net5.0 with `Orleans.Providers.MongoD
 
 ## 3. Hosting
 
-- Silo `Program.cs`: `Host.CreateApplicationBuilder(args).UseOrleans(silo => ...)`. Move the
+- `WildCat.Host/Program.cs`: `Host.CreateApplicationBuilder(args).UseOrleans(silo => ...)`. Move the
   `#if DEBUG` provider switch to configuration (`ASPNETCORE_ENVIRONMENT` or an `Orleans:Provider`
   setting). Replace `devsconfig.json` reading with the options pattern and user secrets.
 - Gateway: delete `ClusterClientHostedService` (the retry loop, `ClientBuilder`,
@@ -88,8 +90,9 @@ The code in `backend/` is Orleans 3.4.3 on net5.0 with `Orleans.Providers.MongoD
   - Grain-only fan-out with implicit subscribers: `AddBroadcastChannel("...")` with
     `[ImplicitChannelSubscription]` and `IOnBroadcastChannelSubscribed`.
 - `IUNetConnectionObserver` / `UNetConnectionDataTransferMessage` (an observer-based push from
-  grains to the gateway) maps to `IGrainObserver` with `ObserverManager` and `[OneWay]`; the
-  observer interface methods must return `Task`/`ValueTask`, not `void`.
+  grains to the gateway; the message is `PlayerConnectionMessage` since step 3) maps to
+  `IGrainObserver` with `ObserverManager` and `[OneWay]`; the observer interface methods must
+  return `Task`/`ValueTask`, not `void`.
 
 ## 6. Transactions
 
@@ -118,10 +121,10 @@ persistence.md.
 
 - MongoDB: `Orleans.Providers.MongoDB` 9.5.0 replaces 3.3.1. `UseMongoDBClient`,
   `UseMongoDBClustering`, `UseMongoDBReminders`, `AddMongoDBGrainStorage` keep their names;
-  `ConfigureJsonSerializerSettings` and `CreateShardKeyForCosmos` as used in `Silo/Program.cs`
-  must be re-checked against the 9.5 options types (inferred: the shard key option may remain,
-  the Newtonsoft settings hook is replaced by `IGrainStorageSerializer`). Not verified on
-  Orleans 10.
+  `ConfigureJsonSerializerSettings` and `CreateShardKeyForCosmos` as used in
+  `WildCat.Host/Program.cs` must be re-checked against the 9.5 options types (inferred: the shard
+  key option may remain, the Newtonsoft settings hook is replaced by `IGrainStorageSerializer`).
+  Not verified on Orleans 10.
 - Or switch to official ADO.NET (PostgreSQL) or Redis providers; both cover clustering,
   persistence and reminders. See persistence.md.
 - `ConfigureEndpoints(IPAddress.Loopback, 11111, 30000)` becomes `ConfigureEndpoints(11111,
@@ -137,8 +140,9 @@ persistence.md.
 ## Order of work that keeps the build green
 
 1. Bump target frameworks and packages; fix hosting so an empty silo starts.
-2. Add serialization attributes to Interfaces (the compiler and analyzers flag missing ids).
-3. Fix grain base class signatures and extension method calls in Collections.
+2. Add serialization attributes to WildCat.Interfaces (the compiler and analyzers flag missing
+   ids).
+3. Fix grain base class signatures and extension method calls in WildCat.Grains.
 4. Replace SMS with memory streams or broadcast channels.
 5. Port the gateway to co-hosting.
 6. Port tests to `InProcessTestCluster` and run them; fix reentrancy timeouts as they appear.

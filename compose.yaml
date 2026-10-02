@@ -1,0 +1,59 @@
+# WildCat with PostgreSQL: the host (Orleans silo plus WebSocket gateway) and one database.
+#
+#   cp .env.example .env      # then set POSTGRES_PASSWORD and WILDCAT_ADMIN_JWT_SIGNING_KEY
+#                             # (openssl rand -base64 32) in .env, see README.md
+#   docker compose up --build
+#
+# Clients connect to ws://localhost:5000/ws. The database is only reachable from the compose
+# network. On the first start PostgreSQL runs the Orleans scripts in deploy/postgres; after that
+# the data lives in the postgres-data volume (docker compose down -v deletes it).
+
+name: wildcat
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: wildcat
+      POSTGRES_USER: wildcat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example to .env)}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Checks over TCP on purpose: while the init scripts run, the temporary server listens on
+      # the Unix socket only, so a socket check would report ready too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U wildcat -d wildcat"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  wildcat:
+    build:
+      context: ./backend
+      dockerfile: WildCat.Host/Dockerfile
+    ports:
+      - "5000:5000"
+    # Everything in .env also reaches the host, so other settings (SMTP, seed) can live there
+    # next to the password; see .env.example. The entries below take precedence over it.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      WildCat__Orleans__Provider: PostgreSQL
+      ConnectionStrings__WildCat: "Host=postgres;Port=5432;Database=wildcat;Username=wildcat;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example to .env)}"
+      # The admin API refuses to start outside Development without a JWT signing key. Generate one
+      # with `openssl rand -base64 32` and put it in .env.
+      WildCat__Admin__JwtSigningKey: ${WILDCAT_ADMIN_JWT_SIGNING_KEY:?Set WILDCAT_ADMIN_JWT_SIGNING_KEY in .env (see .env.example)}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Gives the silo time to leave the cluster cleanly before Docker kills it.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

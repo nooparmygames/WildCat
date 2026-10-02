@@ -1,0 +1,18 @@
+{
+    "name": "WildCat.Samples.Basic",
+    "rootNamespace": "WildCat.Samples.Basic",
+    "references": [
+        "WildCat.Unity",
+        "WildCat.Core",
+        "WildCat.Protocol"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,4 @@
+<Project>
+  <!-- The SDK test projects use the backend's central package versions. -->
+  <Import Project="..\..\backend\Directory.Packages.props" />
+</Project>
