@@ -1,6 +1,6 @@
 ---
 name: orleans
-description: Microsoft Orleans 10 (virtual actors on .NET 8/9/10) as used to build and modernize this game backend - grain interfaces and keys, the [GenerateSerializer]/[Id] serialization rules, IPersistentState storage, streams vs broadcast channels vs observers, timers vs reminders, reentrancy and deadlocks, the task-scheduler rules, hosting with UseOrleans/UseOrleansClient, clustering and persistence providers (ADO.NET/PostgreSQL, Redis, Azure, the MongoDB contrib package), InProcessTestCluster testing, the built-in dashboard, Aspire and Kubernetes hosting, and the 3.x to 7+ migration checklist for the legacy code in backend/. Use when writing or reviewing any grain, silo or client host, storage or stream configuration, test fixture, or when porting a 3.4-era file.
+description: Port and maintain WildCat's Orleans backend. Use when writing or reviewing grains, silo or client hosting, persistence, streams, timers, reminders, grain tests, or the Orleans 3.4.3 to 10 migration.
 ---
 
 # Orleans 10 for this repository
@@ -9,10 +9,18 @@ Written from the official docs at learn.microsoft.com/dotnet/orleans on 2026-09-
 used is listed with its own date in `reference/sources.md`. Where a statement is inferred rather
 than documented it says so.
 
-Version facts (docs): the current stable release is Orleans 10.3.1 (2026-08-28). Orleans 10
-targets .NET 8, 9 and 10. The machine this repo was set up on has the .NET 10.0.401 SDK. The
+The original research recorded Orleans 10.3.1 (2026-08-28) as the stable release and .NET 8, 9
+and 10 as its targets. Treat version and API claims here as a 2026-09-30 research snapshot;
+check the selected packages and official documentation before applying them. The machine this
+repo was set up on had the .NET 10.0.401 SDK. The
 legacy code in `backend/` is Orleans 3.4.3 on net5.0 and does not compile against 10 without the
 changes in `reference/migration-3x.md`.
+
+Read [AGENTS.md](../../../AGENTS.md) for the confirmed project choices. WildCat targets Orleans
+10 on .NET 10 with PostgreSQL through the official ADO.NET providers for clustering, grain
+state and reminders, and memory providers in Debug and tests. The other providers below and in
+the references are background research, not alternatives to reopen unless the user changes the
+decision. There is no legacy data to migrate. Read only the reference files needed for the task.
 
 ## The ten rules that catch most mistakes
 
@@ -57,7 +65,7 @@ changes in `reference/migration-3x.md`.
     through an xUnit collection fixture. Register memory storage named `Default` and
     `PubSubStore` in the fixture. `reference/testing.md`.
 
-## Choosing providers for this project
+## Provider reference from the original research
 
 | Concern | Dev / tests | Production candidates (all official unless noted) |
 |---|---|---|
@@ -67,11 +75,11 @@ changes in `reference/migration-3x.md`.
 | Pub/sub | `AddBroadcastChannel` or `AddMemoryStreams` + `AddMemoryGrainStorage("PubSubStore")` | Same in-memory options are acceptable for transient game events; Azure Queue or Event Hubs when durability is required |
 | Transactions | `UseTransactions()` + memory storage bridge | `AddAzureTableTransactionalStateStorage`; DynamoDB transactional storage arrived in 10.3 |
 
-The legacy backend used MongoDB for all three system stores plus SMS streams. The contrib MongoDB
-package exists and is maintained (9.5.0, 2026-01-12, depends on `Microsoft.Orleans.Reminders`
->= 9.0.1) but nobody has verified it on Orleans 10. Prefer an official provider unless keeping
-MongoDB is a hard requirement; PostgreSQL through the ADO.NET packages covers clustering,
-persistence and reminders with one database and ships SQL scripts in the docs.
+The legacy backend used MongoDB for all three system stores plus SMS streams. The original
+research recorded the contrib MongoDB package at 9.5.0 (2026-01-12, depending on
+`Microsoft.Orleans.Reminders` >= 9.0.1), with Orleans 10 compatibility unverified. WildCat's
+confirmed replacement is PostgreSQL through the official ADO.NET packages for clustering,
+persistence and reminders. The reference retains the provider survey for context.
 
 ## Recipes
 
