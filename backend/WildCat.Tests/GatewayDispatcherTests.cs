@@ -432,7 +432,8 @@ namespace WildCat.Tests
                 Assert.False(host.Handlers.TryGet(type, out _, out _), $"{type} has a handler now; take it off the unhandled list");
 
             // The unhandled ones are documented as such.
-            string protocolDoc = File.ReadAllText(Path.Combine(ProtocolSyncTests.FindRepoRoot(), "docs", "wire-protocol.md"));
+            string protocolDoc = File.ReadAllText(Path.Combine(ProtocolSyncTests.FindRepoRoot(), "docs", "wire-protocol.md"))
+                .ReplaceLineEndings("\n");
             string unhandled = protocolDoc.Substring(protocolDoc.IndexOf("Defined but unhandled", StringComparison.Ordinal));
             unhandled = unhandled.Substring(0, unhandled.IndexOf("\n\n", StringComparison.Ordinal));
             foreach (var type in DocumentedUnhandled)

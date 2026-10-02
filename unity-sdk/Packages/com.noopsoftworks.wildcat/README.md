@@ -7,9 +7,10 @@ Every call returns a Task; the connection has request timeouts, a heartbeat and 
 reconnection with session resume.
 
 Status: 0.1.0, pre-release. The engine-free core is tested with plain .NET against the real
-server; the Unity-specific parts (the MonoBehaviour, the editor menus, the sample and the WebGL
-transport) compile against stand-in Unity assemblies but have not been run in the Unity editor
-yet. See [Documentation~/index.md](Documentation~/index.md#what-is-verified-and-what-is-not).
+server. Unity 6000.0.80f1 also passed package import, compilation, editor menu and Basic sample
+Play mode checks against the host, plus a WebGL player build. Browser execution and mobile
+IL2CPP players still need verification. See
+[Documentation~/index.md](Documentation~/index.md#what-is-verified-and-what-is-not).
 
 ## Install
 

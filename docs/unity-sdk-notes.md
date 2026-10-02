@@ -85,23 +85,28 @@ Verified with plain .NET (CI runs both in the backend job):
   package.json, the asmdefs and the .meta files.
 - `WildCat.Sdk.CoreCheck` proves the Core compiles as Unity compiles it.
 
-Not verified in Unity (no Unity install was available for step 8):
+Verified in Unity 6000.0.80f1 on 2026-10-02:
 
-- `Runtime/Unity`, `Editor/` and `Samples~/Basic` were compiled only against hand-written
-  stand-ins for the UnityEngine and UnityEditor members they use (also with `UNITY_WEBGL`
-  defined for the WebGL transport), in a throwaway project that is not in the repository.
-- The WebGL `.jslib` and transport never ran in a browser; Task.Delay (heartbeat, backoff) and
-  the request timeouts (CancellationTokenSource timers) on WebGL's single thread are unverified.
-  If they do not fire there, drive them from the dispatcher pump on WebGL (a timer list checked
-  in WildCatBehaviour.Update); not done yet because it could not be tried.
-- The .meta files, the asmdefs and the sample's `WildCatSettings.asset` were written by hand (the
-  asset's field names are checked against the script by a test).
-- There is no sample scene or prefab: the sample builds its objects at run time and its README
-  lists the three setup steps (Add Client To Scene, add Basic Sample, Play).
+- The embedded package imported and its Protocol, Core, Unity and Editor assemblies compiled.
+  The Basic sample imported through Package Manager and its assembly compiled too.
+- Create Or Select Settings, Add Client To Scene and About worked. The Add Client menu attached
+  the sample settings asset, and the About window loaded its logo.
+- In a resident headless Editor, Play mode advanced frames. Two Basic sample instances connected
+  to the real host, logged in, found the same two-player match, received relayed cube positions,
+  submitted a score through a server script and read the leaderboard. The console reported no
+  runtime errors. No visual layout check was performed in the headless session.
+- A WebGL IL2CPP player containing the sample built with zero errors. The only build warning
+  concerned the temporary Pipeline package's disabled runtime instrumentation. That package and
+  the temporary scene and imported sample were removed after verification.
 
-First things to do with Unity at hand: open `unity-sdk/` in Unity 6, let it upgrade the project
-settings, import the Basic sample, run it against `dotnet run --project backend/WildCat.Host`
-with a build as the second player, and try a WebGL build.
+Browser execution remains unverified. The `.jslib` callbacks, Task.Delay (heartbeat, backoff)
+and request timeouts (CancellationTokenSource timers) still need a browser test. If the timers
+do not fire on WebGL's single thread, drive them from the dispatcher pump in
+WildCatBehaviour.Update after reproducing that behavior. Mobile IL2CPP players also remain
+untested. There is no checked-in sample scene or prefab; the sample README describes setup.
+
+See [the verification record](project-memory/verification-2026-10-02.md) for the exact checks,
+artifacts and remaining limitations.
 
 ## The old SDK and what became of it
 

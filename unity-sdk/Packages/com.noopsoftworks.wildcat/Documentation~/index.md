@@ -201,19 +201,22 @@ tools/unity-package-meta.sh     # writes missing .meta files after adding files 
 Verified with plain .NET: everything in `Runtime/Core` and `Runtime/Protocol`, end to end
 against the real gateway, and the Core's compatibility with .NET Standard 2.1 and C# 9.
 
-Not verified in a real Unity editor or player (no Unity was available when 0.1.0 was written):
+Verified in Unity 6000.0.80f1 on 2026-10-02: the package imported and all runtime and editor
+assemblies compiled. The Basic sample imported through Package Manager. The settings and Add
+Client menus worked, and the About window loaded its logo. In a resident headless Editor,
+two Basic sample clients connected to the host, logged in, joined the same match, relayed cube
+positions, submitted a score through a server script and read the leaderboard. Play mode
+advanced frames and the console reported no runtime errors.
 
-- `Runtime/Unity` (`WildCatBehaviour`, `WildCatSettings`, the coroutine helpers), `Editor/`
-  and `Samples~/Basic` were compiled against hand-written stand-ins for the UnityEngine and
-  UnityEditor APIs they use, and reviewed by reading, but never imported into Unity.
-- The WebGL transport and its `.jslib` compiled (with `UNITY_WEBGL` defined) against the same
-  stand-ins and the receive queue is tested in plain .NET, but they have not run in a browser.
-  Whether `Task.Delay` (heartbeat, reconnection backoff) and the request timeouts
-  (`CancellationTokenSource` timers) fire on WebGL's single thread is also unverified. If they do
-  not, the fix is to drive them from the dispatcher pump on WebGL (a timer list checked in
-  `Update`); that was left until it can be tried in a browser.
-- The `.meta` files and the sample's `WildCatSettings.asset` were written by hand; Unity may
-  rewrite them on first import.
+A WebGL player containing the sample also built successfully with IL2CPP, including the
+transport and `.jslib`. Its browser execution still needs verification:
+
+- The browser WebSocket callbacks, `Task.Delay` (heartbeat and reconnection backoff), and
+  request timeouts (`CancellationTokenSource` timers) have not been exercised in a browser.
+  If the timers do not fire on WebGL's single thread, drive them from the dispatcher pump
+  in `Update`; that change still needs evidence from a browser run.
+- The `.meta` files and the sample's settings asset imported successfully. Visual layout was
+  not inspected in the headless Editor.
 - `ClientWebSocket` on Unity 6 IL2CPP mobile players is expected to work (Unity supports it) but
   was not tried.
 

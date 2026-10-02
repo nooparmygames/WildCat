@@ -9,6 +9,33 @@ These files preserve project context for agents that can read this checkout. The
 import into account-wide ChatGPT saved memory. Keep durable project facts here, with dates and
 supporting files, and keep temporary command output in the conversation.
 
+## Merged and verified on 2026-10-02
+
+The owner authorized merging the completed remote branch, running the tests and checking the
+Unity Editor with GPT-6.1 Sol at max reasoning, followed by an independent parent review.
+Local commit `a4c4b95` preserved the Codex context migration. Merge commit `15a844b` integrated
+`origin/claude/elegant-mendel-jr5n9a` at `f3590a4` into `master`. It retains all branch commits,
+the canonical AGENTS.md guide, CLAUDE.md's compatibility import and the newer Orleans refs
+under `.agents/skills/orleans`.
+
+The current backend is Orleans 10.3.1 on .NET 10, with a shared netstandard2.1 protocol, a
+co-hosted gateway and admin API, PostgreSQL providers, a React panel and the Unity 6 UPM SDK.
+All nine roadmap items were already implemented on the merged branch. The older local-state
+sections below describe the context-import history, not pending product work.
+
+Release build passed. Backend tests passed 717 with one existing skipped test, including all
+eight PostgreSQL integration tests. SDK tests passed 61 and panel tests passed 38; panel lint
+and production build, Compose validation, Docker image build and a Production host startup
+against PostgreSQL also passed. A Windows newline parsing failure in the gateway route test
+was corrected and independently rerun.
+
+Actual Unity 6000.0.80f1 checks covered package/sample import, compilation, settings/client/About
+menus, two Basic sample clients in Play mode against the host, matchmaking, relay positions,
+server score submission and leaderboard reads. The sample's WebGL IL2CPP player built with zero
+errors. Browser execution, mobile players and visual layout remain unverified. See
+[the full verification and review record](verification-2026-10-02.md) for commands, evidence,
+the final configuration import and limits. Changes are local; nothing was pushed or published.
+
 ## Where to look
 
 | Task | Read |
@@ -20,7 +47,7 @@ supporting files, and keep temporary command output in the conversation.
 | Build the admin API or panel | [Legacy panel behavior and expected REST contract](../legacy-admin-panel.md) |
 | Port Orleans 3.4.3 code | [Migration checklist](../../.agents/skills/orleans/reference/migration-3x.md) |
 
-## Remote progress discovered on 2026-10-02
+## Remote progress discovered before the merge on 2026-10-02
 
 `git fetch --all --prune` and `git pull --ff-only` completed. The pull reported "Already up to
 date" because local `master` and `origin/master` both remain at `703ed09`. There is one remote

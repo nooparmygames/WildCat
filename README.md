@@ -25,7 +25,7 @@ being cleaned up for an open-source release.
 
 Pre-release. The backend builds and runs, but the configuration, the wire protocol and the SDK
 will still change in breaking ways. The roadmap and the decisions behind it are in
-[CLAUDE.md](CLAUDE.md), and the known bugs in
+[AGENTS.md](AGENTS.md), and the known bugs in
 [docs/legacy-backend-notes.md](docs/legacy-backend-notes.md); read the bug list before exposing a
 server to the internet.
 
@@ -219,8 +219,8 @@ go install github.com/rhysd/actionlint/cmd/actionlint@latest
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md): decisions, roadmap and working rules for contributors (and for Claude
-  Code, which this repository is set up for)
+- [AGENTS.md](AGENTS.md): decisions, roadmap and working rules for contributors and coding agents;
+  CLAUDE.md imports it for compatibility
 - [docs/legacy-backend-notes.md](docs/legacy-backend-notes.md): grain inventory, main flows and
   the known bug list
 - [docs/wire-protocol.md](docs/wire-protocol.md): WebSocket framing, value encodings, the codec

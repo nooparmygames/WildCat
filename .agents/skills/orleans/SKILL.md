@@ -12,9 +12,10 @@ than documented it says so.
 The original research recorded Orleans 10.3.1 (2026-08-28) as the stable release and .NET 8, 9
 and 10 as its targets. Treat version and API claims here as a 2026-09-30 research snapshot;
 check the selected packages and official documentation before applying them. The machine this
-repo was set up on had the .NET 10.0.401 SDK. The
-legacy code in `backend/` is Orleans 3.4.3 on net5.0 and does not compile against 10 without the
-changes in `reference/migration-3x.md`.
+repo was set up on had the .NET 10.0.401 SDK. The merged backend now targets Orleans 10.3.1
+on .NET 10. WildCat.Protocol targets netstandard2.1 with C# 9 so Unity 6 can compile the same
+source. `reference/migration-3x.md` preserves the historical Orleans 3.4.3/net5.0 migration
+checklist; that migration has already been completed.
 
 Read [AGENTS.md](../../../AGENTS.md) for the confirmed project choices. WildCat targets Orleans
 10 on .NET 10 with PostgreSQL through the official ADO.NET providers for clustering, grain
@@ -83,7 +84,7 @@ persistence and reminders. The reference retains the provider survey for context
 
 ## Recipes
 
-Silo with co-hosted WebSocket gateway (the shape this repo is moving to):
+Silo with a co-hosted WebSocket gateway (the shape used by this repository):
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
