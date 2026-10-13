@@ -18,6 +18,19 @@ compact binary protocol. It covers:
 A client SDK for Unity 6, the UPM package `com.noopsoftworks.wildcat`, lives in
 `unity-sdk/Packages/` (see its [README](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md)).
 
+## Why we are open sourcing WildCat
+
+We originally built this tool with Orleans more than eight years ago. We are open sourcing it
+in the hope that it is useful to other developers and gives people a practical example of how
+to build distributed, scalable backends for games.
+
+We also want to address the difficulties we have found with existing game backends,
+particularly how hard they can be to customize and debug. Our goal is to make adding your own
+game logic feel as natural as extending a game engine.
+
+We used AI to help clean up the original code and develop recent features, and we plan to
+continue using it as we develop WildCat.
+
 ## Status
 
 Pre-release. The backend builds and runs, but the configuration, the wire protocol and the SDK
