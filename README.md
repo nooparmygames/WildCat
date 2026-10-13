@@ -28,6 +28,16 @@ issues; review the open issues before deploying a public server.
 The [admin API](docs/admin-api.md) runs under `/api/v1`, with OpenAPI at `/openapi/v1.json`.
 The [developer panel](panel/README.md) provides a React interface for managing games and content.
 
+## Getting started
+
+| What you want to do | Start here |
+|---|---|
+| Run the backend and panel on your machine | [Local setup](#a-from-source-with-memory-providers) |
+| Keep local data between restarts | [Docker Compose with PostgreSQL](#b-docker-compose-with-postgresql) |
+| Deploy on a Linux server with HTTPS | [Server deployment guide](docs/server-deployment.md) |
+| Connect a Unity game | [SDK installation and quick start](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md) |
+| Try matchmaking and relay with two clients | [Basic sample](unity-sdk/Packages/com.noopsoftworks.wildcat/Samples~/Basic/README.md) |
+
 ## Quick start
 
 Clone the repository and run the commands below from its root:
@@ -236,27 +246,39 @@ go install github.com/rhysd/actionlint/cmd/actionlint@latest
 "$(go env GOPATH)/bin/actionlint"
 ```
 
+## Unity sample
+
+The package includes a Basic sample with login, matchmaking, relayed cube positions,
+leaderboard submission through a server script, and friend invitations. Import it through
+Window > Package Manager > WildCat > Samples > Basic, then follow the
+[sample setup guide](unity-sdk/Packages/com.noopsoftworks.wildcat/Samples~/Basic/README.md).
+It creates its UI and objects at runtime, so you add its components to an empty scene.
+Use two clients for matchmaking and relay; the guide explains how to start them and configure
+the score event.
+
 ## Documentation
 
-- [Roadmap](docs/developer-experience-roadmap.md): planned serialization, customization and
-  development tools
-- [Admin API](docs/admin-api.md) and [developer panel](panel/README.md): configuration and usage
-- [AGENTS.md](AGENTS.md): decisions, roadmap and working rules for contributors and coding agents;
-  CLAUDE.md imports it for compatibility
-- [docs/legacy-backend-notes.md](docs/legacy-backend-notes.md): grain inventory, main flows and
-  the known bug list
-- [docs/wire-protocol.md](docs/wire-protocol.md): WebSocket framing, value encodings, the codec
-  and the message table
-- [docs/gateway.md](docs/gateway.md): how the gateway handles a frame, and how to add and test a
-  message handler
-- [unity-sdk/Packages/com.noopsoftworks.wildcat/README.md](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md):
-  the Unity SDK: install, quick start, migration from the old SDK; its Documentation~/index.md
-  is the manual
-- [docs/unity-sdk-notes.md](docs/unity-sdk-notes.md): the Unity SDK's design, what is verified
-  and what is not, and what became of the old SDK
-- [docs/legacy-admin-panel.md](docs/legacy-admin-panel.md): what the old admin panel did and the
-  REST contract it expected
-- [deploy/postgres/README.md](deploy/postgres/README.md): where the database scripts come from
+The guides are Markdown files in this repository. Read them on GitHub or in your editor's
+Markdown preview; no documentation build is required. There is no DocFX site or DocFX build
+command yet. The running host generates the admin API reference at `/openapi/v1.json`.
+
+| Guide | Covers |
+|---|---|
+| [Server deployment](docs/server-deployment.md) | Linux setup, HTTPS, panel hosting, accounts, backups and updates |
+| [Unity SDK quick start](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md) | Installation, first client script and migration from the old SDK |
+| [Unity SDK manual](unity-sdk/Packages/com.noopsoftworks.wildcat/Documentation~/index.md) | Feature APIs, threading, reconnection, options and platform limits |
+| [Basic sample](unity-sdk/Packages/com.noopsoftworks.wildcat/Samples~/Basic/README.md) | Running two clients and using the sample features |
+| [Admin API](docs/admin-api.md) | Authentication, configuration and endpoints |
+| [Developer panel](panel/README.md) | Local development, deployment and translations |
+| [Wire protocol](docs/wire-protocol.md) | Framing, encodings, message IDs and shared protocol source |
+| [Gateway](docs/gateway.md) | Request handling and adding a handler |
+| [PostgreSQL setup](deploy/postgres/README.md) | Schema scripts and database initialization |
+| [Roadmap](docs/developer-experience-roadmap.md) | Planned serialization, customization and development tools |
+
+For repository work, read [AGENTS.md](AGENTS.md) for architecture decisions and contribution
+rules. The [backend notes](docs/legacy-backend-notes.md) retain the grain inventory and known
+issues. [SDK notes](docs/unity-sdk-notes.md) and the
+[legacy panel survey](docs/legacy-admin-panel.md) provide implementation and migration history.
 
 ## License
 
