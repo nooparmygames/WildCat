@@ -6,6 +6,7 @@ using Orleans.Configuration;
 using WildCat.Scripting;
 using Orleans.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orleans.Serialization;
 using Newtonsoft.Json;
 
@@ -87,6 +88,7 @@ namespace WildCat.Grains
         public static ISiloBuilder AddWildCatStorage(this ISiloBuilder builder, OrleansHostingOptions options, string connectionString)
         {
             Validate(options);
+            builder.Services.TryAddSingleton<PasswordHashing>();
             // The memory storage serializes state with the same JSON settings as the ADO.NET
             // storage (it used to be configured for PostgreSQL only), so Memory mode needs it too.
             builder.Services.Configure<OrleansJsonSerializerOptions>(WriteDefaultValues);

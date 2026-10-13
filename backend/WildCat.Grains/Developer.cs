@@ -14,9 +14,13 @@ namespace WildCat.Grains
     {
         private readonly IPersistentState<DeveloperState> state;
 
-        public Developer([PersistentState(GrainStateNames.Developer, GrainStorageNames.Default)] IPersistentState<DeveloperState> state)
+        private readonly PasswordHashing passwordHashing;
+
+        public Developer([PersistentState(GrainStateNames.Developer, GrainStorageNames.Default)] IPersistentState<DeveloperState> state,
+            PasswordHashing passwordHashing)
         {
             this.state = state;
+            this.passwordHashing = passwordHashing;
         }
 
         private DeveloperState State => state.State;
@@ -107,7 +111,7 @@ namespace WildCat.Grains
         {
             if (data.GameInfos.Count > 0)
                 throw new ArgumentException();
-            data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : await PasswordHasher.HashAsync(data.PasswordHash);
+            data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : await passwordHashing.HashAsync(data.PasswordHash);
             data.DeveloperSecret = Guid.NewGuid();
             state.State = data;
             State.IsCreated = true;
@@ -175,13 +179,13 @@ namespace WildCat.Grains
 
         public async Task<bool> IsPasswordCorrect(string password)
         {
-            return isCreated && await PasswordHasher.VerifyAsync(password, State.PasswordHash);
+            return isCreated && await passwordHashing.VerifyAsync(password, State.PasswordHash);
         }
 
         public async Task ChangePassword(string newPassword)
         {
             AssertIsCreated();
-            State.PasswordHash = await PasswordHasher.HashAsync(newPassword);
+            State.PasswordHash = await passwordHashing.HashAsync(newPassword);
             await state.WriteStateAsync();
         }
 

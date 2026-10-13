@@ -25,6 +25,8 @@ namespace WildCat.Tests
         /// </summary>
         internal ManualTimeProvider SignInClock { get; } = new ManualTimeProvider();
 
+        internal ControlledPasswordHashing PasswordHashing { get; } = new();
+
         public async Task InitializeAsync()
         {
             var builder = new InProcessTestClusterBuilder(initialSilosCount: 1);
@@ -35,6 +37,7 @@ namespace WildCat.Tests
                 silo.AddLegacyCallChainReentrancy();
                 silo.AddIncomingGrainCallFilter<FailingPushFilter>();
                 silo.Services.AddSingleton<IEmailSender>(Emails);
+                silo.Services.AddSingleton<PasswordHashing>(PasswordHashing);
                 silo.Services.AddKeyedSingleton<TimeProvider>(Player.SignInClockKey, SignInClock);
             });
             builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));

@@ -9,6 +9,16 @@ These files preserve project context for agents that can read this checkout. The
 import into account-wide ChatGPT saved memory. Keep durable project facts here, with dates and
 supporting files, and keep temporary command output in the conversation.
 
+## Password hashing CI fix on 2026-10-13
+
+Two password hashing concurrency tests failed in GitHub Actions because their measured delay
+missed the hashing operation. Player and Developer now receive a `PasswordHashing` service
+that preserves the existing thread-pool execution and PBKDF2 format. The test fixture replaces
+only the synchronous work with a password-scoped gate, then checks that an interleavable call
+finishes before releasing the worker. All waits are bounded and cleanup releases the gate.
+The four focused tests passed. Temporarily running verification inline made the developer
+test fail as intended; the thread-pool implementation was restored before the full test run.
+
 ## Customization roadmap added on 2026-10-13
 
 [The developer experience roadmap](../developer-experience-roadmap.md) continues the completed

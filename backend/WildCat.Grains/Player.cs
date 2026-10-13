@@ -35,12 +35,16 @@ namespace WildCat.Grains
         private readonly IEmailSender emailSender;
         private readonly ILogger<Player> logger;
 
+        private readonly PasswordHashing passwordHashing;
+
         public Player(
             [PersistentState(GrainStateNames.Player, GrainStorageNames.Default)] IPersistentState<PlayerState> state,
             IEmailSender emailSender,
-            ILogger<Player> logger)
+            ILogger<Player> logger,
+            PasswordHashing passwordHashing)
         {
             this.state = state;
+            this.passwordHashing = passwordHashing;
             this.emailSender = emailSender;
             this.logger = logger;
         }
@@ -311,7 +315,7 @@ namespace WildCat.Grains
                 .SetAccountID(this.GetPrimaryKeyString());
             if (isMappingAdded)
             {
-                string passwordHash = await PasswordHasher.HashAsync(password);
+                string passwordHash = await passwordHashing.HashAsync(password);
                 State.UserNamePasswordPairs.Add(user,
                     new Dictionary<string, string> {{PASSWORD_KEY, passwordHash}});
                 await state.WriteStateAsync();
@@ -392,7 +396,7 @@ namespace WildCat.Grains
         {
             if (lockout > TimeSpan.Zero && SignInClock.GetElapsedTime(lockoutStart) < lockout)
                 return false;
-            bool valid = await PasswordHasher.VerifyAsync(password, storedHash);
+            bool valid = await passwordHashing.VerifyAsync(password, storedHash);
             if (valid)
             {
                 passwordFailures = 0;
@@ -429,7 +433,7 @@ namespace WildCat.Grains
                 .SetAccountID(this.GetPrimaryKeyString());
             if (isMappingAdded)
             {
-                string passwordHash = await PasswordHasher.HashAsync(password);
+                string passwordHash = await passwordHashing.HashAsync(password);
                 string activationCode = VerificationCode.Create(RANDOM_TOKEN_LENGTH);
                 State.Emails.Add(email,
                     new Dictionary<string, string>
@@ -612,7 +616,7 @@ namespace WildCat.Grains
         {
             if (State.Emails.TryGetValue(email, out var account))
             {
-                account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
+                account[PASSWORD_KEY] = await passwordHashing.HashAsync(newPassword);
                 await state.WriteStateAsync();
                 return true;
             }
@@ -685,7 +689,7 @@ namespace WildCat.Grains
                 return false;
             }
 
-            account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
+            account[PASSWORD_KEY] = await passwordHashing.HashAsync(newPassword);
             // The code arrived by email, which proves the address, so a reset also activates it.
             // That is the way back for a player whose activation code expired or was used up.
             account[STATUS_KEY] = STATUS_ACTIVE;
@@ -756,7 +760,7 @@ namespace WildCat.Grains
         {
             if (State.UserNamePasswordPairs.TryGetValue(user, out var account))
             {
-                account[PASSWORD_KEY] = await PasswordHasher.HashAsync(newPassword);
+                account[PASSWORD_KEY] = await passwordHashing.HashAsync(newPassword);
                 await state.WriteStateAsync();
                 return true;
             }
