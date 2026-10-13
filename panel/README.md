@@ -12,7 +12,7 @@ and loads only when someone opens it.
 
 ## Commands
 
-Node 22.22 or later.
+Use Node 22.22 or later. Run these commands from `panel/`:
 
 ```bash
 npm ci            # install exactly what package-lock.json says
@@ -26,7 +26,8 @@ npm test          # vitest unit tests
 ## Talking to the API
 
 The panel calls the admin API under `/api/v1` on the same origin. In development the Vite dev
-server proxies `/api` to the WildCat host at `http://localhost:5000`, so start the host first:
+server proxies `/api` to the WildCat host at `http://localhost:5000`. Start the host from the
+repository root in another terminal:
 
 ```bash
 dotnet run --project backend/WildCat.Host

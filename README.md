@@ -18,21 +18,27 @@ compact binary protocol. It covers:
 A client SDK for Unity 6, the UPM package `com.noopsoftworks.wildcat`, lives in
 `unity-sdk/Packages/` (see its [README](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md)).
 
-WildCat started in 2019 as a private platform called Apadana (Orleans 3, MongoDB, PlayFab) and is
-being cleaned up for an open-source release.
-
 ## Status
 
 Pre-release. The backend builds and runs, but the configuration, the wire protocol and the SDK
-will still change in breaking ways. The roadmap and the decisions behind it are in
-[AGENTS.md](AGENTS.md), and the known bugs in
-[docs/legacy-backend-notes.md](docs/legacy-backend-notes.md); read the bug list before exposing a
-server to the internet.
+may change in breaking ways. The [roadmap](docs/developer-experience-roadmap.md) describes the
+planned customization tools. The [backend notes](docs/legacy-backend-notes.md) track known
+issues; review the open issues before deploying a public server.
 
-- Admin REST API (`backend/WildCat.Admin`, under `/api/v1`, OpenAPI at `/openapi/v1.json`): in progress.
-- Admin panel (`panel/`, React and TypeScript): in progress.
+The [admin API](docs/admin-api.md) runs under `/api/v1`, with OpenAPI at `/openapi/v1.json`.
+The [developer panel](panel/README.md) provides a React interface for managing games and content.
 
 ## Quick start
+
+Clone the repository and run the commands below from its root:
+
+```bash
+git clone https://github.com/nooparmygames/WildCat.git
+cd WildCat
+```
+
+For a Linux server with HTTPS and persistent storage, follow
+[Run WildCat on a server](docs/server-deployment.md).
 
 ### A: from source, with memory providers
 
@@ -56,6 +62,19 @@ game key. In the Unity SDK that is `await client.ConnectAsync()` followed by
 `await client.Session.InitializeAsync(developerKey, gameKey)`; the SDK's Basic sample ships a
 settings asset with this URL and these keys. SMTP is not configured, so activation and password
 reset codes appear in the host's log.
+
+To open the developer panel locally, install Node 22.22 or later and run these commands in
+another terminal from the repository root:
+
+```bash
+npm --prefix panel ci
+npm --prefix panel run dev
+```
+
+Open `http://localhost:5173/panel/`. Register an account and use the activation code in the
+host log, then sign in and create a game. To use the seeded `developer@example.com` account,
+request a password reset first and read its code from the log. Memory mode loses accounts and
+games on restart; use PostgreSQL when you need to keep them.
 
 ### B: Docker Compose, with PostgreSQL
 
@@ -154,9 +173,9 @@ compose.yaml              PostgreSQL plus the host
 
 ## Running the tests
 
-The tests run on an in-process Orleans cluster with memory providers, so they need nothing
-installed besides the .NET SDK. They are slow and some wait forever when they fail, so set a hang
-timeout for full runs and filter by class while iterating:
+Most tests run on an in-process Orleans cluster with memory providers and need only the .NET
+SDK. Some legacy tests can wait indefinitely on failure. Set a hang timeout for full runs and
+filter by class while iterating:
 
 ```bash
 dotnet test backend/WildCat.Tests/WildCat.Tests.csproj --blame-hang-timeout 4m
@@ -219,6 +238,9 @@ go install github.com/rhysd/actionlint/cmd/actionlint@latest
 
 ## Documentation
 
+- [Roadmap](docs/developer-experience-roadmap.md): planned serialization, customization and
+  development tools
+- [Admin API](docs/admin-api.md) and [developer panel](panel/README.md): configuration and usage
 - [AGENTS.md](AGENTS.md): decisions, roadmap and working rules for contributors and coding agents;
   CLAUDE.md imports it for compatibility
 - [docs/legacy-backend-notes.md](docs/legacy-backend-notes.md): grain inventory, main flows and

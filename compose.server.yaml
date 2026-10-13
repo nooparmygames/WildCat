@@ -1,0 +1,12 @@
+# Use with compose.yaml; see docs/server-deployment.md. Requires Compose 2.24.4+.
+services:
+  wildcat:
+    ports: !override
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - type: bind
+        source: ./panel/dist
+        target: /app/wwwroot/panel
+        read_only: true
+        bind:
+          create_host_path: false

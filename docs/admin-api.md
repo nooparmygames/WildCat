@@ -1,14 +1,12 @@
 # Admin REST API
 
-The HTTP API behind the developer panel, added in roadmap step 7. It lives in
-`backend/WildCat.Admin` and runs inside the host process next to the game gateway, calling grains
-through the silo's own `IGrainFactory`. The contract started from the endpoint list in
-`legacy-admin-panel.md`; this page is the current one. The OpenAPI document at `/openapi/v1.json`
-is generated from the code and is the exact reference.
+Use the admin API to manage developer accounts, games and game content. It runs in the same
+host as the game gateway. This page covers configuration and endpoints; `/openapi/v1.json`
+provides the generated API reference.
 
 ## Hosting
 
-`WildCat.Host/Program.cs` wires it in with four lines around the gateway:
+`WildCat.Host/Program.cs` registers the API services and middleware alongside the gateway:
 
 ```csharp
 builder.Services.AddWildCatAdmin(builder.Configuration);
@@ -39,7 +37,8 @@ Set real values through user secrets or environment variables (`WildCat__Admin__
 `WildCat__Admin__AdminEmails__0`). With Docker Compose, `compose.yaml` at the repository root
 passes `WILDCAT_ADMIN_JWT_SIGNING_KEY` from `.env` to the host as `WildCat__Admin__JwtSigningKey`
 and refuses to start while it is empty; quick start B in the README shows how to generate it.
-Account emails go through the `IEmailSender` the host registers; without one they are logged.
+Account emails go through the registered `IEmailSender`. Without SMTP configuration, the host
+uses `LoggingEmailSender` and writes the messages to its log.
 
 ## Conventions
 
@@ -63,7 +62,7 @@ otherwise, 404 for an unknown game); admins may open any game.
 
 | Method and path | Auth | Body | Response |
 |---|---|---|---|
-| POST `/auth/register` | anonymous, rate limited | `{email, password, firstName?, lastName?}` | 202; 409 if the email is taken (see Not there yet). Emails an activation code. |
+| POST `/auth/register` | anonymous, rate limited | `{email, password, firstName?, lastName?}` | 202; 409 if the email is taken (see Limitations). Emails an activation code. |
 | POST `/auth/activate` | anonymous, rate limited | `{email, code}` | 204; 400 for a wrong or expired code (7 days, 5 tries). The code is checked for an account that is already active too, with the same 400 for a wrong code, so the answer does not tell whether an account is active; the code that activated it keeps answering 204 until it expires. |
 | POST `/auth/resend-activation` | anonymous, rate limited | `{email}` | always 202; emails a new code to an inactive account |
 | POST `/auth/login` | anonymous, rate limited | `{email, password}` | `{token, expiresAt, developer: {key, email, firstName, lastName, isAdmin}}`; 401 for a wrong email or password (same message for both); 403 for an account that is not activated or is disabled |
@@ -116,7 +115,7 @@ Shapes:
   before. `finishGameWithOneDisconnect` is optional in the request (an existing mode keeps its
   value, a new one gets true).
 
-## Not there yet
+## Limitations
 
 - Email enumeration through registration: `POST /auth/register` answers 409 for an email that
   already has an account, so anyone can find out whether an address is registered. This is a

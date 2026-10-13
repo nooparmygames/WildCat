@@ -1,34 +1,21 @@
 # Legacy admin panel: what it did, and the API it expected
 
-This is the rewrite reference for the developer panel. The old panel (an AngularJS 1.x app built
-on the commercial "Fuse" theme, Persian RTL, gulp/bower toolchain) is not copied into this repo:
-the theme is a paid template and cannot be redistributed, the toolchain is dead, and the code was
-already half broken. Only this document survives. Survey date 2026-09-30; updated after roadmap
-step 2 dropped billing, which removed the usage dashboard from the contract.
+This document records the AngularJS panel used by Apadana and the contract it expected.
+It is historical reference for the rewrite. Use [the admin API guide](admin-api.md) and
+[panel README](../panel/README.md) for the current implementation.
 
-## Implemented in step 7
-
-The new admin API is in `backend/WildCat.Admin`, co-hosted with the silo; `admin-api.md` lists the
-final endpoints, configuration and error format. Compared with the legacy contract below: every
-route is under `/api/v1` with real HTTP verbs (PUT upserts, DELETE deletes, no `.../delete`
-POSTs); auth is `/auth/register`, `/auth/activate`, `/auth/resend-activation`, `/auth/login`,
-`/auth/request-password-reset`, `/auth/reset-password` and `/auth/change-password` with plain
-passwords; the profile moved to `/me` (with `isAdmin` instead of `type`); game modes are at
-`/games/{gameKey}/game-modes` with a `criteria` array; publisher data is at
-`/publisher-data/{key}`; `/admin/developers` pages and searches; errors are problem details with
-`detail`. Script events gained a DELETE, which empties the script until step 9 can clear it.
+The old panel used the commercial Fuse theme and was not copied into this repository.
+The survey below dates from 2026-09-30 and excludes billing and CafeBazaar features removed
+from WildCat.
 
 ## The legacy contract
 
-One important finding: the REST API this panel calls (`/api/v1/...`) does not exist in the backend
-in this repo. The backend's gateway (`WildCat.Gateway`) only exposes the game WebSocket at `/ws`.
-The HTTP admin API lived in some other project that was never checked in. So the panel rewrite
-also needs a new admin HTTP API on the backend side. Treat the endpoint table below as the
-contract the old panel expected, not as something that exists.
+The HTTP API called by the old panel was not included in the imported source. The table below
+records the legacy contract, which differs from the current `/api/v1` API.
 
-## What the panel really was
+## Panel features
 
-The real product was: auth (register with email activation, login, forgot/reset password), a
+The panel provided: auth (register with email activation, login, forgot/reset password), a
 games list, a per-game config area with five tabs, a developer-wide key/value page, and an
 admin-only developer list. Everything else (invoice, profile, quick panel chat, error pages,
 theme switcher) was Fuse demo content.
@@ -71,8 +58,9 @@ the server enforced admin access.
 
 GET `/games` returned an array of games. Columns: name, key, info, edit, delete.
 
-Info dialog: game key, developer key, developer secret, each with a copy button. These are the
-SDK credentials a game needs.
+Info dialog: game key, developer key, developer secret, each with a copy button.
+The developer and game keys identify a game. The developer secret is for server-side
+administration and must not be included in a client build.
 
 Add/edit dialog fields: `name` (required), `description`, `studioName`, `website`,
 `genre` (0 Action, 1 Arcade, 2 Strategy, 3 Puzzle, 4 Casual, 5 Sports), `region` (0 Domestic,
@@ -128,7 +116,7 @@ Developer-scoped key/value store (maps to `WildCat.Interfaces/IDeveloperStorage.
 - Create and update were mostly a single upsert POST. Errors carried `{message}`.
 - The only role signal was `type` on the GET `/developers` response ("admin" or anything else).
 
-## Rebuild list
+## Rewrite scope (historical)
 
 Keep: auth flow (with a modern password hash instead of client-side MD5), role-aware shell with
 real route guards, admin developer list with pagination, games CRUD plus the credentials dialog,

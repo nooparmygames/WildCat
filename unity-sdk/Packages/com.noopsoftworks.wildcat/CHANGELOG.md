@@ -1,8 +1,6 @@
 # Changelog
 
-All notable changes to this package are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
-[Semantic Versioning](https://semver.org/). Before 1.0.0, minor versions may break the API.
+Before 1.0.0, minor versions may break the API.
 
 ## [0.1.0] - 2026-09-30
 
@@ -26,7 +24,8 @@ The first release as a UPM package for Unity 6, replacing the `Assets/Backend` S
   queued are not sent.
 - Errors as exceptions: `WildCatException` (server error code and text, including the gateway's
   ErrorMsg refusals), `TimeoutException`, `WildCatDisconnectedException`.
-- `IMainThreadDispatcher` seam; `WildCatBehaviour` pumps a `QueuedDispatcher` so events and Task
+- `IMainThreadDispatcher` lets applications control where callbacks run. `WildCatBehaviour`
+  pumps a `QueuedDispatcher` so events and Task
   completions run on Unity's main thread.
 - Calls for password recovery and activation codes: `Auth.RecoverPasswordAsync`,
   `Auth.ResetPasswordAsync`, `Auth.ResendActivationCodeAsync`.
@@ -40,7 +39,7 @@ The first release as a UPM package for Unity 6, replacing the `Assets/Backend` S
 ### Changed
 
 - The wire protocol is the one shared with the server (`Runtime/Protocol`, generated from
-  `backend/WildCat.Protocol`); it is not compatible with servers from before roadmap step 6.
+  `backend/WildCat.Protocol`). It is not compatible with the earlier SDK's wire format.
 - Passwords are sent only over `wss://` or to localhost unless
   `AllowPlainTextPasswordsWithoutTls` is set.
 
@@ -59,9 +58,11 @@ The first release as a UPM package for Unity 6, replacing the `Assets/Backend` S
 
 ### Fixed
 
-Bugs of the old SDK that the rewrite does not have: responses lost after Disconnect and a
-second Connect, `OnDisconnected` raised twice, `DenyChallengeRequest` never completing, inventory
-calls throwing on a null inventory name, `CreateAccountWithUserAndPassword` sending the wrong
-field, leaderboard answers matched by guessing (an empty Top query never completed), requests
-refused by the gateway (ErrorMsg) never completing, an unsynchronized handler table and queue
-between the socket thread and the main thread.
+- Reconnecting after an explicit disconnect no longer loses responses or raises the final
+  disconnect event twice.
+- Denying a challenge completes the request. Gateway refusals also complete pending requests
+  with an error instead of leaving them waiting.
+- Inventory calls accept a null inventory name, and account creation sends the correct
+  password field.
+- Leaderboard responses match requests by ID and query type, including empty results.
+- The handler table and outgoing queue synchronize access between the socket and main threads.

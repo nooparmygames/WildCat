@@ -1,16 +1,13 @@
 # Legacy backend notes: grains, flows, dependencies, known bugs
 
-Survey of `backend/` as copied from the Apadana 2 repository on 2026-09-30 (Orleans 3.4.3, net5.0,
-about 18,000 lines), updated after roadmap step 2 removed PlayFab, CafeBazaar, billing and the
-dead subsystems, after step 4 fixed the bugs marked "Fixed in step 4" in the bug list, and after
-step 5 added the PostgreSQL providers and the configuration model, and after step 6 split the
-gateway and moved the protocol behind one codec (docs/gateway.md, docs/wire-protocol.md). Removed code keeps a short note
-here (see "Removed in step 2" at the end) so bug numbers and history stay readable. CLAUDE.md
-describes the Orleans 10 host from step 1. Read this before touching a grain. File names are
-relative to `backend/`. Line numbers refer to the copied files.
+This inventory records the backend imported from Apadana on 2026-09-30 and the changes made
+through the migration. The grain and flow descriptions include those changes; the numbered
+bug list retains both open issues and resolved entries so existing references remain useful.
 
-Paths and names follow the WildCat rename from roadmap step 3; the table below gives each
-project's legacy name.
+Use [AGENTS.md](../AGENTS.md) for the current architecture and working rules,
+[the gateway guide](gateway.md) for handlers, and [the protocol reference](wire-protocol.md)
+for messages. File paths below are relative to `backend/`. Historical line numbers refer to
+the imported files, and the project table includes their former names.
 
 ## Projects
 

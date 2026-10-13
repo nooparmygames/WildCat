@@ -1,7 +1,7 @@
 # WildCat SDK manual
 
-The package README covers installing, a first script and migrating from the old SDK. This page
-describes how the SDK is built, the whole API, and how it is tested.
+The [package README](../README.md) covers installation and your first client script. This
+manual explains the connection lifecycle, threading, feature APIs and configuration.
 
 ## Layout
 
@@ -20,7 +20,7 @@ Documentation~/  this page.
 ```
 
 Everything that is not Unity-specific lives in `WildCat.Core`, which compiles as plain .NET
-Standard 2.1 with C# 9. That is what makes it testable without Unity (see Testing).
+Standard 2.1 with C# 9. You can use the core from .NET tools without loading Unity assemblies.
 
 ## Architecture
 
@@ -45,8 +45,8 @@ game code --> client.Feature --> WildCatConnection --> ITransport --> WebSocket 
   holds at most `MaxQueuedMessages` frames and `MaxQueuedBytes` bytes (then `Relay.Send`
   returns false and requests fail at once with `WildCatErrorCodes.SendQueueFull`; heartbeats and
   the resume are exempt, so a stalled socket still shows up as a missed heartbeat), and the writer
-  skips requests that timed out or were cancelled while they waited, so a request reported as
-  failed was never sent.
+  skips requests that timed out or were cancelled while they waited. A timeout after sending
+  does not establish whether the server completed the operation.
 - Frames without a request id (and game messages above `HighestInternal`) are pushes: the
   registered handlers for that message type run through the dispatcher, then `MessageReceived`.
 - The feature clients are thin: they build the request payload, pick the frame shape the gateway
@@ -167,60 +167,17 @@ so awaited calls fail instead of waiting forever.
 WebSocket in WebGL players, and `WildCatBehaviour` picks it there. Custom transports (a test
 double, a proxy) plug in through `ITransportFactory`.
 
-## Testing
+## Platform support
 
-`unity-sdk/Tests/` in the repository holds plain .NET projects, so the SDK is checked without
-Unity (CI runs them in the backend job):
+The SDK targets Unity 6 LTS. The Editor and desktop/mobile transport uses `ClientWebSocket`;
+WebGL uses the browser WebSocket through the supplied `.jslib` bridge.
 
-- `WildCat.Sdk.Tests` (xUnit, net10.0) compiles `Runtime/Protocol` and `Runtime/Core` from this
-  package into the test assembly and runs them against the real server: an in-process Orleans
-  test cluster with the memory providers and the real WebSocket gateway on Kestrel
-  (`ServerFixture`). It covers session and logins, email accounts, gateway refusals, find match
-  with two clients, relay order, match properties and events, friend and challenge events, cloud
-  data, leaderboards through a script event, inventory, request timeouts with late answers,
-  heartbeats, explicit disconnects, server-side drops with reconnection and session resume,
-  backoff and giving up, and the queued dispatcher. `CoreTests` use an in-memory fake server for
-  exact control (frame shapes, answer order, errors, heartbeat timeouts, resume with a password,
-  refused resume and the retried one after an internal error, answers pumped after a
-  reconnection or a disconnect, the send limits, the server time offset). `WebGLTransportTests`
-  run the browser transport's receive queue (compiled without `UNITY_WEBGL`, so without the
-  .jslib).
-- `WildCat.Sdk.CoreCheck` builds `Runtime/Core` the way Unity does: netstandard2.1, C# 9, no
-  nullable annotations, warnings as errors, against a separate `WildCat.Protocol` assembly.
-- `PackageLayoutTests` check package.json, the asmdefs and that every file has a `.meta` with a
-  unique GUID.
+WebGL browser execution and mobile IL2CPP runtime support remain unverified. A successful
+WebGL build does not establish browser behavior. Before targeting WebGL, check connection,
+message delivery, request timeouts, heartbeats and reconnection in your target browser.
+For mobile, check these behaviors in an IL2CPP player on the target device.
 
-```bash
-dotnet test unity-sdk/Tests/WildCat.Sdk.Tests/WildCat.Sdk.Tests.csproj
-dotnet build unity-sdk/Tests/WildCat.Sdk.CoreCheck/WildCat.Sdk.CoreCheck.csproj
-tools/unity-package-meta.sh     # writes missing .meta files after adding files without Unity
-```
-
-## What is verified and what is not
-
-Verified with plain .NET: everything in `Runtime/Core` and `Runtime/Protocol`, end to end
-against the real gateway, and the Core's compatibility with .NET Standard 2.1 and C# 9.
-
-Verified in Unity 6000.0.80f1 on 2026-10-02: the package imported and all runtime and editor
-assemblies compiled. The Basic sample imported through Package Manager. The settings and Add
-Client menus worked, and the About window loaded its logo. In a resident headless Editor,
-two Basic sample clients connected to the host, logged in, joined the same match, relayed cube
-positions, submitted a score through a server script and read the leaderboard. Play mode
-advanced frames and the console reported no runtime errors.
-
-A WebGL player containing the sample also built successfully with IL2CPP, including the
-transport and `.jslib`. Its browser execution still needs verification:
-
-- The browser WebSocket callbacks, `Task.Delay` (heartbeat and reconnection backoff), and
-  request timeouts (`CancellationTokenSource` timers) have not been exercised in a browser.
-  If the timers do not fire on WebGL's single thread, drive them from the dispatcher pump
-  in `Update`; that change still needs evidence from a browser run.
-- The `.meta` files and the sample's settings asset imported successfully. Visual layout was
-  not inspected in the headless Editor.
-- `ClientWebSocket` on Unity 6 IL2CPP mobile players is expected to work (Unity supports it) but
-  was not tried.
-
-## Known server issues seen from the SDK
+## Known limitations
 
 - `Friends.InviteByDisplayNameAsync` always fails: the server's map from display names to
   players is never filled.

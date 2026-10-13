@@ -4,7 +4,7 @@ One IMGUI screen that walks through the SDK: connect and log in with a device id
 and relay cube positions between two clients, submit a score through a server script event and
 read the leaderboard, and invite, accept and list friends.
 
-The sample has no scene file; it builds what it needs at run time. Setting it up takes a minute:
+The sample creates its UI and objects at runtime. Add it to an empty scene:
 
 1. Start a server. From the repository root, `dotnet run --project backend/WildCat.Host` runs
    one on `ws://localhost:5000/ws` with the development developer and game keys that

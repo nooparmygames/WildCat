@@ -3,18 +3,15 @@
 `com.noopsoftworks.wildcat` is the Unity 6 client of the [WildCat](https://github.com/nooparmygames/wildcat)
 game backend: sessions, device, user name and email accounts, friends, challenges, matchmaking,
 relay matches, leaderboards, inventory, cloud data and server script events, over one WebSocket.
-Every call returns a Task; the connection has request timeouts, a heartbeat and automatic
-reconnection with session resume.
+Request/response operations return Tasks. The connection handles request timeouts, heartbeats
+and automatic reconnection with session resume.
 
-Status: 0.1.0, pre-release. The engine-free core is tested with plain .NET against the real
-server. Unity 6000.0.80f1 also passed package import, compilation, editor menu and Basic sample
-Play mode checks against the host, plus a WebGL player build. Browser execution and mobile
-IL2CPP players still need verification. See
-[Documentation~/index.md](Documentation~/index.md#what-is-verified-and-what-is-not).
+Version 0.1.0 is a pre-release for Unity 6 LTS. The API may change before 1.0.
+See [platform support](Documentation~/index.md#platform-support) for WebGL and mobile limits.
 
 ## Install
 
-Unity 6 (6000.0) or later. In Window > Package Manager, choose + > Install package from git URL
+Use Unity 6 LTS. In Window > Package Manager, choose + > Install package from git URL
 and enter
 
 ```
@@ -138,7 +135,7 @@ destroyed it drops the connection and pumps once more, so code awaiting a call s
 The old SDK was a singleton MonoBehaviour, `BackendPlatform.Instance`, whose calls returned a
 `Result` to poll or `yield return r.Wait()`. The new calls are grouped by feature on a
 `WildCatClient` (`wildCat.Client` below) and return Tasks. Result fields map to Tasks as follows:
-`isSuccessful` is a completed Task, `errorCode`/`errorMessage` are `WildCatException.ErrorCode` and
+`isSuccessful` means the Task completed successfully, `errorCode`/`errorMessage` are `WildCatException.ErrorCode` and
 `Message`, `value` is the Task's result (or `TaskYieldInstruction<T>.Result` with coroutines).
 
 | Old (`BackendPlatform.Instance.`) | New (`wildCat.Client.`) |

@@ -1,10 +1,10 @@
 # The WebSocket gateway
 
-`backend/WildCat.Gateway` is the WebSocket front door of the host: clients connect to `/ws`, send
-one binary frame per message (see `docs/wire-protocol.md`) and get answers and pushed events
-back. It runs inside the silo process and calls grains through the silo's `IClusterClient`.
-Roadmap step 6 split the old one-class gateway (`FrontEndServer`) into a transport, a dispatcher
-and one handler per message. This page explains the parts and how to add a handler.
+The gateway accepts client connections at `/ws`, dispatches requests and sends responses and
+events. Each WebSocket binary message contains one [protocol frame](wire-protocol.md).
+`backend/WildCat.Gateway` runs inside the silo process and calls grains through the silo's
+`IClusterClient`. Its transport handles sockets, its dispatcher checks and routes requests,
+and its handlers implement the individual operations.
 
 ## Layout
 
@@ -67,9 +67,9 @@ WildCat.Gateway/
    dispatcher's `OnFrameAsync` for it. Frames are handed on one at a time, in arrival order.
 2. The dispatcher decodes it with `WireCodec.Decode`. A frame that does not decode gets an
    ErrorMsg (8) with code 1, "The message could not be read."
-3. Game messages (ids above `HighestInternal`, 1023) go to the connection's relay queue, which
-   holds at most 256 of them and `Gateway:RelayQueueBytes` (4 MiB) of them; when it is full the
-   receive loop waits, so the gateway stops reading that socket. One relay worker per connection
+3. Game messages (ids above `HighestInternal`, 1023) go to the connection's relay queue.
+   It holds at most 256 messages, with a byte limit set by `Gateway:RelayQueueBytes` (4 MiB).
+   When either limit is reached, the receive loop waits for space. One relay worker per connection
    checks the session, and passes each one on to the other players of the match in its game
    target, in order, without the ticket.
 4. For any other id the dispatcher looks up the route. No route: ErrorMsg code 1, "Unsupported
@@ -177,9 +177,7 @@ namespace WildCat.Gateway
   `context.Send(frame)`.
 - Never block (`.Result`, `.Wait()`) and never wait on a socket; `context.Send` and
   `GatewayConnection.TrySend` only queue.
-- Every request type the old `FrontEndServer` handled has its own handler since roadmap step 6b;
-  the temporary adapter that served the rest in between is gone. A request type without a
-  handler is answered with "Unsupported message type".
+- A request type without a handler is answered with "Unsupported message type".
 
 ## Pushing to clients
 

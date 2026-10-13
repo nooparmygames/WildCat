@@ -9,6 +9,44 @@ These files preserve project context for agents that can read this checkout. The
 import into account-wide ChatGPT saved memory. Keep durable project facts here, with dates and
 supporting files, and keep temporary command output in the conversation.
 
+## Customization roadmap added on 2026-10-13
+
+[The developer experience roadmap](../developer-experience-roadmap.md) continues the completed
+migration milestones with planned items 10 through 15: serialize/schema support, generated
+multilingual RPC contracts, compiled C# modules and grain extensions, typed state subscriptions,
+development inspection and tracing, command recovery, and optional simulation/hosting modules.
+
+The goal is to make backend customization feel as natural as working in a game engine.
+Grains, sets of grains and ordinary modules take priority over scripting. Proceed directly
+with implementation rather than a separate trial or comparative benchmark phase. Normal
+implementation verification remains applicable.
+
+## Documentation review on 2026-10-13
+
+Applied UEWF's `product-docs` writing guidance to the project guides: explain behavior through
+its purpose and consequences, preserve examples, and keep verification reports in internal
+records. User-facing SDK pages now describe platform limits without recounting the Editor
+session. Corrected stale admin status and Unity version text, clarified historical surveys,
+and documented the SDK's 100-character key limit separately from the gateway's 128-character
+limit. Local Markdown links, heading anchors, ASCII, code fences and protocol documentation
+consistency checks passed. No application code changed or runtime tests ran for this edit.
+
+## Public release preparation on 2026-10-13
+
+The requested scope is preparation only: no push or repository visibility change. The README
+now includes cloning and local panel startup. [Server deployment](../server-deployment.md)
+covers Linux, PostgreSQL, a panel build mounted through `compose.server.yaml`, a host-installed
+HTTPS proxy, trusted forwarding, account setup, backups and updates.
+
+Compose 2.40.3 accepted the merged server configuration with synthetic validation values;
+the host has one loopback-only published port. Markdown checks passed across 34 files.
+No live server deployment or HTTPS certificate issuance was performed. A limited pattern scan
+of 1,561 blobs reachable through local Git refs found no recognizable AWS access keys, GitHub
+or Slack tokens, Google API keys, private keys or AWS secret assignments. This is not a full
+secret audit and does not cover remote refs absent locally. The older Apadana credential
+rotation follow-up remains unconfirmed. GitHub CLI is not authenticated, so remote visibility
+and current CI status were not checked. Changes remain local and uncommitted.
+
 ## Merged and verified on 2026-10-02
 
 The owner authorized merging the completed remote branch, running the tests and checking the
@@ -20,7 +58,7 @@ under `.agents/skills/orleans`.
 
 The current backend is Orleans 10.3.1 on .NET 10, with a shared netstandard2.1 protocol, a
 co-hosted gateway and admin API, PostgreSQL providers, a React panel and the Unity 6 UPM SDK.
-All nine roadmap items were already implemented on the merged branch. The older local-state
+All nine original roadmap items were already implemented on the merged branch. The older local-state
 sections below describe the context-import history, not pending product work.
 
 Release build passed. Backend tests passed 717 with one existing skipped test, including all

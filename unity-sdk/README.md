@@ -1,4 +1,4 @@
-# unity-sdk
+# WildCat Unity SDK project
 
 The WildCat client SDK for Unity 6, and the Unity project it is developed in.
 
@@ -11,13 +11,10 @@ Tests/WildCat.Sdk.Tests/              plain .NET tests of the package's engine-f
 Tests/WildCat.Sdk.CoreCheck/          builds the engine-free code as Unity does (netstandard2.1, C# 9)
 ```
 
-Open this folder with Unity 6 LTS. ProjectVersion.txt names 6000.0.80f1, the Editor used for
-the import, compilation, editor menu, Basic sample Play mode and WebGL build checks on
-2026-10-02. See [the verification record](../docs/project-memory/verification-2026-10-02.md)
-for the results and remaining platform checks. Some project settings still come from the
-Unity 2020.3 project the SDK started in; the Editor updates those settings when needed.
+Open this folder with Unity 6 LTS. `ProjectVersion.txt` selects 6000.0.80f1. Some settings
+originate from the earlier Unity project and are upgraded by the Editor when needed.
 
-The tests need only the .NET 10 SDK:
+The core tests need only the .NET 10 SDK. Run them from the repository root:
 
 ```bash
 dotnet test unity-sdk/Tests/WildCat.Sdk.Tests/WildCat.Sdk.Tests.csproj

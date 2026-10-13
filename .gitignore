@@ -24,6 +24,7 @@ appsettings.*.local.json
 node_modules/
 dist/
 .tmp/
+*.dump
 coverage/
 npm-debug.log*
 

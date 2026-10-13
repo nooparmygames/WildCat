@@ -1,14 +1,11 @@
 # Wire protocol between the Unity SDK and the gateway
 
-One source, `backend/WildCat.Protocol` (netstandard2.1, C# 9, no Orleans, ASP.NET or Newtonsoft
-references, namespace `WildCat.Protocol`), shared by the server and the Unity SDK. The SDK's copy
-in the Unity package's `Runtime/Protocol` (`unity-sdk/Packages/com.noopsoftworks.wildcat`) is
-generated from it (see "The SDK copy" below);
-until roadmap step 6 the SDK kept its own diverged `LowLevelAPI/Messages.cs`. Documented from the
-code on 2026-09-30 and updated after roadmap steps 2 (removed messages), 3 (the WildCat rename:
-namespace `RealtimeServer`, `ApadanaMessageBase` and `ApadanaMsgType` became `WildCat.Protocol`,
-`WildCatMessageBase` and `WildCatMsgType`), 4 (security fixes) and 6 (this format, the codec and
-the split gateway; `docs/gateway.md` describes the gateway side).
+The gateway and Unity SDK share the protocol defined in `backend/WildCat.Protocol`.
+It targets netstandard2.1 and C# 9 without Orleans or ASP.NET dependencies. The SDK's
+`Runtime/Protocol` folder is generated from that source; see [The SDK copy](#the-sdk-copy).
+
+This page describes the current frame format, encodings and message IDs. See
+[the gateway guide](gateway.md) for request dispatch and handler implementation.
 
 ## Source layout
 
@@ -30,7 +27,7 @@ backend/WildCat.Protocol/
 
 Everything that turns messages into bytes goes through `WireCodec`; nothing outside
 `WildCat.Protocol` touches `BinaryWriter` or `BinaryReader`, so the format can be replaced in one
-place later (the owner wants to, and judged MessagePack too large a payload):
+place without changing the gateway handlers:
 
 ```csharp
 byte[]             WireCodec.Encode(WildCatMessageBase frame)
@@ -144,8 +141,8 @@ gateway answers a request with a longer one with code 1 and "The {what} is longe
 characters." before any grain call: player (account) ids, device ids and user names 128
 characters, email addresses 254, display names and the names of leaderboards, inventories,
 items, game modes and script events 128, cloud data and publisher data keys 128, cloud data values
-65,536 (`WireLimits`; the SDK refuses to send longer ones). Match property keys are limited by the
-match itself.
+65,536 (`WireLimits`). The SDK also checks these limits, but applies a stricter 100-character
+limit to cloud and publisher data keys. Match property keys are limited by the match itself.
 
 ## Game messages and relay
 
@@ -343,7 +340,7 @@ Wire format changes, made on both sides at once since the SDK now gets the same 
 
 `unity-sdk/Packages/com.noopsoftworks.wildcat/Runtime/Protocol` (the Unity package's
 `WildCat.Protocol` assembly; `Assets/Backend/Plugins/Protocol` before step 8) is generated, never
-edited: change `backend/WildCat.Protocol`, then run from anywhere
+edited: change `backend/WildCat.Protocol`, then run from the repository root:
 
 ```bash
 tools/sync-protocol.sh          # or, on Windows: pwsh tools/sync-protocol.ps1

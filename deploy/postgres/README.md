@@ -15,8 +15,9 @@ the dotnet/orleans repository at tag `v10.3.1`, which matches the Orleans packag
 They must run in this order, once, against an empty database. `compose.yaml` mounts this folder
 at `/docker-entrypoint-initdb.d`, and the postgres image runs the `.sql` files there in name order
 the first time it initializes its data volume (it skips this README). They do not run again on
-later starts, so deleting the volume (`docker compose down -v`) is the way to start over. For a
-database you manage yourself, run them in order as the user WildCat connects with, for example:
+later starts. To reset a disposable development database, `docker compose down -v` deletes its
+volume and all stored data; the next start creates a new database. For a database you manage
+yourself, run the scripts in order as the user WildCat connects with:
 
 ```bash
 for f in deploy/postgres/*.sql; do psql -v ON_ERROR_STOP=1 -h <host> -U wildcat -d wildcat -f "$f"; done

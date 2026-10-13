@@ -5,7 +5,7 @@ Since roadmap step 8 the Unity SDK is the UPM package `com.noopsoftworks.wildcat
 `Assets/Backend` SDK (`BackendPlatform`) that came over from the Apadana project. The package's
 README.md is the user guide (install, quick start, migration table) and its Documentation~/index.md
 the manual (architecture, API, options, testing). This page keeps the history and the status for
-people working on the SDK. Updated 2026-09-30.
+people working on the SDK.
 
 ## Layout
 
@@ -28,11 +28,11 @@ unity-sdk/
 tools/unity-package-meta.sh    writes missing .meta files for files added without Unity
 ```
 
-The ProjectSettings files other than ProjectVersion.txt (now 6000.0.58f2) are still the 2020.3
+The ProjectSettings files other than ProjectVersion.txt (6000.0.80f1) are still the 2020.3
 ones; Unity 6 upgrades them on first open. The old `Packages/manifest.json` (2D, VS Code and
 DOTS-era packages) was trimmed to what the sample needs.
 
-## Design in short
+## Connection design
 
 - One `WildCatConnection` per client: a single writer drains a ConcurrentQueue of frames
   (SemaphoreSlim signalled; netstandard2.1 has no Channels), a receive loop matches answers to

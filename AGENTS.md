@@ -257,6 +257,24 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
    transport, reconnection, Task-based results, sample scene).
 9. (Done) Script sandbox hardening. CI.
 
+The next phase makes backend customization feel as natural and inspectable as working in a
+game engine. See [the customization and developer experience roadmap](docs/developer-experience-roadmap.md)
+for scope and implementation order. Compiled C# modules, grains and
+sets of grains are the primary extension model; runtime scripting is not a current priority.
+
+10. (Planned) Add Glenn Fiedler's serialize/schema support, multilingual contracts and protocol
+    compatibility handling at the client/server boundary.
+11. (Planned) Add public compiled-module extension APIs and generated typed RPC clients and
+    server adapters without requiring framework forks.
+12. (Planned) Add typed state subscriptions, permission-scoped replicated views and optional
+    room/match modules and shared deterministic actions.
+13. (Planned) Add integrated local startup, breakpoint debugging, entity/state inspection,
+    request tracing and recorded replay for debugging.
+14. (Planned) Define state ownership, persistence boundaries, duplicate handling and recovery
+    semantics for custom commands.
+15. (Planned) Add optional authoritative simulation modules and dedicated-server hosting
+    integrations, keeping persistent services and simulation execution separate.
+
 ## Working rules for this repo
 
 - Use the `orleans` skill for anything touching grains, hosting, storage, streams or tests. Its
@@ -288,3 +306,10 @@ After substantive work, give a self-contained recap of the full request: what ch
 what was tested and the result, and any unfinished work or limitations. Link the main files and
 state whether changes were committed, pushed or published. Ordinary questions need a direct
 answer; interrupted work must be described as incomplete.
+
+Product documentation explains how to use WildCat. Keep test counts, review history, agent
+activity and delivery reports in project memory or chat recaps. Retain support limits and
+troubleshooting steps where they affect the reader. Introduce each concept through its job,
+then explain the relevant behavior and consequence. Preserve worked examples and exact API
+names; split overloaded sentences instead of turning explanations into terse fragments.
+Roadmaps describe planned features directly, without approval history or competitor comparisons.
