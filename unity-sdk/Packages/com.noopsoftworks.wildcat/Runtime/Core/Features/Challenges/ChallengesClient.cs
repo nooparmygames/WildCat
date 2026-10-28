@@ -75,7 +75,7 @@ namespace WildCat
         public async Task<ChallengeList> GetAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             ChallengeRequestsMessage answer = await Request<ChallengeRequestsMessage>(WildCatMsgType.GetPlayerChallengesRequest,
-                new EmptyMessage(), WildCatMsgType.GetPlayerChallengesResponse, cancellationToken).ConfigureAwait(false);
+                new EmptyMessage(), WildCatMsgType.GetPlayerChallengesResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return new ChallengeList(Convert(answer.sent), Convert(answer.received));
         }
 

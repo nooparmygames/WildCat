@@ -34,7 +34,7 @@ namespace WildCat
         {
             RequireKey(key);
             StringMessage answer = await Request<StringMessage>(WildCatMsgType.GetCloudDataRequest, new StringMessage { value = key },
-                WildCatMsgType.GetCloudDataResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetCloudDataResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
 
@@ -55,7 +55,7 @@ namespace WildCat
         {
             RequireKey(key);
             GetPublicCloudDataResponse answer = await Request<GetPublicCloudDataResponse>(WildCatMsgType.GetPublicCloudDataRequest,
-                new StringMessage { value = key }, WildCatMsgType.GetPublicCloudDataResponse, cancellationToken).ConfigureAwait(false);
+                new StringMessage { value = key }, WildCatMsgType.GetPublicCloudDataResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.hasValue ? answer.value : null;
         }
 
@@ -66,7 +66,7 @@ namespace WildCat
             RequireKey(key);
             GetPlayerPublicCloudDataResponse answer = await Request<GetPlayerPublicCloudDataResponse>(
                 WildCatMsgType.GetPlayerPublicCloudDataRequest, new GetPlayerPublicCloudDataRequest { player = playerId, key = key },
-                WildCatMsgType.GetPlayerPublicCloudDataResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetPlayerPublicCloudDataResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.hasValue ? answer.value : null;
         }
 
@@ -78,7 +78,7 @@ namespace WildCat
         {
             RequireKey(key);
             StringMessage answer = await Request<StringMessage>(WildCatMsgType.GetPublisherDataRequest, new StringMessage { value = key },
-                WildCatMsgType.GetPublisherDataResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetPublisherDataResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
     }

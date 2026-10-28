@@ -49,6 +49,7 @@ namespace WildCat.Unity
 
         private readonly QueuedDispatcher dispatcher = new QueuedDispatcher();
         private WildCatClient client;
+        private PumpedConnectionScheduler webScheduler;
 
         /// <summary>The settings the client is created from. Set it before the first use of <see cref="Client"/>.</summary>
         public WildCatSettings Settings
@@ -121,6 +122,7 @@ namespace WildCat.Unity
 
         private void Update()
         {
+            webScheduler?.Pump();
             dispatcher.Pump(maxCallbacksPerFrame > 0 ? maxCallbacksPerFrame : int.MaxValue, OnCallbackError);
         }
 
@@ -151,8 +153,11 @@ namespace WildCat.Unity
                 return;
             if (settings == null)
                 throw new InvalidOperationException("Assign a WildCatSettings asset to the WildCat Client component on " + name + ".");
+#if UNITY_WEBGL && !UNITY_EDITOR
+            webScheduler = new PumpedConnectionScheduler();
+#endif
             client = new WildCatClient(settings.CreateOptions(), dispatcher, CreateTransportFactory(),
-                new UnityWildCatLogger(settings.LogLevel));
+                new UnityWildCatLogger(settings.LogLevel), webScheduler);
         }
 
         private static ITransportFactory CreateTransportFactory()

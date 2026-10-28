@@ -24,7 +24,7 @@ namespace WildCat
         {
             RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.GetInventoryRequest,
-                new StringMessage { value = inventory ?? "" }, WildCatMsgType.GetInventoryResponse, cancellationToken).ConfigureAwait(false);
+                new StringMessage { value = inventory ?? "" }, WildCatMsgType.GetInventoryResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return Items(answer.items);
         }
 
@@ -51,7 +51,7 @@ namespace WildCat
                 throw new ArgumentException("At most " + WireLimits.MaxInventoryItemsPerRequest + " items can be removed at once.", nameof(items));
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.RemoveInventoryItemRequest,
                 new RemoveItemInventoryRequestMessage { inventoryName = inventory ?? "", items = changes.ToArray() },
-                WildCatMsgType.RemoveInventoryItemResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.RemoveInventoryItemResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return Items(answer.items);
         }
 
@@ -60,7 +60,7 @@ namespace WildCat
         {
             RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryResponseMessage answer = await Request<GetInventoryResponseMessage>(WildCatMsgType.UnlockInventoryRequest,
-                new StringMessage { value = inventory ?? "" }, WildCatMsgType.UnlockInventoryResponse, cancellationToken).ConfigureAwait(false);
+                new StringMessage { value = inventory ?? "" }, WildCatMsgType.UnlockInventoryResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return Items(answer.items);
         }
 
@@ -70,7 +70,7 @@ namespace WildCat
             RequireLength(inventory, "inventory", WireLimits.MaxNameLength);
             GetInventoryUnlockTimeResponseMessage answer = await Request<GetInventoryUnlockTimeResponseMessage>(
                 WildCatMsgType.GetInventoryUnlockTimeRequest, new StringMessage { value = inventory ?? "" },
-                WildCatMsgType.GetInventoryUnlockTimeResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetInventoryUnlockTimeResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.time;
         }
 

@@ -27,7 +27,7 @@ namespace WildCat
         public async Task<string> GetNameAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             StringMessage answer = await Request<StringMessage>(WildCatMsgType.GetNameRequest, new EmptyMessage(),
-                WildCatMsgType.GetNameResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetNameResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
 
@@ -36,7 +36,7 @@ namespace WildCat
         {
             RequirePlayerId(playerId, "playerId");
             StringMessage answer = await Request<StringMessage>(WildCatMsgType.GetPlayerNameRequest, new StringMessage { value = playerId },
-                WildCatMsgType.GetPlayerNameResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetPlayerNameResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
     }

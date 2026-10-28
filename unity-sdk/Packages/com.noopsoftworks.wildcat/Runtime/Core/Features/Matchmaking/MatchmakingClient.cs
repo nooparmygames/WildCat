@@ -47,7 +47,7 @@ namespace WildCat
             {
                 answer = await Request<FindMatchResponse>(WildCatMsgType.FindMatchRequest,
                     new FindMatchRequest(gameMode, skill, waitSeconds), WildCatMsgType.FindMatchResponse, cancellationToken,
-                    TimeSpan.FromSeconds(waitSeconds) + Connection.Options.RequestTimeout).ConfigureAwait(false);
+                    TimeSpan.FromSeconds(waitSeconds) + Connection.Options.RequestTimeout).ConfigureAwait(Connection.CaptureContext);
             }
             catch (WildCatException ex) when (ex.ErrorCode == WildCatErrorCodes.Refused && !ex.IsGatewayRefusal)
             {

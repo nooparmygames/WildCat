@@ -46,7 +46,7 @@ namespace WildCat
             }
             FriendlistCollection answer = await Request<FriendlistCollection>(WildCatMsgType.GetFriendsRequest,
                 new GetFriendsRequestMessage { publicKeys = publicDataKeys ?? new string[0] },
-                WildCatMsgType.GetFriendsResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.GetFriendsResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
 
             List<Friend> friends = new List<Friend>();
             foreach (FriendlistEntry entry in answer.friends)

@@ -16,8 +16,10 @@ namespace WildCat
     /// when the socket drops.
     /// </summary>
     /// <remarks>
-    /// Thread safety: every public member can be called from any thread. The loops run on
-    /// background threads; event handlers, push handlers and the completion of the Tasks returned
+    /// With the default scheduler, public members can be called from any thread and socket work
+    /// can run on background threads. A PumpedConnectionScheduler keeps the work on its pumping
+    /// thread instead; create and use that client on the same thread. Event handlers, push handlers
+    /// and the completion of the Tasks returned
     /// by <see cref="RequestAsync{TResponse}"/> go through the <see cref="IMainThreadDispatcher"/>
     /// (Unity's main thread in a game). Most code uses the feature clients of
     /// <see cref="WildCatClient"/> rather than this class.
@@ -34,6 +36,7 @@ namespace WildCat
         private readonly ITransportFactory transportFactory;
         private readonly IMainThreadDispatcher dispatcher;
         private readonly IWildCatLogger logger;
+        private readonly IConnectionScheduler scheduler;
         private readonly object gate = new object();
         private readonly ConcurrentDictionary<uint, PendingRequest> pending = new ConcurrentDictionary<uint, PendingRequest>();
         private readonly Random random = new Random();
@@ -56,8 +59,9 @@ namespace WildCat
         /// <param name="dispatcher">Where handlers and completions run; null runs them inline on the network thread.</param>
         /// <param name="transportFactory">Creates the socket for each attempt; null uses ClientWebSocket.</param>
         /// <param name="logger">Receives log messages; null drops them.</param>
+        /// <param name="scheduler">Deadlines and delays; null uses managed timers. Web players must pass a PumpedConnectionScheduler and pump it every frame.</param>
         public WildCatConnection(WildCatClientOptions options, IMainThreadDispatcher dispatcher = null,
-            ITransportFactory transportFactory = null, IWildCatLogger logger = null)
+            ITransportFactory transportFactory = null, IWildCatLogger logger = null, IConnectionScheduler scheduler = null)
         {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
@@ -66,6 +70,7 @@ namespace WildCat
             this.dispatcher = dispatcher ?? InlineDispatcher.Instance;
             this.transportFactory = transportFactory ?? new ClientWebSocketTransportFactory();
             this.logger = logger ?? NullWildCatLogger.Instance;
+            this.scheduler = scheduler ?? SystemConnectionScheduler.Instance;
         }
 
         /// <summary>Raised when ConnectAsync has opened the socket.</summary>
@@ -123,6 +128,8 @@ namespace WildCat
         {
             get { return logger; }
         }
+
+        internal bool CaptureContext => scheduler.CaptureContext;
 
         /// <summary>
         /// The round trip time of the last answered heartbeat, from the moment its frame went to the
@@ -220,7 +227,7 @@ namespace WildCat
             try
             {
                 using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionLifetime.Token))
-                    fresh = await OpenLinkAsync(linked.Token).ConfigureAwait(false);
+                    fresh = await OpenLinkAsync(linked.Token).ConfigureAwait(CaptureContext);
             }
             catch (Exception ex)
             {
@@ -280,11 +287,11 @@ namespace WildCat
             if (current != null)
             {
                 current.RequestClose();
-                Task first = await Task.WhenAny(current.Receiver, Task.Delay(CloseHandshakeTimeout)).ConfigureAwait(false);
+                Task first = await Task.WhenAny(current.Receiver, scheduler.DelayAsync(CloseHandshakeTimeout)).ConfigureAwait(CaptureContext);
                 if (first != current.Receiver)
                 {
                     current.Abort(DisconnectReason.ClientClosed, null);
-                    await Task.WhenAny(current.Receiver, Task.Delay(CloseHandshakeTimeout)).ConfigureAwait(false);
+                    await Task.WhenAny(current.Receiver, scheduler.DelayAsync(CloseHandshakeTimeout)).ConfigureAwait(CaptureContext);
                 }
                 // The receive loop normally reported the close already; this covers a loop that did not end.
                 OnLinkLost(current, DisconnectReason.ClientClosed, null);
@@ -497,8 +504,7 @@ namespace WildCat
             TimeSpan limit = timeout ?? options.RequestTimeout;
             if (limit > TimeSpan.Zero && limit != Timeout.InfiniteTimeSpan)
             {
-                request.TimeoutSource = new CancellationTokenSource(limit);
-                request.TimeoutRegistration = request.TimeoutSource.Token.Register(() => Complete(id,
+                request.TimeoutRegistration = scheduler.Schedule(limit, () => Complete(id,
                     r => r.Fail(new TimeoutException(requestType + " got no answer within " + limit.TotalSeconds + " seconds.")), true));
             }
             if (cancellationToken.CanBeCanceled)
@@ -590,14 +596,14 @@ namespace WildCat
         {
             try
             {
-                await work.ConfigureAwait(false);
+                await work.ConfigureAwait(CaptureContext);
             }
             catch (Exception)
             {
-                await YieldToDispatcher().ConfigureAwait(false);
+                await YieldToDispatcher().ConfigureAwait(CaptureContext);
                 throw;
             }
-            await YieldToDispatcher().ConfigureAwait(false);
+            await YieldToDispatcher().ConfigureAwait(CaptureContext);
         }
 
         private Task YieldToDispatcher()
@@ -628,17 +634,17 @@ namespace WildCat
             {
                 using (CancellationTokenSource limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    limit.CancelAfter(options.ConnectTimeout);
+                    using var deadline = scheduler.Schedule(options.ConnectTimeout, () => CancelQuietly(limit));
                     try
                     {
-                        await transport.ConnectAsync(options.ServerUri, limit.Token).ConfigureAwait(false);
+                        await transport.ConnectAsync(options.ServerUri, limit.Token).ConfigureAwait(CaptureContext);
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         throw new TimeoutException("Opening the socket took longer than " + options.ConnectTimeout.TotalSeconds + " seconds.");
                     }
                 }
-                return new Link(transport, options.MaxQueuedMessages, options.MaxQueuedBytes);
+                return new Link(transport, options.MaxQueuedMessages, options.MaxQueuedBytes, CaptureContext);
             }
             catch
             {
@@ -663,7 +669,7 @@ namespace WildCat
             {
                 while (true)
                 {
-                    byte[] message = await current.Transport.ReceiveAsync(current.Stop.Token).ConfigureAwait(false);
+                    byte[] message = await current.Transport.ReceiveAsync(current.Stop.Token).ConfigureAwait(CaptureContext);
                     if (message == null)
                         break;
                     HandleFrame(message);
@@ -671,7 +677,7 @@ namespace WildCat
                 // The server closed the socket. Answer its close message through the writer (the
                 // only one allowed to send) and give it a moment to do so.
                 current.RequestClose();
-                await Task.WhenAny(current.Writer, Task.Delay(CloseHandshakeTimeout)).ConfigureAwait(false);
+                await Task.WhenAny(current.Writer, scheduler.DelayAsync(CloseHandshakeTimeout)).ConfigureAwait(CaptureContext);
             }
             catch (Exception ex)
             {
@@ -692,14 +698,15 @@ namespace WildCat
             {
                 while (true)
                 {
-                    await current.WaitForFrameAsync().ConfigureAwait(false);
+                    await current.WaitForFrameAsync().ConfigureAwait(CaptureContext);
                     Outgoing next;
                     if (!current.TryDequeue(out next))
                         continue;
                     if (ReferenceEquals(next.Bytes, CloseMarker))
                     {
-                        using (CancellationTokenSource limit = new CancellationTokenSource(CloseHandshakeTimeout))
-                            await current.Transport.CloseAsync(limit.Token).ConfigureAwait(false);
+                        using (CancellationTokenSource limit = new CancellationTokenSource())
+                        using (scheduler.Schedule(CloseHandshakeTimeout, () => CancelQuietly(limit)))
+                            await current.Transport.CloseAsync(limit.Token).ConfigureAwait(CaptureContext);
                         return;
                     }
                     // A request that timed out or was cancelled while it waited in the queue is not
@@ -711,7 +718,7 @@ namespace WildCat
                             continue;
                         next.Request.MarkSent();
                     }
-                    await current.Transport.SendAsync(next.Bytes, current.Stop.Token).ConfigureAwait(false);
+                    await current.Transport.SendAsync(next.Bytes, current.Stop.Token).ConfigureAwait(CaptureContext);
                 }
             }
             catch (OperationCanceledException) when (current.Stop.IsCancellationRequested)
@@ -733,7 +740,7 @@ namespace WildCat
             {
                 try
                 {
-                    await Task.Delay(options.HeartbeatInterval, current.Stop.Token).ConfigureAwait(false);
+                    await scheduler.DelayAsync(options.HeartbeatInterval, current.Stop.Token).ConfigureAwait(CaptureContext);
                 }
                 catch (OperationCanceledException)
                 {
@@ -760,13 +767,13 @@ namespace WildCat
                     {
                         await SendRequestAsync<EmptyMessage>(WildCatMsgType.HeartBeatRequest, new EmptyMessage(),
                             WildCatMsgType.HeartBeatResponse, true, null, options.HeartbeatTimeout, true, CancellationToken.None,
-                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(false);
+                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(CaptureContext);
                     }
                     else
                     {
                         await SendRequestAsync<DateTimeMessage>(WildCatMsgType.GetServerTimeRequest, new EmptyMessage(),
                             WildCatMsgType.GetServerTimeResponse, false, null, options.HeartbeatTimeout, true, CancellationToken.None,
-                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(false);
+                            (answer, roundTrip) => measured = roundTrip).ConfigureAwait(CaptureContext);
                     }
                     RecordRoundTrip(measured);
                 }
@@ -959,7 +966,7 @@ namespace WildCat
                 Raise(Reconnecting, new ReconnectingEventArgs(attempt, delay, dropReason, lastError));
                 try
                 {
-                    await Task.Delay(delay, stop).ConfigureAwait(false);
+                    await scheduler.DelayAsync(delay, stop).ConfigureAwait(CaptureContext);
                 }
                 catch (OperationCanceledException)
                 {
@@ -969,7 +976,7 @@ namespace WildCat
                 Link fresh;
                 try
                 {
-                    fresh = await OpenLinkAsync(stop).ConfigureAwait(false);
+                    fresh = await OpenLinkAsync(stop).ConfigureAwait(CaptureContext);
                 }
                 catch (Exception ex)
                 {
@@ -998,7 +1005,7 @@ namespace WildCat
                 {
                     Func<CancellationToken, Task> resume = ResumeHandler;
                     if (resume != null)
-                        await resume(stop).ConfigureAwait(false);
+                        await resume(stop).ConfigureAwait(CaptureContext);
                 }
                 catch (WildCatException ex) when (ex.ErrorCode == WildCatErrorCodes.Refused || ex.ErrorCode == WildCatErrorCodes.AlreadyExists)
                 {
@@ -1193,7 +1200,7 @@ namespace WildCat
         {
             private readonly object queueLock = new object();
             private readonly Queue<Outgoing> outbound = new Queue<Outgoing>();
-            private readonly SemaphoreSlim signal = new SemaphoreSlim(0, int.MaxValue);
+            private readonly AsyncSignal signal;
             private readonly int maxQueuedMessages;
             private readonly long maxQueuedBytes;
             private long queuedBytes;
@@ -1201,8 +1208,9 @@ namespace WildCat
             private int closeRequested;
             private int aborted;
 
-            public Link(ITransport transport, int maxQueuedMessages, long maxQueuedBytes)
+            public Link(ITransport transport, int maxQueuedMessages, long maxQueuedBytes, bool captureContext)
             {
+                signal = new AsyncSignal(captureContext);
                 Transport = transport;
                 this.maxQueuedMessages = maxQueuedMessages;
                 this.maxQueuedBytes = maxQueuedBytes;
@@ -1355,9 +1363,7 @@ namespace WildCat
 
             public bool IsInternal { get; }
 
-            public CancellationTokenSource TimeoutSource { get; set; }
-
-            public CancellationTokenRegistration TimeoutRegistration { get; set; }
+            public IDisposable TimeoutRegistration { get; set; }
 
             public CancellationTokenRegistration CancelRegistration { get; set; }
 
@@ -1373,12 +1379,8 @@ namespace WildCat
 
             public void ReleaseTimers(bool fromTimeout)
             {
-                TimeoutRegistration.Dispose();
+                TimeoutRegistration?.Dispose();
                 CancelRegistration.Dispose();
-                // A source whose timer just fired is left to the garbage collector: disposing it
-                // from inside its own callback is not safe.
-                if (!fromTimeout && TimeoutSource != null)
-                    TimeoutSource.Dispose();
             }
         }
 

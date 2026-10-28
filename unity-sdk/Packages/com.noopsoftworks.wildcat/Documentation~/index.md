@@ -169,13 +169,20 @@ double, a proxy) plug in through `ITransportFactory`.
 
 ## Platform support
 
-The SDK targets Unity 6 LTS. The Editor and desktop/mobile transport uses `ClientWebSocket`;
-WebGL uses the browser WebSocket through the supplied `.jslib` bridge.
+The SDK targets Unity 6.6. The Editor and desktop/mobile transport uses `ClientWebSocket`;
+Web uses the browser WebSocket through the supplied `.jslib` bridge. `WildCatBehaviour` drives
+connection deadlines, heartbeats and reconnection from `Update` through
+`PumpedConnectionScheduler`, and keeps continuations on Unity's synchronization context.
 
-WebGL browser execution and mobile IL2CPP runtime support remain unverified. A successful
-WebGL build does not establish browser behavior. Before targeting WebGL, check connection,
-message delivery, request timeouts, heartbeats and reconnection in your target browser.
-For mobile, check these behaviors in an IL2CPP player on the target device.
+Managed threads and timers are unavailable on the Web platform. When constructing a client
+without `WildCatBehaviour`, pass a `PumpedConnectionScheduler` and call its `Pump()` on the
+main thread every frame, before pumping the dispatcher. A paused or throttled browser tab can
+delay both callbacks and timeouts; reconnect when it resumes if the server closed the socket.
+
+The browser integration scene in the SDK project covers the connection and relay flows in
+Chrome. Other browsers and mobile IL2CPP runtime support still need target-device testing.
+Before shipping, check connection, message delivery, timeouts, heartbeats and reconnection in
+each target browser or player.
 
 ## Known limitations
 

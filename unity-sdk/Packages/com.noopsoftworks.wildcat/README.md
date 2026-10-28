@@ -6,12 +6,12 @@ relay matches, leaderboards, inventory, cloud data and server script events, ove
 Request/response operations return Tasks. The connection handles request timeouts, heartbeats
 and automatic reconnection with session resume.
 
-Version 0.1.0 is a pre-release for Unity 6 LTS. The API may change before 1.0.
+Version 0.1.0 is a pre-release for Unity 6.6. The API may change before 1.0.
 See [platform support](Documentation~/index.md#platform-support) for WebGL and mobile limits.
 
 ## Install
 
-Use Unity 6 LTS. In Window > Package Manager, choose + > Install package from git URL
+Use Unity 6.6. In Window > Package Manager, choose + > Install package from git URL
 and enter
 
 ```
@@ -75,13 +75,20 @@ between two clients included.
 
 ## Threading
 
-The socket is read and written on background threads. Everything the SDK hands back to the game
+On desktop and mobile, socket work can run on background threads. On Web, browser callbacks
+and a frame-driven scheduler keep it on Unity's main thread. Everything the SDK hands back to the game
 (event handlers, relay handlers and the completion of every Task, ConnectAsync and
 DisconnectAsync included) goes through `IMainThreadDispatcher`. `WildCatBehaviour` pumps a
 `QueuedDispatcher` in `Update`, so in a scene all of it runs on Unity's main thread and may touch
 Unity objects. Do not block the main thread on a Task (`.Result`, `.Wait()`): its completion
 waits for the next `Update`. Outside Unity (tools, tests) the default `InlineDispatcher` runs
 callbacks on the network thread.
+
+`WildCatBehaviour` supplies and pumps `PumpedConnectionScheduler` in Web players. If you create
+a `WildCatClient` yourself for Web, pass that scheduler alongside `WebGLWebSocketTransportFactory`
+and your dispatcher, and call `scheduler.Pump()` every frame before pumping the dispatcher.
+Create and use that client on Unity's main thread. Managed timers and thread-pool work are not
+available in a Web player, including Unity 6.6; changing the Editor version does not enable them.
 
 Nothing is pumped while Unity does not call `Update`, for example while a desktop player is not
 focused. Outside WebGL the heartbeat and the reconnection do not need the pump, so the connection

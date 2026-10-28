@@ -99,14 +99,21 @@ Verified in Unity 6000.0.80f1 on 2026-10-02:
   concerned the temporary Pipeline package's disabled runtime instrumentation. That package and
   the temporary scene and imported sample were removed after verification.
 
-Browser execution remains unverified. The `.jslib` callbacks, Task.Delay (heartbeat, backoff)
-and request timeouts (CancellationTokenSource timers) still need a browser test. If the timers
-do not fire on WebGL's single thread, drive them from the dispatcher pump in
-WildCatBehaviour.Update after reproducing that behavior. Mobile IL2CPP players also remain
-untested. There is no checked-in sample scene or prefab; the sample README describes setup.
+Web players use `PumpedConnectionScheduler` for deadlines, heartbeat delays and reconnect
+backoff. `WildCatBehaviour.Update` pumps it before the callback dispatcher. The writer uses a
+single-waiter async signal, and continuations retain Unity's synchronization context, so this
+path needs no managed timers or thread-pool work. Native clients retain the default timer
+scheduler. Custom Web clients must supply and pump the frame scheduler themselves.
+
+`Assets/WebGLSmoke/Smoke.unity` is a browser integration scene for the seeded Development
+host. It covers both a direct client and `WildCatBehaviour`; the SDK project README explains
+how to build and run it. Mobile IL2CPP players and non-Chromium browser behavior still need
+target-device testing. The Basic sample README continues to describe its separate scene setup.
 
 See [the verification record](project-memory/verification-2026-10-02.md) for the exact checks,
 artifacts and remaining limitations.
+The [2026-10-28 record](project-memory/verification-2026-10-28.md) covers the Unity 6.6 upgrade
+and browser runtime checks.
 
 ## The old SDK and what became of it
 

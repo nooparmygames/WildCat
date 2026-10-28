@@ -2,6 +2,15 @@
 
 Before 1.0.0, minor versions may break the API.
 
+## Unreleased
+
+- Target Unity 6.6; the development project selects 6000.6.5f1.
+- Run Web connection timeouts, heartbeats and reconnection on a frame-driven scheduler.
+  Browser clients preserve Unity's synchronization context and wake their writer without
+  thread-pool work. `WildCatBehaviour` configures this automatically; custom Web clients
+  supply and pump `PumpedConnectionScheduler`.
+- Add a repeatable Web integration scene and a headless Chrome runner.
+
 ## [0.1.0] - 2026-09-30
 
 The first release as a UPM package for Unity 6, replacing the `Assets/Backend` SDK

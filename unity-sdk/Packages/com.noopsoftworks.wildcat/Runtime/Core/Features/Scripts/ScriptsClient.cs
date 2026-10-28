@@ -39,14 +39,14 @@ namespace WildCat
             ScriptEventExecutionRequestMessage request = new ScriptEventExecutionRequestMessage { eventName = eventName };
             request.SetParametersAndTypes(args ?? new object[0]);
             ScriptEventExecutionResponseMessage answer = await Request<ScriptEventExecutionResponseMessage>(
-                WildCatMsgType.ExecuteScriptEventRequest, request, WildCatMsgType.ExecuteScriptEventResponse, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.ExecuteScriptEventRequest, request, WildCatMsgType.ExecuteScriptEventResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return new ScriptResult(answer.hasReturnValue, answer.returnType, answer.returnValue);
         }
 
         /// <summary>Runs the event and returns its value as <typeparamref name="T"/>.</summary>
         public async Task<T> ExecuteAsync<T>(string eventName, params object[] args)
         {
-            ScriptResult result = await ExecuteAsync(eventName, args, CancellationToken.None).ConfigureAwait(false);
+            ScriptResult result = await ExecuteAsync(eventName, args, CancellationToken.None).ConfigureAwait(Connection.CaptureContext);
             return result.GetValue<T>();
         }
     }

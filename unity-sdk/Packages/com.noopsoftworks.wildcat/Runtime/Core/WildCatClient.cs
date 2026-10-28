@@ -26,10 +26,11 @@ namespace WildCat
         /// </param>
         /// <param name="transportFactory">The socket implementation; null uses System.Net.WebSockets.ClientWebSocket.</param>
         /// <param name="logger">Receives the SDK's log messages; null drops them.</param>
+        /// <param name="scheduler">Deadlines and delays; null uses managed timers. WildCatBehaviour supplies a frame-driven scheduler on Web.</param>
         public WildCatClient(WildCatClientOptions options, IMainThreadDispatcher dispatcher = null,
-            ITransportFactory transportFactory = null, IWildCatLogger logger = null)
+            ITransportFactory transportFactory = null, IWildCatLogger logger = null, IConnectionScheduler scheduler = null)
         {
-            Connection = new WildCatConnection(options, dispatcher, transportFactory, logger);
+            Connection = new WildCatConnection(options, dispatcher, transportFactory, logger, scheduler);
             Session = new SessionClient(Connection);
             Auth = new AuthClient(Connection, Session);
             Profile = new ProfileClient(Connection);
@@ -181,11 +182,11 @@ namespace WildCat
             Guid gameKey;
             if (!Session.TryGetKeys(out developerKey, out gameKey))
                 return;
-            await Session.InitializeCoreAsync(developerKey, gameKey, true, cancellationToken).ConfigureAwait(false);
+            await Session.InitializeCoreAsync(developerKey, gameKey, true, cancellationToken).ConfigureAwait(Connection.CaptureContext);
 
             StoredLogin login = Auth.LastLogin;
             if (login != null)
-                await Auth.LoginAsync(login, true, cancellationToken).ConfigureAwait(false);
+                await Auth.LoginAsync(login, true, cancellationToken).ConfigureAwait(Connection.CaptureContext);
         }
     }
 }

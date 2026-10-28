@@ -84,7 +84,7 @@ namespace WildCat
             GuidMessage answer = await Connection.SendRequestAsync<GuidMessage>(WildCatMsgType.InitializeSessionRequest,
                 new InitializeSessionRequest { DeveloperKey = developer, GameKey = game },
                 WildCatMsgType.InitializeSessionResponse, false, null, null, isResume, cancellationToken,
-                (opened, roundTrip) => Apply(developer, game, opened.value, isResume)).ConfigureAwait(false);
+                (opened, roundTrip) => Apply(developer, game, opened.value, isResume)).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
 

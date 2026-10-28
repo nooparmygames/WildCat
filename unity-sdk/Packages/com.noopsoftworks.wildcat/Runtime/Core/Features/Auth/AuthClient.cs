@@ -110,7 +110,7 @@ namespace WildCat
             };
             AuthenticationResponse answer = await Connection.SendRequestAsync<AuthenticationResponse>(WildCatMsgType.AuthenticateRequest,
                 request, WildCatMsgType.AuthenticateResponse, false, null, null, isInternal, cancellationToken,
-                (accepted, roundTrip) => Apply(login, ticket, accepted)).ConfigureAwait(false);
+                (accepted, roundTrip) => Apply(login, ticket, accepted)).ConfigureAwait(Connection.CaptureContext);
             return new LoginResult(answer.userId, answer.name, answer.isNewlyCreated);
         }
 
@@ -173,7 +173,7 @@ namespace WildCat
                 data = new Dictionary<string, string>(),
             };
             StringMessage answer = await Connection.SendRequestAsync<StringMessage>(WildCatMsgType.CreateNewAccountRequest, request,
-                WildCatMsgType.CreateNewAccountResponse, false, null, null, false, cancellationToken).ConfigureAwait(false);
+                WildCatMsgType.CreateNewAccountResponse, false, null, null, false, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
 

@@ -26,7 +26,7 @@ namespace WildCat
             RequireName(leaderboard, "leaderboard");
             if (offset < 0 || count < 1)
                 throw new ArgumentOutOfRangeException(nameof(count), "The offset must not be negative and the count must be positive.");
-            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Top, offset, count, cancellationToken).ConfigureAwait(false);
+            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Top, offset, count, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return new LeaderboardPage(Entries(answer), answer.count, -1);
         }
 
@@ -37,7 +37,7 @@ namespace WildCat
             RequireName(leaderboard, "leaderboard");
             if (count < 1)
                 throw new ArgumentOutOfRangeException(nameof(count), "The count must be positive.");
-            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Around, 0, count, cancellationToken).ConfigureAwait(false);
+            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Around, 0, count, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return new LeaderboardPage(Entries(answer), -1, answer.playerRank);
         }
 
@@ -45,7 +45,7 @@ namespace WildCat
         public async Task<int> GetRankAsync(string leaderboard, CancellationToken cancellationToken = default(CancellationToken))
         {
             RequireName(leaderboard, "leaderboard");
-            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Me, 0, 0, cancellationToken).ConfigureAwait(false);
+            GetLeaderBoardResponse answer = await Get(leaderboard, GetLeaderBoardRequest.RequestType.Me, 0, 0, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             return answer.playerRank;
         }
 

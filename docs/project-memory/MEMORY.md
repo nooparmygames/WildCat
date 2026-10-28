@@ -9,6 +9,32 @@ These files preserve project context for agents that can read this checkout. The
 import into account-wide ChatGPT saved memory. Keep durable project facts here, with dates and
 supporting files, and keep temporary command output in the conversation.
 
+## Review fixes and Unity 6.6 Web runtime on 2026-10-28
+
+The owner requested fixes for all nine review findings with a Sol subagent, regression tests,
+an upgrade to Unity 6.6, investigation of the Web threading issue, and a commit/push after
+each completed step. Three Sol agents implemented and cross-reviewed the backend changes;
+the parent reviewed them and implemented the Web scheduler, which a Sol agent also reviewed.
+
+All nine findings are fixed. Backend coverage adds 47 regression cases for leaderboard
+persistence/deletion/sorting, admin token revocation, inventory capacity/package consumption,
+matchmaking cancellation and stale-login races, live mode refresh and per-game pending matches.
+Backend Release passed 755 with 10 skips, SDK passed 66, panel passed 38 plus lint/build.
+The nine PostgreSQL cases could not run because Docker Desktop failed during startup; one
+legacy test remains skipped. No new compiler warnings were introduced.
+
+The Unity project and package target are now 6.6, using installed Editor 6000.6.5f1 with Web
+support. Unity Web still lacks managed threads/timers. The SDK now uses a pumped scheduler,
+an async writer signal and synchronization-context capture in Web players. The final Web
+build passed with zero errors/warnings after temporary Pipeline tooling was removed, and its
+headless Chrome run passed connection/login, heartbeat, timeout, matchmaking/relay,
+reconnection/session resume and disconnect. Safari, Firefox and mobile IL2CPP remain untested.
+
+Separate commits were pushed to origin/master for auth (`e44bcfa`), leaderboard/inventory
+(`d6a1e5c`), matchmaking (`904c3a9`) and the Unity upgrade (`e70888d`). The Web runtime fix and
+its verification record follow those steps. See [the full record](verification-2026-10-28.md)
+for test artifacts, the browser runner and remaining limits.
+
 ## Password hashing CI fix on 2026-10-13
 
 Two password hashing concurrency tests failed in GitHub Actions because their measured delay

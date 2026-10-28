@@ -52,7 +52,7 @@ namespace WildCat
         {
             DateTimeMessage answer = await Connection.SendRequestAsync<DateTimeMessage>(WildCatMsgType.GetServerTimeRequest,
                 new EmptyMessage(), WildCatMsgType.GetServerTimeResponse, false, null, null, false, cancellationToken,
-                (arrived, roundTrip) => Record(arrived.value, roundTrip)).ConfigureAwait(false);
+                (arrived, roundTrip) => Record(arrived.value, roundTrip)).ConfigureAwait(Connection.CaptureContext);
             return answer.value;
         }
 

@@ -2,7 +2,6 @@
 // Each socket gets an integer id; the C# side registers four callbacks once and is called
 // with that id when a socket opens, receives a binary message, reports an error or closes.
 // Only binary messages are part of the WildCat protocol; text messages are dropped.
-// Not verified in a browser yet.
 
 var WildCatWebSocketLibrary = {
     $WildCatWS: {

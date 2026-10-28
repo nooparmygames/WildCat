@@ -153,7 +153,7 @@ namespace WildCat
         public async Task<IReadOnlyList<PendingMatch>> GetPendingAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             PendingMatchesCollectionData answer = await Request<PendingMatchesCollectionData>(WildCatMsgType.GetPlayerPendingMatchesRequest,
-                new EmptyMessage(), WildCatMsgType.GetPlayerMatchesResponse, cancellationToken).ConfigureAwait(false);
+                new EmptyMessage(), WildCatMsgType.GetPlayerMatchesResponse, cancellationToken).ConfigureAwait(Connection.CaptureContext);
             List<PendingMatch> result = new List<PendingMatch>();
             if (answer.matches != null)
             {
