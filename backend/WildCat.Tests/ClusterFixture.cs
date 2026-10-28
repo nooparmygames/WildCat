@@ -36,11 +36,16 @@ namespace WildCat.Tests
                 silo.AddGameStreams();
                 silo.AddLegacyCallChainReentrancy();
                 silo.AddIncomingGrainCallFilter<FailingPushFilter>();
+                silo.AddIncomingGrainCallFilter<MatchmakingCallGate>();
                 silo.Services.AddSingleton<IEmailSender>(Emails);
                 silo.Services.AddSingleton<PasswordHashing>(PasswordHashing);
                 silo.Services.AddKeyedSingleton<TimeProvider>(Player.SignInClockKey, SignInClock);
             });
-            builder.ConfigureClient(client => client.AddMemoryStreams(StreamNames.PROVIDER_NAME));
+            builder.ConfigureClient(client =>
+            {
+                client.AddMemoryStreams(StreamNames.PROVIDER_NAME);
+                client.AddOutgoingGrainCallFilter<MatchmakingReplyGate>();
+            });
             Cluster = builder.Build();
             await Cluster.DeployAsync();
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Orleans;
 using WildCat.Interfaces;
@@ -41,17 +42,46 @@ namespace WildCat.Gateway
                 throw new RequestFailedException(GatewayErrors.Refused, NoGameMode);
             InputLimits.Name(request.matchType, "game mode name");
 
+            var login = context.Connection.Login;
+            if (login == null || !login.Player.Equals(context.Player) || login.GameKey != context.Session.GameKey)
+                throw new RequestFailedException(GatewayErrors.Refused, MatchNotFound);
+            using var canceled = CancellationTokenSource.CreateLinkedTokenSource(context.Closing, login.Ended);
             var matchMaker = context.Grains.GetGrain<ICustomMatchMaker>(context.Session.GameKey, request.matchType, null);
-            FoundRelayMatchResult found = await matchMaker.FindMatch(context.Player, request.skill,
-                Math.Min(request.waitTime, MaxWaitSeconds));
+            FoundRelayMatchResult found;
+            try
+            {
+                found = await matchMaker.FindMatch(context.Player, request.skill,
+                    Math.Min(request.waitTime, MaxWaitSeconds), login.LoginTicket, canceled.Token);
+            }
+            catch (OperationCanceledException) when (canceled.IsCancellationRequested)
+            {
+                throw new RequestFailedException(GatewayErrors.Refused, MatchNotFound);
+            }
             if (found?.game == null)
                 throw new RequestFailedException(GatewayErrors.Refused, MatchNotFound);
 
             IRelayServerGame match = found.game;
-            Guid matchId = match.GetPrimaryKey(out string _);
-            var players = await match.GetPlayers();
-            await match.PlayerStarted(context.Player);
-            return new FindMatchResponse(matchId, "", players.Select(p => p.GetPrimaryKeyString()).ToArray());
+            try
+            {
+                canceled.Token.ThrowIfCancellationRequested();
+                Guid matchId = match.GetPrimaryKey(out string _);
+                var players = await match.GetPlayers();
+                canceled.Token.ThrowIfCancellationRequested();
+                if (!await context.Player.TryJoinMatch(match, login.LoginTicket))
+                {
+                    await match.PlayerFinished(context.Player);
+                    throw new RequestFailedException(GatewayErrors.Refused, MatchNotFound);
+                }
+                canceled.Token.ThrowIfCancellationRequested();
+                return new FindMatchResponse(matchId, "", players.Select(p => p.GetPrimaryKeyString()).ToArray());
+            }
+            catch (OperationCanceledException) when (canceled.IsCancellationRequested)
+            {
+                // This login may have disconnected before StartGame added its match. Repeat the
+                // ticket-aware cleanup so it cannot disconnect an account that has logged in again.
+                await context.Player.Disconnected(login.LoginTicket);
+                throw new RequestFailedException(GatewayErrors.Refused, MatchNotFound);
+            }
         }
     }
 }

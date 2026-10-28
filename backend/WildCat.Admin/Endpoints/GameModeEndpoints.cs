@@ -30,7 +30,7 @@ internal static class GameModeEndpoints
             .Produces<GameModeResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
         modes.MapDelete("/{name}", Delete)
-            .WithSummary("Deletes a game mode. Queues that are running keep their settings until they go idle.")
+            .WithSummary("Deletes a game mode. Its queue uses the default rules on the next matching pass.")
             .Produces(StatusCodes.Status204NoContent);
     }
 

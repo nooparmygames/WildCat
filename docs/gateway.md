@@ -92,7 +92,12 @@ WildCat.Gateway/
    relayed frames of 1 MiB.)
 7. When the socket closes, however it closes, `LoginManager.ReleaseAsync` removes the connection,
    drops its stream subscriptions (if it still owns them) and calls `IPlayer.Disconnected` with the
-   ticket of the login it held.
+   ticket of the login it held. Pending matchmaking searches are canceled as soon as the socket
+   starts closing, or when its login is replaced. A search canceled while its match is being
+   created is removed from that match before the other players continue looking.
+   The matchmaker also checks the captured login ticket, so an account logging in on another
+   gateway invalidates its earlier searches. Joining checks that ticket in the player grain;
+   delayed cleanup from an older login cannot disconnect a player who has already rejoined.
 
 ## Session requirements
 

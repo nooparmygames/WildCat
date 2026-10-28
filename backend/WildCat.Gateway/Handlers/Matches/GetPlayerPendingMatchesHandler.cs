@@ -7,7 +7,7 @@ namespace WildCat.Gateway
 {
     /// <summary>
     /// GetPlayerPendingMatches (131 -> 132): the running matches the player dropped out of and
-    /// can rejoin with RejoinMatch, with their start time and players (IPlayer.GetPendingMatches).
+    /// can rejoin in the session's game, with their start time and players.
     /// </summary>
     internal sealed class GetPlayerPendingMatchesHandler : RequestHandler<EmptyMessage, PendingMatchesCollectionData>
     {
@@ -16,7 +16,7 @@ namespace WildCat.Gateway
 
         protected override async Task<PendingMatchesCollectionData> HandleAsync(MessageContext context, EmptyMessage request)
         {
-            var matches = await context.Player.GetPendingMatches();
+            var matches = await context.Player.GetPendingMatchesInGame(context.Session.GameKey);
             return new PendingMatchesCollectionData
             {
                 matches = matches.Select(m => new PendingMatchesCollectionData.PendingMatchInfo

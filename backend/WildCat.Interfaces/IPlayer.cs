@@ -26,6 +26,11 @@ namespace WildCat.Interfaces
         Task<LoginResult> LoginWithDeviceID(string deviceID, Guid sessionKey, Guid sentLoginTimeTicket);
         Task Logout();
         Task<bool> IsLoggedIn();
+        [AlwaysInterleave]
+        Task<bool> IsLoginCurrent(Guid loginTicket);
+
+        /// <summary>Joins only while the captured login is current; login changes wait for this operation.</summary>
+        Task<bool> TryJoinMatch(IRelayServerGame match, Guid loginTicket);
         Task<AdditionResult> AddPlayerDevice(string deviceID);
         Task<List<string>> GetPlayerDevices();
         [AlwaysInterleave]
@@ -82,6 +87,9 @@ namespace WildCat.Interfaces
         Task<Guid> GetGameTitleKey();
 
         Task<List<PlayerRunningMatch>> GetPendingMatches();
+
+        /// <summary>Pending matches in one game, checked before reading any match state.</summary>
+        Task<List<PlayerRunningMatch>> GetPendingMatchesInGame(Guid gameKey);
         Task RejoinMatch(IRelayServerGame game);
 
         Task HeartBeat();

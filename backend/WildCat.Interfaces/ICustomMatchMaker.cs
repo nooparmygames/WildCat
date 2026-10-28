@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Orleans;
 
@@ -14,7 +15,8 @@ namespace WildCat.Interfaces
         /// <param name="playerID">The player we want to find match for</param>
         /// <param name="maximumWaitTime">Maximum amount of time before declaring a failure</param>
         /// <returns>The relay game that was created, or an empty id in case of failure.</returns>
-        Task<FoundRelayMatchResult> FindMatch(IPlayer playerID, uint skill,uint maxWaitTime);
+        Task<FoundRelayMatchResult> FindMatch(IPlayer playerID, uint skill, uint maxWaitTime,
+            Guid loginTicket = default, CancellationToken cancellationToken = default);
         Task<bool> RemoveDisconnectedPlayer(IPlayer player);
         Task<int> GetOnlinePlayersCount();
 

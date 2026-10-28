@@ -94,7 +94,8 @@ calls also counted API calls and relay messages and flushed the counts to `Accou
 billing.
 
 Matchmaking: the gateway calls `ICustomMatchMaker(gameKey, modeName).FindMatch(player, skill,
-waitTime)`. The matchmaker loads its GameMode (or the default 2v2 mode), parks a
+waitTime, cancellationToken)`. The matchmaker loads the current GameMode on each matching pass
+(or the default two-player mode), parks a
 TaskCompletionSource per waiting player and every 3 s recomputes each player's criteria index
 (the latest criterion whose start time has passed), times players out, and groups players whose
 skill distance is within the current threshold, requiring MinPlayers-1 opponents when
@@ -103,7 +104,11 @@ gameKey)`, calls `StartGame`, and resolves every waiting task. The gateway's Fin
 then joins the requesting player with `PlayerStarted` as an explicit step (the legacy gateway did
 it under a TODO to make it not automatic; the SDK has no separate join message) and answers
 with the match id and players. It caps the wait at 20 s so the matchmaker answers within the
-30 s grain call timeout. Challenges bypass the matchmaker and create the game directly.
+30 s grain call timeout. Closing the socket or replacing its login cancels its searches. A
+cancellation during match creation retires the incomplete match and preserves the other
+players' searches. The matchmaker checks the captured login ticket so a newer login on another
+gateway also invalidates the old search. Joining validates that ticket in the Player grain,
+which serializes it with login changes. Challenges bypass the matchmaker and create the game directly.
 
 Relay: the backend never parses game payloads. `SendToAllBut(player, channel, bytes)` forwards
 a frame from an InGame player (anything else is dropped since the step 6 review) to every other
@@ -232,6 +237,9 @@ Correctness:
     false came back true after a deactivation in Memory mode).
 11. `LeaderBoard.CreateList` indexes an empty list (any board with chunks fails to activate);
     partial chunks are never persisted; chunks are never cleared.
+    Fixed: activation appends the chunk reads to the task list, score writes include the final
+    partial chunk, and finishing clears both stored chunks and the active list. Score sorting
+    uses `CompareTo` so the full integer range ranks correctly.
 12. Removed in step 2: `DeveloperInvoiceCollection.GenerateInvoicesIfNeeded` looped forever;
     invoices are gone with billing.
 13. Removed in step 2: `TimedExecutionManager` had broken DateTime keys and an A to B to A
@@ -241,6 +249,10 @@ Correctness:
     `RemoveDisconnectedPlayer`, and holds the grain call open longer than the 30 s response
     timeout. It also throws when the first criterion start time is not 0. Since step 6b the
     gateway caps a FindMatch wait at 20 s, so the call returns before the timeout.
+    Fixed: elapsed time uses the full duration, disconnect removal completes the waiting task,
+    and the gateway passes cancellation from its socket and login. Matching refreshes mode rules
+    on every pass and computes unsigned skill differences in a signed 64-bit value. The admin
+    API requires the first criterion to start at zero.
 15. Fixed in step 9: `ScriptCompilationUtility.RunScript` called `Thread.Abort`
     (PlatformNotSupported on .NET 5+; the port abandoned the thread, so a runaway script kept
     running), raced on a placeholder task so every call waited the full 3 s, kept a

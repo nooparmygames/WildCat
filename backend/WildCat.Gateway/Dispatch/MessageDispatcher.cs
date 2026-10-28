@@ -167,6 +167,9 @@ namespace WildCat.Gateway
                 if (context != null)
                     await handler.HandleAsync(context);
             }
+            catch (OperationCanceledException) when (connection.Closing.IsCancellationRequested)
+            {
+            }
             catch (Exception ex)
             {
                 AnswerException(connection, message, route, ex);

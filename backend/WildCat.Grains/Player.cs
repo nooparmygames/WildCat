@@ -162,6 +162,17 @@ namespace WildCat.Grains
             return Task.FromResult(State.IsLoggedIn);
         }
 
+        public Task<bool> IsLoginCurrent(Guid loginTicket) =>
+            Task.FromResult(State.IsLoggedIn && State.LoginTicket == loginTicket);
+
+        public async Task<bool> TryJoinMatch(IRelayServerGame match, Guid loginTicket)
+        {
+            if (!State.IsLoggedIn || State.LoginTicket != loginTicket)
+                return false;
+            await match.PlayerStarted(this.AsReference<IPlayer>());
+            return true;
+        }
+
         /// <summary>
         /// Finishes a login attempt. A failed attempt changes nothing, so a wrong password cannot
         /// flip the state of a player who is logged in elsewhere. A successful one binds the session
@@ -780,14 +791,20 @@ namespace WildCat.Grains
             return Task.CompletedTask;
         }
 
-        public async Task<List<PlayerRunningMatch>> GetPendingMatches()
+        public Task<List<PlayerRunningMatch>> GetPendingMatches() => ReadPendingMatches(null);
+
+        public Task<List<PlayerRunningMatch>> GetPendingMatchesInGame(Guid gameKey) => ReadPendingMatches(gameKey);
+
+        private async Task<List<PlayerRunningMatch>> ReadPendingMatches(Guid? gameKey)
         {
             List<PlayerRunningMatch> matches = new List<PlayerRunningMatch>();
             foreach (var match in State.RunningGames)
             {
-                var result = await match.GetState();
                 string ext;
                 var id = match.GetPrimaryKey(out ext);
+                if (gameKey.HasValue && (!Guid.TryParse(ext, out var matchGameKey) || matchGameKey != gameKey.Value))
+                    continue;
+                var result = await match.GetState();
                 List<IPlayer> players = new List<IPlayer>();
                 RelayServerPlayerGameStatus playerStatus = RelayServerPlayerGameStatus.NotStarted;
                 foreach (var p in result.Players)

@@ -37,6 +37,8 @@ namespace WildCat.Gateway
         /// </summary>
         public sealed class LoginState
         {
+            private readonly CancellationTokenSource ended = new CancellationTokenSource();
+
             internal LoginState(IPlayer player, Guid gameKey, Guid loginTicket)
             {
                 Player = player ?? throw new ArgumentNullException(nameof(player));
@@ -54,6 +56,11 @@ namespace WildCat.Gateway
             /// disconnect cannot log out a newer login.
             /// </summary>
             public Guid LoginTicket { get; }
+
+            /// <summary>Canceled when this login is replaced or released.</summary>
+            internal CancellationToken Ended => ended.Token;
+
+            internal void End() => ended.Cancel();
         }
 
         public int Id
@@ -114,13 +121,17 @@ namespace WildCat.Gateway
         /// <summary>Binds a login; called by <see cref="LoginManager"/> with the login lock held.</summary>
         internal void SetLogin(IPlayer player, Guid gameKey, Guid loginTicket)
         {
+            var previous = login;
             login = new LoginState(player, gameKey, loginTicket);
+            previous?.End();
         }
 
         /// <summary>Drops the login; called by <see cref="LoginManager"/> with the login lock held.</summary>
         internal void ClearLogin()
         {
+            var previous = login;
             login = null;
+            previous?.End();
         }
 
         /// <summary>Queues an encoded frame for the socket; never waits (see <see cref="WebSocketConnection.TrySend"/>).</summary>

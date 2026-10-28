@@ -1,259 +1,221 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using WildCat.Interfaces;
+using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Concurrency;
 using Orleans.Runtime;
+using WildCat.Interfaces;
 
 namespace WildCat.Grains
 {
     [Reentrant]
     class RelayServerMatchMaker : Grain, ICustomMatchMaker
     {
-        private const int CHECK_PERIOD = 3;
-        private List<RelayServerPlayerData> onlinePlayers;
-        private HashSet<IPlayer> pendingPlayers;
-        private Dictionary<string, TaskCompletionSource<FoundRelayMatchResult>> PlayerTasks;
-
+        private const int CheckPeriodSeconds = 3;
+        private readonly Dictionary<string, Search> searches = new();
+        private readonly ILogger<RelayServerMatchMaker> logger;
         private IGrainTimer timer;
-
+        private IGameModeManager modes;
         private string gameKey;
-        private GameMode gameMode;
+        private string modeName;
 
-        public override async Task OnActivateAsync(CancellationToken cancellationToken)
+        public RelayServerMatchMaker(ILogger<RelayServerMatchMaker> logger)
         {
-            string type;
-            var gk = this.GetPrimaryKey(out type);
-            gameKey = gk.ToString();
-            var gameModesManager = GrainFactory.GetGrain<IGameModeManager>(gk);
-            gameMode = await gameModesManager.GetGameModeData(type);
-            if (gameMode == null)
+            this.logger = logger;
+        }
+
+        public override Task OnActivateAsync(CancellationToken cancellationToken)
+        {
+            var game = this.GetPrimaryKey(out modeName);
+            gameKey = game.ToString();
+            modes = GrainFactory.GetGrain<IGameModeManager>(game);
+            timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
             {
-                gameMode = GameMode.CreateDefault();
-
-            }
-
-            onlinePlayers = new List<RelayServerPlayerData>();
-            pendingPlayers = new HashSet<IPlayer>();
-            PlayerTasks = new Dictionary<string, TaskCompletionSource<FoundRelayMatchResult>>();
-            TryRegisterTimer();
-            await base.OnActivateAsync(cancellationToken);
+                DueTime = TimeSpan.FromSeconds(0.1),
+                Period = TimeSpan.FromSeconds(CheckPeriodSeconds),
+                Interleave = true,
+            });
+            return base.OnActivateAsync(cancellationToken);
         }
 
-        private void TryRegisterTimer()
+        public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
-            if (timer == null)
-                timer = this.RegisterGrainTimer<object>(OnTimer, null, new GrainTimerCreationOptions
-                {
-                    DueTime = TimeSpan.FromSeconds(0.1),
-                    Period = TimeSpan.FromSeconds(CHECK_PERIOD),
-                    Interleave = true
-                });
+            timer?.Dispose();
+            foreach (var search in searches.Values.ToArray())
+                Complete(search, null);
+            return base.OnDeactivateAsync(reason, cancellationToken);
         }
 
-        public Task<int> GetOnlinePlayersCount()
-        {
-            return Task.FromResult(onlinePlayers.Count);
-        }
+        public Task<int> GetOnlinePlayersCount() => Task.FromResult(searches.Count);
 
-        private async Task OnTimer(object o)
+        private bool IsCurrent(Search search) =>
+            searches.TryGetValue(search.Player.GetPrimaryKeyString(), out var current) && ReferenceEquals(search, current);
+
+        private void Complete(Search search, FoundRelayMatchResult result)
         {
-            if (onlinePlayers.Count < 2)
-            {
-                if (onlinePlayers.Count == 1)
-                {
-                    var player = onlinePlayers[0];
-                    //check timeout of tasks
-                    if (PlayerTasks.ContainsKey(player.Player.GetPrimaryKeyString())
-                        && CheckCriteriaIndexAndRequestTimeout(player))
-                    {
-                        PlayerTasks[player.Player.GetPrimaryKeyString()].SetResult(null);
-                        PlayerTasks.Remove(player.Player.GetPrimaryKeyString());
-                        onlinePlayers.RemoveAt(0);
-                    }
-                }
+            if (!IsCurrent(search))
                 return;
-            }
-            int i = 0;
-            while (i < onlinePlayers.Count && onlinePlayers.Count >= 2)
+            searches.Remove(search.Player.GetPrimaryKeyString());
+            search.Completion.TrySetResult(result);
+        }
+
+        private async Task OnTimer(object unused)
+        {
+            if (searches.Count == 0)
+                return;
+            // A pass uses one snapshot, including while StartGame awaits other grains. The next
+            // pass sees mode edits and deletions even when this activation has never gone idle.
+            var mode = await modes.GetGameModeData(modeName) ?? GameMode.CreateDefault();
+            foreach (var search in searches.Values.ToArray())
             {
-                var player = onlinePlayers[i];
-                //if the player is gone while we are waiting
-                if (!PlayerTasks.ContainsKey(player.Player.GetPrimaryKeyString()))
+                if (!await IsAvailable(search))
+                    Complete(search, null);
+            }
+
+            foreach (var search in searches.Values.ToArray())
+            {
+                if (!IsCurrent(search) || search.Pending)
+                    continue;
+                if (!await IsAvailable(search))
                 {
-                    i++;
+                    Complete(search, null);
                     continue;
                 }
-                //check timeout of tasks
-                if (CheckCriteriaIndexAndRequestTimeout(player))
-                {
-                    PlayerTasks[player.Player.GetPrimaryKeyString()].SetResult(null);
-                    PlayerTasks.Remove(player.Player.GetPrimaryKeyString());
-                    onlinePlayers.RemoveAt(i);
+                var now = DateTime.UtcNow;
+                var criterionIndex = GetCriterionIndex(mode, search, now);
+                var criterion = mode.Criterias[criterionIndex];
+                int required = criterion.IsMinPlayersEnough ? mode.MinPlayers - 1 : mode.MaxPlayers - 1;
+                var opponents = searches.Values
+                    .Where(candidate => !ReferenceEquals(candidate, search) && !candidate.Pending
+                        && !HasExpired(candidate, now)
+                        && GetCriterionIndex(mode, candidate, now) <= criterionIndex
+                        && SkillDistance(candidate.Skill, search.Skill) <= criterion.AcceptableThreshold)
+                    .OrderBy(candidate => SkillDistance(candidate.Skill, search.Skill))
+                    .Take(mode.MaxPlayers - 1)
+                    .ToArray();
+                if (opponents.Length < required)
                     continue;
-                }
 
-
-                if (pendingPlayers.Contains(player.Player))
+                var group = opponents.Append(search).ToArray();
+                foreach (var member in group)
+                    member.Pending = true;
+                IRelayServerGame game = null;
+                try
                 {
-                    i++;
-                    continue;
-                }
-                var opponents = FindOpponents(player);
-                if (opponents.Count > 0)
-                {
-                    foreach (var opponent in opponents)
-                        pendingPlayers.Add(opponent.Player);
-                    pendingPlayers.Add(player.Player);
-                    try
+                    game = GrainFactory.GetGrain<IRelayServerGame>(Guid.NewGuid(), gameKey, null);
+                    await game.StartGame(group.Select(member => member.Player).ToArray(), mode);
+                    foreach (var member in group)
                     {
-                        List<IPlayer> players = new List<IPlayer>();
-                        players.AddRange(opponents.Select(x => x.Player));
-                        players.Add(player.Player);
-                        //TODO make methods to accept list to avoid conversion
-                        var game = await CreateGame(players.ToArray(), "");
-
-                        PlayerTasks[player.Player.GetPrimaryKeyString()].SetResult(new FoundRelayMatchResult(game));
-                        PlayerTasks.Remove(player.Player.GetPrimaryKeyString());
-                        foreach (var opponent in opponents)
-                        {
-                            PlayerTasks[opponent.Player.GetPrimaryKeyString()].SetResult(new FoundRelayMatchResult(game));
-                            PlayerTasks.Remove(opponent.Player.GetPrimaryKeyString());
-                        }
+                        if (!await IsAvailable(member))
+                            Complete(member, null);
                     }
-                    catch
+                    foreach (var member in group)
                     {
-                        
-                        i++;
+                        if (HasExpired(member, DateTime.UtcNow))
+                            Complete(member, null);
                     }
-                    finally
+                    if (group.Any(member => !IsCurrent(member)))
                     {
-                        pendingPlayers.Remove(player.Player);
-                        foreach (var opponent in opponents)
-                            pendingPlayers.Remove(opponent.Player);
+                        // A canceled player may already have been added to RunningGames by
+                        // StartGame. Retire this incomplete match and leave its other searches queued.
+                        await RetireGame(game, group);
+                        continue;
                     }
+
+                    foreach (var member in group)
+                        Complete(member, new FoundRelayMatchResult(game));
                 }
-                else //No opponent found
+                catch (Exception ex)
                 {
-                    i++;
+                    logger.LogWarning(ex, "Could not create a match in game {GameKey}, mode {ModeName}", gameKey, modeName);
+                    if (game != null)
+                        await RetireGame(game, group);
                 }
-            } //End of while loop
-        }
-
-        private bool CheckCriteriaIndexAndRequestTimeout(RelayServerPlayerData player)
-        {
-            player.CriteriaIndex = GetPlayerCriteriaIndex(player);
-            return (DateTime.Now - player.StartTime).Seconds > player.WaitTime ||
-                                (DateTime.Now - player.StartTime).Minutes > 0;
-        }
-
-        private async Task<IRelayServerGame> CreateGame(IPlayer[] players, string gameName)
-        {
-            var game = GrainFactory.GetGrain<IRelayServerGame>(Guid.NewGuid(), gameKey, null);
-            var names = await game.StartGame(players,gameMode);
-
-
-            onlinePlayers.RemoveAll(x => players.Contains(x.Player));
-
-            return game;
-        }
-
-        private List<RelayServerPlayerData> FindOpponents(RelayServerPlayerData player)
-        {
-            var criteria = gameMode.Criterias[player.CriteriaIndex];
-            int maxNeeded = (criteria.IsMinPlayersEnough) ? gameMode.MinPlayers - 1 : gameMode.MaxPlayers - 1;
-            List<RelayServerPlayerData> opponents = new List<RelayServerPlayerData>();
-            var list = onlinePlayers.OrderBy(x => Math.Abs(x.Skill - player.Skill)).ToList();
-            var count = list.Count();
-            if (count < 2)
-                return null;
-            int i = 0;
-            while (i < count && opponents.Count < gameMode.MaxPlayers - 1)
-            {
-                if (Math.Abs(list[i].Skill - player.Skill) <= criteria.AcceptableThreshold &&
-                    list[i].CriteriaIndex <= player.CriteriaIndex &&
-                    list[i].Player.GetPrimaryKeyString() != player.Player.GetPrimaryKeyString() &&
-                    !pendingPlayers.Contains(list[i].Player))
+                finally
                 {
-                    opponents.Add(list[i]);
-                }
-                else
-                {
-                }
-                ++i;
-            }
-            if (opponents.Count > 0 && opponents.Count < maxNeeded)
-                return new List<RelayServerPlayerData>();
-            return opponents;
-        }
-
-        private int GetPlayerCriteriaIndex(RelayServerPlayerData data)
-        {
-            var timeSpent = (DateTime.Now - data.StartTime).TotalSeconds;
-            int criteriaIndex = -1;
-            for (int i = gameMode.Criterias.Count - 1; i >= 0; --i)
-            {
-                if (timeSpent >= gameMode.Criterias[i].StartTimeInSeconds)
-                {
-                    criteriaIndex = i;
-                    break;
+                    foreach (var member in group)
+                        member.Pending = false;
                 }
             }
-            if (criteriaIndex < 0)
-                throw new InvalidOperationException("The criteria should never be null");
-            return criteriaIndex;
         }
 
-        private void AddPlayer(uint waitTime, uint skill, IPlayer player)
+        private async Task RetireGame(IRelayServerGame game, Search[] group)
         {
-            onlinePlayers.Add(new RelayServerPlayerData(player, skill, waitTime));
-
+            foreach (var member in group)
+            {
+                try
+                {
+                    await game.PlayerFinished(member.Player);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not remove player {PlayerId} from an incomplete match",
+                        member.Player.GetPrimaryKeyString());
+                }
+            }
         }
 
-        /// <summary>
-        /// Finds a match, if timeout happens returns null.
-        /// </summary>
-        /// <param name="player"></param>
-        /// <param name="skill"></param>
-        /// <param name="maximumWaitTime"></param>
-        /// <returns></returns>
-        public async Task<FoundRelayMatchResult> FindMatch(IPlayer player, uint skill, uint maximumWaitTime)
+        private static long SkillDistance(uint first, uint second) => Math.Abs((long)first - second);
+
+        private static bool HasExpired(Search search, DateTime now) =>
+            search.Cancellation.IsCancellationRequested || now - search.Started >= TimeSpan.FromSeconds(search.WaitSeconds);
+
+        private static async Task<bool> IsAvailable(Search search)
         {
-            if (PlayerTasks.ContainsKey(player.GetPrimaryKeyString()))
-                return (await PlayerTasks[player.GetPrimaryKeyString()].Task);
-            var playerSkill = skill;
-            AddPlayer(maximumWaitTime, playerSkill, player);
-            TaskCompletionSource<FoundRelayMatchResult> t = new TaskCompletionSource<FoundRelayMatchResult>();
+            if (HasExpired(search, DateTime.UtcNow))
+                return false;
+            if (search.LoginTicket != Guid.Empty && !await search.Player.IsLoginCurrent(search.LoginTicket))
+                return false;
+            return !HasExpired(search, DateTime.UtcNow);
+        }
 
-            PlayerTasks.Add(player.GetPrimaryKeyString(), t);
+        private static int GetCriterionIndex(GameMode mode, Search search, DateTime now)
+        {
+            double elapsed = (now - search.Started).TotalSeconds;
+            for (int index = mode.Criterias.Count - 1; index >= 0; index--)
+            {
+                if (elapsed >= mode.Criterias[index].StartTimeInSeconds)
+                    return index;
+            }
+            throw new InvalidOperationException("The first matchmaking criterion must start at zero seconds.");
+        }
 
-            return await t.Task;
+        /// <summary>Waits for a match, or returns null when the search expires or is canceled.</summary>
+        public async Task<FoundRelayMatchResult> FindMatch(IPlayer player, uint skill, uint maximumWaitTime,
+            Guid loginTicket = default, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // Each call owns its cancellation. Replacing an older search must not let the old
+            // socket's eventual cancellation remove the new socket's search for the same account.
+            if (searches.TryGetValue(player.GetPrimaryKeyString(), out var previous))
+                Complete(previous, null);
+            var search = new Search(player, skill, maximumWaitTime, loginTicket, cancellationToken);
+            searches.Add(player.GetPrimaryKeyString(), search);
+            using var registration = cancellationToken.Register(() => Complete(search, null));
+            return await search.Completion.Task;
         }
 
         public Task<bool> RemoveDisconnectedPlayer(IPlayer player)
         {
-            onlinePlayers.RemoveAll(x => x.Player.GetPrimaryKeyString() == player.GetPrimaryKeyString());
+            if (searches.TryGetValue(player.GetPrimaryKeyString(), out var search))
+                Complete(search, null);
             return Task.FromResult(true);
         }
-    }
 
-    public class RelayServerPlayerData
-    {
-        public IPlayer Player;
-        public uint Skill;
-        public DateTime StartTime;
-        public uint WaitTime;
-        public int CriteriaIndex;
-
-        public RelayServerPlayerData(IPlayer player, uint skill, uint waitTime)
+        private sealed class Search(IPlayer player, uint skill, uint waitSeconds, Guid loginTicket, CancellationToken cancellation)
         {
-            this.Skill = skill;
-            this.StartTime = DateTime.Now;
-            this.Player = player;
-            this.WaitTime = waitTime;
-            this.CriteriaIndex = 0;
+            public IPlayer Player { get; } = player;
+            public uint Skill { get; } = skill;
+            public uint WaitSeconds { get; } = waitSeconds;
+            public Guid LoginTicket { get; } = loginTicket;
+            public DateTime Started { get; } = DateTime.UtcNow;
+            public CancellationToken Cancellation { get; } = cancellation;
+            public TaskCompletionSource<FoundRelayMatchResult> Completion { get; } =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public bool Pending { get; set; }
         }
     }
 }
