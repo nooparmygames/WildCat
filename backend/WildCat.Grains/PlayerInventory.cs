@@ -42,7 +42,7 @@ namespace WildCat.Grains
         public async Task<bool> AddItem(IInventoryItem[] items, int[] counts)
         {
             AssertSameLength(items, counts);
-            if (!State.CanContain(counts.Sum()))
+            if (!State.CanContain(items))
                 return false;
             return await Apply(nameof(AddItem), () =>
             {
@@ -55,7 +55,7 @@ namespace WildCat.Grains
         public async Task SetItem(IInventoryItem[] items, int[] counts)
         {
             AssertSameLength(items, counts);
-            if (!State.CanContain(counts.Sum()))
+            if (!State.CanContain(items))
                 return;
             await Apply(nameof(SetItem), () =>
             {
@@ -75,12 +75,10 @@ namespace WildCat.Grains
                     var item = items[i];
                     var count = counts[i];
                     var itemInfo = await item.GetItemInfo();
-                    bool haveItems = State.HasItems(itemInfo.Price);
-                    bool hasCapacity = State.CanContain(count - itemInfo.Price.Sum(x => x.Count));
-                    if (!haveItems || !hasCapacity)
+                    if (count <= 0 || !RemoveAll(itemInfo.Price))
                         return false;
-                    foreach (var priceItem in itemInfo.Price)
-                        State.RemoveItem(priceItem.Item, priceItem.Count);
+                    if (!State.CanContain(new[] { item }))
+                        return false;
                     State.AddItem(item, count);
                 }
                 return true;
@@ -109,22 +107,17 @@ namespace WildCat.Grains
             if (!State.TryGetItem(package, 1, out _))
                 return false;
             var packageData = await package.GetInfo();
-            bool shouldGrant = !packageData.IsLocked || State.HasItems(packageData.UnlockItems);
-            if (!shouldGrant)
+            if (packageData.IsLocked && packageData.UnlockItems != null && !State.HasItems(packageData.UnlockItems))
                 return false;
-
             var grantedItems = await package.Grant();
-            bool canContain = State.CanContain(grantedItems.Sum(x => x.Count) - packageData.UnlockItems.Sum(x => x.Count));
-            if (!canContain)
-                return false;
-
             return await Apply(nameof(OpenAndUnlockPackage), () =>
             {
-                if (packageData.IsLocked)
-                {
-                    foreach (var item in packageData.UnlockItems)
-                        State.RemoveItem(item.Item, item.Count);
-                }
+                if (!State.RemoveItem(package, 1))
+                    return Task.FromResult(false);
+                if (packageData.IsLocked && !RemoveAll(packageData.UnlockItems))
+                    return Task.FromResult(false);
+                if (!State.CanContain(grantedItems.Select(x => x.Item)))
+                    return Task.FromResult(false);
                 foreach (var item in grantedItems)
                     State.AddItem(item.Item, item.Count);
                 return Task.FromResult(true);
@@ -134,15 +127,13 @@ namespace WildCat.Grains
         public async Task<bool> BuyPackage(IPackageContainer package, int count)
         {
             var info = await package.GetInfo();
-            bool hasPrice = State.HasItems(info.Price);
-            bool canContain = State.CanContain(count - info.Price.Sum(x => x.Count));
-            if (!hasPrice || !canContain)
+            if (count <= 0)
                 return false;
 
             return await Apply(nameof(BuyPackage), () =>
             {
-                foreach (var priceItem in info.Price)
-                    State.RemoveItem(priceItem.Item, priceItem.Count);
+                if (!RemoveAll(info.Price) || !State.CanContain(new[] { package }))
+                    return Task.FromResult(false);
                 State.AddItem(package, count);
                 return Task.FromResult(true);
             });
@@ -183,6 +174,16 @@ namespace WildCat.Grains
             for (int i = 0; i < items.Length; ++i)
             {
                 if (!State.RemoveItem(items[i], counts[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private bool RemoveAll(IEnumerable<PlayerInventoryState.InInventoryItemState> items)
+        {
+            foreach (var item in items ?? Enumerable.Empty<PlayerInventoryState.InInventoryItemState>())
+            {
+                if (!State.RemoveItem(item.Item, item.Count))
                     return false;
             }
             return true;

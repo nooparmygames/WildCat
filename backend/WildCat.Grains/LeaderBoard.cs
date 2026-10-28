@@ -33,7 +33,7 @@ namespace WildCat.Grains
             var tasks = new List<Task<List<LeaderBoardEntry>>>();
             for (int i = 0; i < State.NumberOfLists; i++)
             {
-                tasks[i] =  GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i)).GetEntries();
+                tasks.Add(GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i)).GetEntries());
             }
             var lists = await Task.WhenAll(tasks);
             for (int i = 0; i < lists.Length; i++)
@@ -63,24 +63,18 @@ namespace WildCat.Grains
             }
             if (isSet)
             {
-                _leaderBoardData.Sort((x, y) => y.Score - x.Score);
-                for (int i = 0; i < _leaderBoardData.Count / State.MaxListLength; i++)
+                _leaderBoardData.Sort((x, y) => y.Score.CompareTo(x.Score));
+                int numberOfLists = _leaderBoardData.Count / State.MaxListLength;
+                if (_leaderBoardData.Count % State.MaxListLength != 0)
+                    numberOfLists++;
+                for (int i = 0; i < numberOfLists; i++)
                 {
+                    int start = i * State.MaxListLength;
+                    int count = Math.Min(State.MaxListLength, _leaderBoardData.Count - start);
                     await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i))
-                        .WriteEntries(_leaderBoardData.GetRange(i*State.MaxListLength, State.MaxListLength));
+                        .WriteEntries(_leaderBoardData.GetRange(start, count));
                 }
-
-                var lastChunkIndex = ((_leaderBoardData.Count / State.MaxListLength) + 1);
-                if (lastChunkIndex * State.MaxListLength < _leaderBoardData.Count)
-                {
-                    await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), lastChunkIndex))
-                        .WriteEntries(_leaderBoardData.GetRange(lastChunkIndex*State.MaxListLength, _leaderBoardData.Count - (lastChunkIndex*State.MaxListLength)));
-                    State.NumberOfLists = _leaderBoardData.Count / State.MaxListLength + 1;
-                }
-                else
-                {
-                    State.NumberOfLists = _leaderBoardData.Count / State.MaxListLength;
-                }
+                State.NumberOfLists = numberOfLists;
                 await state.WriteStateAsync();
             }
         }
@@ -112,10 +106,16 @@ namespace WildCat.Grains
         }
         
 
-        public Task FinishLeaderBoard()
+        public async Task FinishLeaderBoard()
         {
             AssertIsCreated();
-            return state.ClearStateAsync();
+            for (int i = 0; i < State.NumberOfLists; i++)
+            {
+                await GrainFactory.GetGrain<ILeaderBoardStorage>(ResourcesUtility.GetLeaderBoardChunkKey(this.GetPrimaryKeyString(), i))
+                    .ClearEntries();
+            }
+            await state.ClearStateAsync();
+            _leaderBoardData.Clear();
         }
 
         public Task<Tuple<int, List<LeaderBoardEntry>>> GetAroundMe(IPlayer player, int count)

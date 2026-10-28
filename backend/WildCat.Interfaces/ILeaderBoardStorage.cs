@@ -10,6 +10,7 @@ namespace WildCat.Interfaces
         Task<List<LeaderBoardEntry>> GetEntries();
 
         Task WriteEntries(List<LeaderBoardEntry> data);
+        Task ClearEntries();
         // Task AddPlayerScore(IPlayer player, int score);
         // Task UpdatePlayerScore(IPlayer player, int score, int index);
     }

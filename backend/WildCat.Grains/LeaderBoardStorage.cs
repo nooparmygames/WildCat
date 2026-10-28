@@ -28,6 +28,8 @@ namespace WildCat.Grains
             State.entries = data;
             await state.WriteStateAsync();
         }
+
+        public Task ClearEntries() => state.ClearStateAsync();
         
         // public async Task AddPlayerScore(IPlayer player, int score)
         // {

@@ -133,14 +133,14 @@ namespace WildCat.Interfaces
         public bool IsFull()
         {
             int itemCount = items == null ? 0 : items.Count;
-            return size > 0 && size < itemCount;
+            return size > 0 && itemCount >= size;
         }
 
         public void AddItem(IInventoryItem item, int count)
         {
-            if (IsFull())
-                throw new InvalidOperationException($"The inventory is full");
             int index = IndexOf(item);
+            if (index == -1 && IsFull())
+                throw new InvalidOperationException("The inventory is full");
             if (index != -1)
             {
                 // checked: a stack that would pass int.MaxValue throws OverflowException, and the
@@ -160,9 +160,9 @@ namespace WildCat.Interfaces
 
         public void SetItem(IInventoryItem item, int count)
         {
-            if (IsFull())
-                throw new InvalidOperationException($"The inventory is full");
             int index = IndexOf(item);
+            if (index == -1 && IsFull())
+                throw new InvalidOperationException("The inventory is full");
             if (index != -1)
             {
                 items[index] = new InInventoryItemState { Count = count, Item = items[index].Item };
@@ -203,9 +203,17 @@ namespace WildCat.Interfaces
             return new List<InInventoryItemState>(items);
         }
 
-        public bool CanContain(int count)
+        public bool CanContain(int additionalStacks)
         {
-            return size == -1 || !IsFull(); //items.Count + count < size;
+            return size <= 0 || additionalStacks <= 0 || (long)items.Count + additionalStacks <= size;
+        }
+
+        public bool CanContain(IEnumerable<IInventoryItem> additions)
+        {
+            var existing = items.Select(x => x.Item.GetPrimaryKeyString()).ToHashSet(StringComparer.Ordinal);
+            int additionalStacks = additions.Select(x => x.GetPrimaryKeyString())
+                .Distinct(StringComparer.Ordinal).Count(key => !existing.Contains(key));
+            return CanContain(additionalStacks);
         }
 
         private int IndexOf(IInventoryItem item)

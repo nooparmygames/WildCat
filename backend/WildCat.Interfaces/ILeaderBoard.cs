@@ -74,7 +74,7 @@ namespace WildCat.Interfaces
         // public List<LeaderBoardEntry> entries { get; set; }
         [Id(3)] public int NumberOfLists { get; set; }
         [Id(4)] public List<string> StorageGrainKeys;
-        [Id(5)] public int MaxListLength { get; }
+        [Id(5)] public int MaxListLength { get; set; }
         [Id(6)] public DateTime start;
         [Id(7)] public DateTime end;
         [Id(8)] public bool AcceptBetterScoresOnly { get; set; }
