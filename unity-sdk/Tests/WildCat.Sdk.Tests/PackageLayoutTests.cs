@@ -69,7 +69,7 @@ namespace WildCat.Sdk.Tests
             JsonElement package = ReadJson("package.json");
             Assert.Equal("com.noopsoftworks.wildcat", package.GetProperty("name").GetString());
             Assert.Equal("WildCat", package.GetProperty("displayName").GetString());
-            Assert.Equal("6000.0", package.GetProperty("unity").GetString());
+            Assert.Equal("6000.6", package.GetProperty("unity").GetString());
             Assert.Equal(WildCatVersion.Current, package.GetProperty("version").GetString());
             Assert.Matches(@"^\d+\.\d+\.\d+$", package.GetProperty("version").GetString());
             foreach (JsonElement sample in package.GetProperty("samples").EnumerateArray())
@@ -184,7 +184,7 @@ namespace WildCat.Sdk.Tests
         public void TheUnityProjectIsAUnity6ProjectWithTheEmbeddedPackage()
         {
             string version = File.ReadAllText(Path.Combine(UnityProject, "ProjectSettings", "ProjectVersion.txt"));
-            Assert.Matches(@"m_EditorVersion: 6000\.0\.\d+f\d+", version);
+            Assert.Matches(@"m_EditorVersion: 6000\.6\.\d+f\d+", version);
             JsonElement manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(UnityProject, "Packages", "manifest.json"))).RootElement;
             var dependencies = manifest.GetProperty("dependencies").EnumerateObject().Select(p => p.Name).ToList();
             // Embedded packages (folders under Packages/) load without a manifest entry.

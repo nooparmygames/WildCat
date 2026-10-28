@@ -146,10 +146,10 @@ ConnectionStrings__WildCat="Host=localhost;Port=5432;Database=wildcat;Username=w
 ```bash
 go install github.com/rhysd/actionlint/cmd/actionlint@latest && "$(go env GOPATH)/bin/actionlint"
 ```
-- Use an installed Unity 6 LTS Editor for package import, compilation, editor tools and sample
+- Use an installed Unity 6.6 Editor for package import, compilation, editor tools and sample
   checks when authorized. The previous cloud session had no Unity installation; that was an
-  environment limitation, not a project rule. On this Windows machine Unity 6000.0.80f1 is
-  installed with Web and Windows modules. Plain .NET tests also cover the engine-free SDK:
+  environment limitation, not a project rule. The project now selects Unity 6000.6.5f1, installed
+  with Web and Windows support on this machine. Plain .NET tests also cover the engine-free SDK:
   Runtime/Protocol and Runtime/Core against the real gateway and in-process cluster, plus
   WildCat.Sdk.CoreCheck (netstandard2.1, C# 9, warnings as errors). Both are in the solution
   and CI. See project memory for the latest actual Editor verification and its limitations.
@@ -226,7 +226,7 @@ Read `docs/legacy-backend-notes.md` for the full picture. The short version:
   panel spec. Usage metrics come back later through OpenTelemetry if needed.
 - Script events: keep and port as is, then harden (per-player data scoping, real timeouts,
   cluster-wide compiled cache, diagnostics surfaced to the panel).
-- Unity SDK: target Unity 6 LTS only, shipped as a UPM package (`package.json`, asmdef,
+- Unity SDK: target Unity 6.6 (updated by the owner on 2026-10-28), shipped as a UPM package (`package.json`, asmdef,
   Runtime/Editor/Samples~ layout). Done in step 8 as `com.noopsoftworks.wildcat`.
 - Email: keep email login, activation and password reset with SMTP settings in configuration
   and a pluggable sender that logs the code when SMTP is not configured.

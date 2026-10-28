@@ -15,7 +15,7 @@ compact binary protocol. It covers:
 - server script events: C# snippets a developer attaches to named events, compiled with Roslyn
   and run on the server
 
-A client SDK for Unity 6, the UPM package `com.noopsoftworks.wildcat`, lives in
+A client SDK for Unity 6.6, the UPM package `com.noopsoftworks.wildcat`, lives in
 `unity-sdk/Packages/` (see its [README](unity-sdk/Packages/com.noopsoftworks.wildcat/README.md)).
 
 ## Why we are open sourcing WildCat
