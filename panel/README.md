@@ -44,6 +44,8 @@ ignores `.env` files).
 
 The sign-in token is kept in `sessionStorage`, so it lasts until the tab is closed. A 401 caused
 by a rejected token signs the developer out; a 403 shows a no-permission page.
+Changing or resetting the password ends all existing admin sessions. The account form returns
+to sign-in as soon as the password changes, with a message to use the new password.
 
 ## Deploying
 

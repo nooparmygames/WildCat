@@ -26,7 +26,7 @@ internal sealed class AdminOpenApiTransformer : IOpenApiDocumentTransformer, IOp
             Type = SecuritySchemeType.Http,
             Scheme = "bearer",
             BearerFormat = "JWT",
-            Description = "The token from POST /api/v1/auth/login, valid for eight hours.",
+            Description = "The token from POST /api/v1/auth/login, valid for up to eight hours. Changing or resetting the password ends all admin sessions.",
         };
         return Task.CompletedTask;
     }

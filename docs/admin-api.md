@@ -44,8 +44,11 @@ uses `LoggingEmailSender` and writes the messages to its log.
 
 - JSON with camelCase names. Game keys and developer keys are GUID strings.
 - Authentication: `Authorization: Bearer <token>` from `POST /auth/login`. Tokens are HS256 JWTs
-  with issuer and audience `wildcat`, valid for eight hours, with claims `sub` (developer key),
-  `email` and `role` (`developer` or `admin`).
+  with issuer and audience `wildcat`, valid for up to eight hours, with claims `sub` (developer key),
+  `email`, `role` (`developer` or `admin`) and `security_stamp` (the account's current credential
+  stamp). Each authenticated request checks that stamp against the developer account. Changing
+  or resetting the password ends all existing admin sessions, including the caller's; sign in
+  again with the new password. A token without a current stamp is rejected with 401.
 - Errors are RFC 7807 problem details (`application/problem+json`) with a `detail` meant for
   people. Validation errors are 400 with an `errors` array listing every message. 401 means no or
   a bad token, 403 means not allowed, 404 not found, 409 a name or email that is taken, 429 too
@@ -67,8 +70,8 @@ otherwise, 404 for an unknown game); admins may open any game.
 | POST `/auth/resend-activation` | anonymous, rate limited | `{email}` | always 202; emails a new code to an inactive account |
 | POST `/auth/login` | anonymous, rate limited | `{email, password}` | `{token, expiresAt, developer: {key, email, firstName, lastName, isAdmin}}`; 401 for a wrong email or password (same message for both); 403 for an account that is not activated or is disabled |
 | POST `/auth/request-password-reset` | anonymous, rate limited | `{email}` | always 202; emails a reset code (1 hour, 5 tries) if the account exists |
-| POST `/auth/reset-password` | anonymous, rate limited | `{email, code, newPassword}` | 204; 400 for a wrong or expired code |
-| POST `/auth/change-password` | developer | `{oldPassword, newPassword}` | 204; 400 (not 401) if the old password is wrong |
+| POST `/auth/reset-password` | anonymous, rate limited | `{email, code, newPassword}` | 204; ends all admin sessions; 400 for a wrong or expired code |
+| POST `/auth/change-password` | developer | `{oldPassword, newPassword}` | 204; ends all admin sessions and invalidates pending reset codes; 400 (not 401) if the old password is wrong |
 | GET `/me` | developer | | `{key, email, firstName, lastName, isAdmin, secret}` |
 | PUT `/me` | developer | `{firstName, lastName}` | the updated `/me` object |
 | POST `/me/secret` | developer | | `{secret}`, the new developer secret; the old one stops working |
@@ -115,6 +118,9 @@ Shapes:
   before. `finishGameWithOneDisconnect` is optional in the request (an existing mode keeps its
   value, a new one gets true).
 
+Existing matchmaking queues use the latest mode rules on their next matching pass. Deleting a
+mode makes its queue use the default two-player rules.
+
 ## Limitations
 
 - Email enumeration through registration: `POST /auth/register` answers 409 for an email that
@@ -125,6 +131,5 @@ Shapes:
 - Structured compiler diagnostics: a rejected script's `errors` holds one line that summarizes
   the first three errors (each with its id, such as `WC1007` or `CS0103`, and its line and column
   when it has one), not a separate entry per diagnostic.
-- Deleting a game, leaderboard or item removes it from the catalog; stored grain state for the
-  game's resources stays behind.
-- Tokens cannot be revoked before they expire; a password change does not end other sessions.
+- Deleting a game or item removes it from the catalog; stored grain state for the game's resources
+  stays behind. Deleting a leaderboard also clears its metadata and score chunks.

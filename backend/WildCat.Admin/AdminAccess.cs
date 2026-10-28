@@ -13,6 +13,7 @@ public static class AdminClaims
     public const string Subject = "sub";
     public const string Email = "email";
     public const string Role = "role";
+    public const string SecurityStamp = "security_stamp";
     public const string DeveloperRole = "developer";
     public const string AdminRole = "admin";
 

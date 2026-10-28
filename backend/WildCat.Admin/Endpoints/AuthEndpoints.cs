@@ -47,7 +47,7 @@ internal static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         anonymous.MapPost("/login", Login)
-            .WithSummary("Exchanges email and password for a bearer token valid for eight hours.")
+            .WithSummary("Exchanges email and password for a bearer token valid for up to eight hours.")
             .Produces<LoginResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
@@ -61,14 +61,14 @@ internal static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         anonymous.MapPost("/reset-password", ResetPassword)
-            .WithSummary("Sets a new password with the emailed reset code.")
+            .WithSummary("Sets a new password with the emailed reset code and ends all existing admin sessions.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         auth.MapPost("/change-password", ChangePassword)
             .RequireAuthorization(WildCatAdminExtensions.DeveloperPolicy)
-            .WithSummary("Changes the caller's password; needs the old one. A wrong old password is 400, not 401.")
+            .WithSummary("Changes the caller's password and ends all admin sessions; needs the old password. A wrong old password is 400.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status400BadRequest);
     }
@@ -154,10 +154,12 @@ internal static class AuthEndpoints
             PasswordHasher.Verify(request.Password!, TimingHash.Value);
             return Problems.Unauthorized(InvalidLogin);
         }
+        // Capture the stamp before checking the password. A concurrent password change then
+        // invalidates this token rather than letting an earlier password check use a new stamp.
+        var data = await developer.GetDeveloperData();
         if (!await developer.IsPasswordCorrect(request.Password!))
             return Problems.Unauthorized(InvalidLogin);
 
-        var data = await developer.GetDeveloperData();
         if (data.Status == DeveloperState.DeveloperStatus.NotActivated)
             return Problems.Forbidden("This account is not activated yet. Enter the code from the activation email first.");
         if (data.Status == DeveloperState.DeveloperStatus.Banned)
@@ -165,7 +167,7 @@ internal static class AuthEndpoints
 
         Guid key = developer.GetPrimaryKey();
         bool isAdmin = access.IsAdminEmail(data.Email);
-        var (token, expiresAt) = tokens.CreateToken(key, data.Email, isAdmin);
+        var (token, expiresAt) = tokens.CreateToken(key, data.Email, isAdmin, data.SecurityStamp);
         return TypedResults.Ok(new LoginResponse(token, expiresAt,
             new DeveloperSummary(key, data.Email, data.FirstName, data.LastName, isAdmin)));
     }
@@ -199,9 +201,8 @@ internal static class AuthEndpoints
             return Problems.Validation(errors);
 
         var developer = await Manager(grains).GetDeveloper(email);
-        if (developer == null || !await developer.ConsumePasswordResetCode(request.Code!))
+        if (developer == null || !await developer.ResetPassword(request.Code!, request.NewPassword!))
             return Problems.BadRequest(InvalidResetCode);
-        await developer.ChangePassword(request.NewPassword!);
         return TypedResults.NoContent();
     }
 
@@ -215,9 +216,9 @@ internal static class AuthEndpoints
 
         var developer = grains.GetGrain<IDeveloper>(user.GetDeveloperKey());
         // 400 rather than 401: the caller is logged in, only the typed password is wrong.
-        if (!await developer.IsPasswordCorrect(request.OldPassword!))
+        Guid securityStamp = Guid.Parse(user.FindFirstValue(AdminClaims.SecurityStamp)!);
+        if (!await developer.TryChangePassword(request.OldPassword!, request.NewPassword!, securityStamp))
             return Problems.BadRequest("The old password is not correct.");
-        await developer.ChangePassword(request.NewPassword!);
         return TypedResults.NoContent();
     }
 }

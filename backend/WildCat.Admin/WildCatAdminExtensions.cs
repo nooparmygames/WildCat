@@ -8,7 +8,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Orleans;
 using WildCat.Admin.Endpoints;
+using WildCat.Interfaces;
 
 namespace WildCat.Admin;
 
@@ -78,6 +80,21 @@ public static class WildCatAdminExtensions
             {
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = tokens.CreateValidationParameters();
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        if (!Guid.TryParse(context.Principal?.FindFirst(AdminClaims.Subject)?.Value, out var developerKey) ||
+                            !Guid.TryParse(context.Principal?.FindFirst(AdminClaims.SecurityStamp)?.Value, out var securityStamp))
+                        {
+                            context.Fail("The token has no valid account credentials.");
+                            return;
+                        }
+                        var grains = context.HttpContext.RequestServices.GetRequiredService<IGrainFactory>();
+                        if (!await grains.GetGrain<IDeveloper>(developerKey).IsAdminSessionValid(securityStamp))
+                            context.Fail("The account credentials have changed. Log in again.");
+                    }
+                };
             });
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, CurrentAdminHandler>());

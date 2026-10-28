@@ -9,7 +9,7 @@ namespace WildCat.Admin;
 
 /// <summary>
 /// Issues and describes the panel's bearer tokens: HMAC-SHA256 JWTs with issuer and audience
-/// "wildcat", valid for eight hours, carrying the developer key (sub), email and role.
+/// "wildcat", valid for up to eight hours, carrying the developer key (sub), email, role and credential stamp.
 /// </summary>
 public sealed class AdminTokenService
 {
@@ -64,7 +64,7 @@ public sealed class AdminTokenService
         return key.Length >= MinKeyBytes;
     }
 
-    public (string Token, DateTimeOffset ExpiresAt) CreateToken(Guid developerKey, string email, bool isAdmin)
+    public (string Token, DateTimeOffset ExpiresAt) CreateToken(Guid developerKey, string email, bool isAdmin, Guid securityStamp)
     {
         DateTimeOffset now = timeProvider.GetUtcNow();
         // JWT times have whole-second precision; report the same expiry the token carries.
@@ -81,6 +81,7 @@ public sealed class AdminTokenService
                 [AdminClaims.Subject] = developerKey.ToString(),
                 [AdminClaims.Email] = email,
                 [AdminClaims.Role] = isAdmin ? AdminClaims.AdminRole : AdminClaims.DeveloperRole,
+                [AdminClaims.SecurityStamp] = securityStamp.ToString("N"),
                 [JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString("N"),
             },
             SigningCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256),

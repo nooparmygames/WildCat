@@ -27,6 +27,16 @@ namespace WildCat.Interfaces
         Task<Guid> InitializeSession(Guid gameKey);
         Task UpdateDeveloperData(DeveloperState data);
         Task ChangePassword(string newPassword);
+
+        /// <summary>
+        /// Changes the password only when both the current password and the caller's session
+        /// stamp still match. A successful change ends all existing admin sessions.
+        /// </summary>
+        Task<bool> TryChangePassword(string oldPassword, string newPassword, Guid securityStamp);
+
+        /// <summary>Checks whether an admin token still belongs to the current account credentials.</summary>
+        [ReadOnly]
+        Task<bool> IsAdminSessionValid(Guid securityStamp);
         Task<Guid> GenerateSecret();
 
         /// <summary>
@@ -66,6 +76,12 @@ namespace WildCat.Interfaces
         /// attempts.
         /// </summary>
         Task<bool> ConsumePasswordResetCode(string code);
+
+        /// <summary>
+        /// Checks and uses up the reset code, changes the password and ends existing admin
+        /// sessions in one operation. A failed check leaves the password unchanged.
+        /// </summary>
+        Task<bool> ResetPassword(string code, string newPassword);
     }
 
     /// <summary>
@@ -107,6 +123,7 @@ namespace WildCat.Interfaces
         [Id(11)] public Dictionary<string, string> AdditionalData { get; set; }
         [Id(12)] public OneTimeCodeState ActivationCode { get; set; }
         [Id(13)] public OneTimeCodeState PasswordResetCode { get; set; }
+        [Id(14)] public Guid SecurityStamp { get; set; }
 
         public DeveloperState()
         {

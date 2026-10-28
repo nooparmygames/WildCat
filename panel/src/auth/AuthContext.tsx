@@ -3,7 +3,7 @@ import { api, setUnauthorizedHandler } from '../api'
 import type { Developer } from '../api/types'
 import { clearSession, currentToken, readSession, writeSession, type StoredSession } from './sessionStore'
 
-export type SignOutReason = 'expired' | 'signedOut'
+export type SignOutReason = 'expired' | 'signedOut' | 'passwordChanged'
 
 interface Profile {
   session: StoredSession

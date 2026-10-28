@@ -43,6 +43,7 @@ export function LoginPage() {
       }
     >
       {signOutReason === 'expired' && !error && <Notice tone="warning">{t('auth.login.sessionExpired')}</Notice>}
+      {signOutReason === 'passwordChanged' && !error && <Notice tone="success">{t('auth.login.passwordReset')}</Notice>}
       {state.notice === 'activated' && <Notice tone="success">{t('auth.login.activated')}</Notice>}
       {state.notice === 'passwordReset' && <Notice tone="success">{t('auth.login.passwordReset')}</Notice>}
       <ErrorAlert

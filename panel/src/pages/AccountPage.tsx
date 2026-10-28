@@ -79,16 +79,15 @@ function ProfileForm() {
 type PasswordFields = 'current' | 'password' | 'confirm'
 
 function PasswordForm() {
+  const { signOut } = useAuth()
   const empty = { current: '', password: '', confirm: '' }
   const [values, setValues] = useState<Record<PasswordFields, string>>(empty)
   const [errors, setErrors] = useState<FieldErrors<PasswordFields>>({})
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   const set = (field: PasswordFields) => (value: string) => {
     setValues((v) => ({ ...v, [field]: value }))
-    setSaved(false)
   }
 
   async function submit(event: FormEvent) {
@@ -104,8 +103,7 @@ function PasswordForm() {
     setError(null)
     try {
       await api.auth.changePassword(values.current, values.password)
-      setValues(empty)
-      setSaved(true)
+      signOut('passwordChanged')
     } catch (e) {
       setError(e)
     } finally {
@@ -146,7 +144,6 @@ function PasswordForm() {
           required
         />
         <ErrorAlert error={error} messages={{ 400: t('account.passwordRejected'), 401: t('account.passwordRejected') }} />
-        {saved && <Notice tone="success">{t('account.passwordChanged')}</Notice>}
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={busy}>
             {busy ? t('common.saving') : t('account.changePassword')}

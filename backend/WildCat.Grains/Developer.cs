@@ -35,6 +35,11 @@ namespace WildCat.Grains
             {
                 await GenerateSecret();
             }
+            if (isCreated && State.SecurityStamp == Guid.Empty)
+            {
+                State.SecurityStamp = Guid.NewGuid();
+                await state.WriteStateAsync();
+            }
             await base.OnActivateAsync(cancellationToken);
         }
 
@@ -113,6 +118,7 @@ namespace WildCat.Grains
                 throw new ArgumentException();
             data.PasswordHash = string.IsNullOrEmpty(data.PasswordHash) ? "" : await passwordHashing.HashAsync(data.PasswordHash);
             data.DeveloperSecret = Guid.NewGuid();
+            data.SecurityStamp = Guid.NewGuid();
             state.State = data;
             State.IsCreated = true;
             isCreated = true;
@@ -186,8 +192,27 @@ namespace WildCat.Grains
         {
             AssertIsCreated();
             State.PasswordHash = await passwordHashing.HashAsync(newPassword);
+            State.SecurityStamp = Guid.NewGuid();
+            State.PasswordResetCode = null;
             await state.WriteStateAsync();
         }
+
+        public async Task<bool> TryChangePassword(string oldPassword, string newPassword, Guid securityStamp)
+        {
+            AssertIsCreated();
+            if (!IsAdminSessionValidSync(securityStamp) || !await passwordHashing.VerifyAsync(oldPassword, State.PasswordHash))
+                return false;
+            await ChangePassword(newPassword);
+            return true;
+        }
+
+        public Task<bool> IsAdminSessionValid(Guid securityStamp) =>
+            Task.FromResult(IsAdminSessionValidSync(securityStamp));
+
+        private bool IsAdminSessionValidSync(Guid securityStamp) =>
+            isCreated && securityStamp != Guid.Empty && securityStamp == State.SecurityStamp &&
+            State.Status != DeveloperState.DeveloperStatus.Banned &&
+            State.Status != DeveloperState.DeveloperStatus.NotActivated;
 
         public Task<bool> IsSecretValid(Guid secret)
         {
@@ -250,6 +275,20 @@ namespace WildCat.Grains
                 State.PasswordResetCode = null;
             await state.WriteStateAsync();
             return valid;
+        }
+
+        public async Task<bool> ResetPassword(string code, string newPassword)
+        {
+            AssertIsCreated();
+            if (!CheckCode(State.PasswordResetCode, code))
+            {
+                if (State.PasswordResetCode != null && State.PasswordResetCode.FailedAttempts >= MaxCodeAttempts)
+                    State.PasswordResetCode = null;
+                await state.WriteStateAsync();
+                return false;
+            }
+            await ChangePassword(newPassword);
+            return true;
         }
 
         private const int MaxCodeAttempts = 5;
